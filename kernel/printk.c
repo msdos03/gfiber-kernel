@@ -115,7 +115,12 @@ static DEFINE_SPINLOCK(logbuf_lock);
  */
 static unsigned log_start;	/* Index into log_buf: next char to be read by syslog() */
 static unsigned con_start;	/* Index into log_buf: next char to be sent to consoles */
+
+#ifdef CONFIG_PRINTK_PERSIST
+#define log_end logbits->_log_end
+#else
 static unsigned log_end;	/* Index into log_buf: most-recently-written-char + 1 */
+#endif
 
 /*
  *	Array of consoles built from command line options (console=)
@@ -164,8 +169,91 @@ void log_buf_kexec_setup(void)
 static int saved_console_loglevel = -1;
 static char __log_buf[__LOG_BUF_LEN];
 static char *log_buf = __log_buf;
+
+#ifndef CONFIG_PRINTK_PERSIST
+
 static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
+
+static __init char *log_buf_alloc(unsigned long size, unsigned *dest_offset)
+{
+	return alloc_bootmem(size);
+}
+
+#else  /* CONFIG_PRINTK_PERSIST */
+
+struct logbits {
+	int magic; /* needed to verify the memory across reboots */
+	int _log_buf_len; /* leading _ so they aren't replaced by #define */
+	unsigned _logged_chars;
+	unsigned _log_end;
+};
+static struct logbits __logbits = {
+	._log_buf_len = __LOG_BUF_LEN,
+};
+static struct logbits *logbits = &__logbits;
+#define log_buf_len logbits->_log_buf_len
+#define logged_chars logbits->_logged_chars
+
+#define PERSIST_SEARCH_START 0
+#define PERSIST_SEARCH_END 0xfe000000
+#define PERSIST_SEARCH_JUMP (16*1024*1024)
+#define PERSIST_MAGIC 0xbabb1e
+
+/*
+ * size is a power of 2 so that the printk offset mask will work.  We'll add
+ * a bit more space to the end of the buffer for our extra data, but that
+ * won't change the offset of the buffers.
+ */
+static __init char *log_buf_alloc(unsigned long size, unsigned *dest_offset)
+{
+	unsigned long where;
+	char *buf;
+	unsigned long full_size = size + sizeof(struct logbits);
+	struct logbits *new_logbits;
+
+	for (where = PERSIST_SEARCH_END - size;
+			where >= PERSIST_SEARCH_START;
+			where -= PERSIST_SEARCH_JUMP) {
+		if (reserve_bootmem(where, full_size, BOOTMEM_EXCLUSIVE))
+			continue;
+
+		buf = phys_to_virt(where);
+		new_logbits = phys_to_virt(where + size);
+		printk(KERN_INFO "printk_persist: memory reserved @ 0x%08lx\n",
+			where);
+		if (new_logbits->magic != PERSIST_MAGIC ||
+				new_logbits->_log_buf_len != size ||
+				new_logbits->_logged_chars > size ||
+				new_logbits->_log_end > size * 2) {
+			printk(KERN_INFO "printk_persist: header invalid, "
+				"cleared.\n");
+			memset(buf, 0, full_size);
+			new_logbits->magic = PERSIST_MAGIC;
+			new_logbits->_log_buf_len = size;
+			new_logbits->_logged_chars = 0;
+			new_logbits->_log_end = 0;
+		} else {
+			printk(KERN_INFO "printk_persist: header valid; "
+				"logged=%d next=%d\n",
+				new_logbits->_logged_chars,
+				new_logbits->_log_end);
+		}
+		*dest_offset = new_logbits->_log_end;
+		new_logbits->_log_end = log_end;
+		new_logbits->_logged_chars += logged_chars;
+		logbits = new_logbits;
+		return buf;
+	}
+	goto error;
+
+error:
+	/* replace the buffer, but don't bother to swap struct logbits */
+	printk(KERN_ERR "printk_persist: failed to reserve bootmem "
+		"area. disabled.\n");
+	return alloc_bootmem(full_size);
+}
+#endif  /* CONFIG_PRINTK_PERSIST */
 
 static int __init log_buf_len_setup(char *str)
 {
@@ -175,10 +263,10 @@ static int __init log_buf_len_setup(char *str)
 	if (size)
 		size = roundup_pow_of_two(size);
 	if (size > log_buf_len) {
-		unsigned start, dest_idx, offset;
+		unsigned start, dest_offset = 0, dest_idx, offset;
 		char *new_log_buf;
 
-		new_log_buf = alloc_bootmem(size);
+		new_log_buf = log_buf_alloc(size, &dest_offset);
 		if (!new_log_buf) {
 			printk(KERN_WARNING "log_buf_len: allocation failed\n");
 			goto out;
@@ -189,15 +277,16 @@ static int __init log_buf_len_setup(char *str)
 		log_buf = new_log_buf;
 
 		offset = start = min(con_start, log_start);
-		dest_idx = 0;
+		dest_idx = dest_offset;
 		while (start != log_end) {
-			log_buf[dest_idx] = __log_buf[start & (__LOG_BUF_LEN - 1)];
+			log_buf[dest_idx & (size - 1)] =
+				__log_buf[start & (__LOG_BUF_LEN - 1)];
 			start++;
 			dest_idx++;
 		}
-		log_start -= offset;
-		con_start -= offset;
-		log_end -= offset;
+		log_start += dest_offset - offset;
+		con_start += dest_offset - offset;
+		log_end += dest_offset - offset;
 		spin_unlock_irqrestore(&logbuf_lock, flags);
 
 		printk(KERN_NOTICE "log_buf_len: %d\n", log_buf_len);

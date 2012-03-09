@@ -818,6 +818,18 @@ config PRINTK
 	  very difficult to diagnose system problems, saying N here is
 	  strongly discouraged.
 
+config PRINTK_PERSIST
+	default n
+	bool "printk log persists across reboots" if PRINTK
+	help
+	  This option tries to keep the printk memory buffer in a well-known
+	  location in physical memory. It isn't cleared on reboot (unless RAM
+	  is wiped by your boot loader or BIOS) so if your system crashes
+	  or panics, you might get to examine all the log messages next time you
+	  boot. The persisted log messages show up in your 'dmesg' output.
+	  Note: you must supply the log_buf_len= kernel parameter to
+	  activate this feature.
+
 config BUG
 	bool "BUG() support" if EMBEDDED
 	default y

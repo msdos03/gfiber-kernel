@@ -143,11 +143,6 @@ static int console_may_schedule;
 
 #ifdef CONFIG_PRINTK
 
-static char __log_buf[__LOG_BUF_LEN];
-static char *log_buf = __log_buf;
-static int log_buf_len = __LOG_BUF_LEN;
-static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
-
 #ifdef CONFIG_KEXEC
 /*
  * This appends the listed symbols to /proc/vmcoreinfo
@@ -165,6 +160,12 @@ void log_buf_kexec_setup(void)
 	VMCOREINFO_SYMBOL(logged_chars);
 }
 #endif
+
+static int saved_console_loglevel = -1;
+static char __log_buf[__LOG_BUF_LEN];
+static char *log_buf = __log_buf;
+static int log_buf_len = __LOG_BUF_LEN;
+static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
 
 static int __init log_buf_len_setup(char *str)
 {

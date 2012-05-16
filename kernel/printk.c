@@ -849,7 +849,6 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 			emit_log_char('<');
 			emit_log_char(current_log_level + '0');
 			emit_log_char('>');
-			printed_len += 3;
 			new_text_line = 0;
 
 			if (printk_time) {
@@ -867,7 +866,6 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 
 				for (tp = tbuf; tp < tbuf + tlen; tp++)
 					emit_log_char(*tp);
-				printed_len += tlen;
 			}
 
 			if (!*p)

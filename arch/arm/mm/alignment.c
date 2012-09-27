@@ -75,7 +75,7 @@ static unsigned long ai_half;
 static unsigned long ai_word;
 static unsigned long ai_dword;
 static unsigned long ai_multi;
-static int ai_usermode;
+static int ai_usermode = 2;
 
 #define UM_WARN		(1 << 0)
 #define UM_FIXUP	(1 << 1)

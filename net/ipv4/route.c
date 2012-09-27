@@ -108,6 +108,14 @@
 #include <linux/sysctl.h>
 #endif
 
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+extern int nfp_fib_learn_en;
+extern int nfp_learn_en;
+extern int nfp_hook_fib_rule_add(int family, u8 *src_l3, u8 *dst_l3, u8 *gtw_l3, int iif, int oif);
+extern int nfp_hook_fib_rule_del(int family, u8 *src_l3, u8 *dst_l3, int iif, int oif);
+extern int nfp_hook_fib_rule_age(int family, u8 *src_l3, u8 *dst_l3, int iif, int oif);
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
+
 #define RT_FL_TOS(oldflp) \
     ((u32)(oldflp->fl4_tos & (IPTOS_RT_MASK | RTO_ONLINK)))
 
@@ -610,6 +618,12 @@ static inline int ip_rt_proc_init(void)
 
 static inline void rt_free(struct rtable *rt)
 {
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+		if (rt->nfp)	
+			nfp_hook_fib_rule_del(AF_INET, (u8*)(&rt->rt_src),(u8*)(&rt->rt_dst), 
+							rt->rt_iif, rt->u.dst.dev->ifindex);
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
+
 	call_rcu_bh(&rt->u.dst.rcu_head, dst_rcu_free);
 }
 
@@ -645,6 +659,14 @@ static int rt_may_expire(struct rtable *rth, unsigned long tmo1, unsigned long t
 	if (rth->u.dst.expires &&
 	    time_after_eq(jiffies, rth->u.dst.expires))
 		goto out;
+
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+	if (rth->nfp) {
+		if (nfp_hook_fib_rule_age(AF_INET,(u8 *)(&rth->rt_src), (u8 *)(&rth->rt_dst), 
+						rth->rt_iif, rth->u.dst.dev->ifindex))
+			rth->u.dst.lastuse = jiffies;
+	}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
 
 	age = jiffies - rth->u.dst.lastuse;
 	ret = 0;
@@ -768,6 +790,35 @@ static void rt_do_flush(int process_context)
 		}
 	}
 }
+
+
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+void nfp_fib_sync(void)
+{
+	struct rtable *rt;
+	int h;
+
+	for (h = 0; h <= rt_hash_mask; h++) {
+		if (!rt_hash_table[h].chain)
+			continue;
+
+		rcu_read_lock_bh();
+		for (rt = rcu_dereference(rt_hash_table[h].chain); rt;
+		    rt = rcu_dereference(rt->u.dst.rt_next)) {
+			if (rt_is_expired(rt))
+				continue;
+
+			rt->nfp = false;
+			if (!(rt->rt_flags & (RTCF_MULTICAST | RTCF_BROADCAST | RTCF_LOCAL | RTCF_REJECT))) {
+				if (!nfp_hook_fib_rule_add(AF_INET, (u8 *)(&rt->rt_src), (u8 *)(&rt->rt_dst),
+					  (u8 *)(&rt->rt_gateway), rt->rt_iif, rt->u.dst.dev->ifindex))
+					rt->nfp = true;
+			}
+		}
+		rcu_read_unlock_bh();
+	}
+}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
 
 /*
  * While freeing expired entries, we compute average chain length
@@ -908,7 +959,14 @@ void rt_cache_flush(struct net *net, int delay)
 static void rt_secret_rebuild(unsigned long __net)
 {
 	struct net *net = (struct net *)__net;
-	rt_cache_invalidate(net);
+
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+	/* If NFP enabled doesn't flush */
+    	if (!nfp_fib_learn_en || !nfp_learn_en)
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
+	{
+		rt_cache_invalidate(net);
+	}
 	mod_timer(&net->ipv4.rt_secret_timer, jiffies + ip_rt_secret_interval);
 }
 
@@ -1994,7 +2052,6 @@ static int __mkroute_input(struct sk_buff *skb,
 		}
 	}
 
-
 	rth = dst_alloc(&ipv4_dst_ops);
 	if (!rth) {
 		err = -ENOBUFS;
@@ -2015,7 +2072,7 @@ static int __mkroute_input(struct sk_buff *skb,
 	rth->rt_src	= saddr;
 	rth->rt_gateway	= daddr;
 	rth->rt_iif 	=
-		rth->fl.iif	= in_dev->dev->ifindex;
+	rth->fl.iif	= in_dev->dev->ifindex;
 	rth->u.dst.dev	= (out_dev)->dev;
 	dev_hold(rth->u.dst.dev);
 	rth->idev	= in_dev_get(rth->u.dst.dev);
@@ -2030,7 +2087,17 @@ static int __mkroute_input(struct sk_buff *skb,
 
 	rth->rt_flags = flags;
 
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+	rth->nfp = false;
+	if (!(rth->rt_flags & (RTCF_MULTICAST | RTCF_BROADCAST | RTCF_LOCAL | RTCF_REJECT))) {
+		if (!nfp_hook_fib_rule_add(AF_INET, (u8*)(&rth->rt_src), (u8*)(&rth->rt_dst), 
+					(u8*)(&rth->rt_gateway), rth->rt_iif, rth->u.dst.dev->ifindex))
+			rth->nfp = true;
+	}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
+
 	*result = rth;
+
 	err = 0;
  cleanup:
 	/* release the working reference to the output device */
@@ -3450,6 +3517,7 @@ int __init ip_rt_init(void)
 #ifdef CONFIG_SYSCTL
 	register_pernet_subsys(&sysctl_route_ops);
 #endif
+
 	return rc;
 }
 

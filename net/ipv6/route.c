@@ -744,6 +744,14 @@ restart:
 
 	dst_hold(&rt->u.dst);
 	if (nrt) {
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+			if ((rt->rt6i_flags & RTF_CACHE)) {
+				ipv6_addr_copy(&rt->rt6i_src.addr, &fl->fl6_src);
+				rt->rt6i_src.plen = 128;
+				rt->rt6i_iifindex = fl->iif;
+			}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
+		
 		err = ip6_ins_rt(nrt);
 		if (!err)
 			goto out2;

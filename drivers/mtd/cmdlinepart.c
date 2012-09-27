@@ -302,12 +302,18 @@ static int mtdpart_setup_real(char *s)
  */
 static int parse_cmdline_partitions(struct mtd_info *master,
                              struct mtd_partition **pparts,
-                             unsigned long origin)
+                             unsigned long origin,
+                             const char *cmd)
 {
 	unsigned long offset;
 	int i;
 	struct cmdline_mtd_partition *part;
 	const char *mtd_id = master->name;
+
+	if (cmd!="") {
+		cmdline = cmd;
+		cmdline_parsed = 0;
+	}
 
 	/* parse command line */
 	if (!cmdline_parsed)

@@ -226,6 +226,9 @@ static void tdi_reset (struct ehci_hcd *ehci)
 	reg_ptr = (u32 __iomem *)(((u8 __iomem *)ehci->regs) + USBMODE);
 	tmp = ehci_readl(ehci, reg_ptr);
 	tmp |= USBMODE_CM_HC;
+
+	tmp |= (1 << 4); //disable USB streamin
+
 	/* The default byte access to MMR space is LE after
 	 * controller reset. Set the required endian mode
 	 * for transfer buffers to match the host microprocessor
@@ -785,10 +788,9 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 
 			/* start 20 msec resume signaling from this port,
 			 * and make khubd collect PORT_STAT_C_SUSPEND to
-			 * stop that signaling.  Use 5 ms extra for safety,
-			 * like usb_port_resume() does.
+			 * stop that signaling.
 			 */
-			ehci->reset_done[i] = jiffies + msecs_to_jiffies(25);
+			ehci->reset_done [i] = jiffies + msecs_to_jiffies (20);
 			ehci_dbg (ehci, "port %d remote wakeup\n", i + 1);
 			mod_timer(&hcd->rh_timer, ehci->reset_done[i]);
 		}
@@ -1124,6 +1126,11 @@ MODULE_LICENSE ("GPL");
 #ifdef CONFIG_PLAT_ORION
 #include "ehci-orion.c"
 #define	PLATFORM_DRIVER		ehci_orion_driver
+#endif
+
+#if defined(CONFIG_ARCH_FEROCEON) || defined(CONFIG_MARVELL)
+#include "ehci_marvell.c"
+#define PLATFORM_DRIVER         ehci_marvell_driver
 #endif
 
 #ifdef CONFIG_ARCH_IXP4XX

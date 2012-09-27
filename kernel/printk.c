@@ -35,6 +35,10 @@
 #include <linux/kexec.h>
 
 #include <asm/uaccess.h>
+#ifdef CONFIG_DEBUG_LL
+/*ll_debug*/
+#include <mach/uncompress.h>
+#endif
 
 /*
  * for_each_console() allows you to iterate on each console
@@ -597,7 +601,9 @@ asmlinkage int printk(const char *fmt, ...)
 
 	return r;
 }
-
+#ifdef CONFIG_DEBUG_LL
+int ll_debug = 0;
+#endif
 /* cpu currently holding logbuf_lock */
 static volatile unsigned int printk_cpu = UINT_MAX;
 
@@ -713,6 +719,9 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	/* Emit the output into the temporary buffer */
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
+#ifdef CONFIG_DEBUG_LL
+	{ extern void printascii(const char *); printascii(printk_buf); }
+#endif
 
 
 	p = printk_buf;
@@ -788,8 +797,15 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	 * will release 'logbuf_lock' regardless of whether it
 	 * actually gets the semaphore or not.
 	 */
-	if (acquire_console_semaphore_for_printk(this_cpu))
+	if (acquire_console_semaphore_for_printk(this_cpu)) {
+#if defined(CONFIG_MV_PRINTK_SLICE_SUPPORT)
+		raw_local_irq_restore(flags);
 		release_console_sem();
+		raw_local_irq_save(flags);
+#else
+		release_console_sem();
+#endif
+	}
 
 	lockdep_on();
 out_restore_irqs:
@@ -1057,7 +1073,14 @@ void release_console_sem(void)
 			break;			/* Nothing to print */
 		_con_start = con_start;
 		_log_end = log_end;
+#if defined(CONFIG_MV_PRINTK_SLICE_SUPPORT)
+		if((_log_end - _con_start) > CONFIG_MV_PRINTK_CHUNK_SIZE) {
+				_log_end = (_con_start + CONFIG_MV_PRINTK_CHUNK_SIZE);
+		}
+		con_start = _log_end;
+#else
 		con_start = log_end;		/* Flush */
+#endif
 		spin_unlock(&logbuf_lock);
 		stop_critical_timings();	/* don't trace print latency */
 		call_console_drivers(_con_start, _log_end);

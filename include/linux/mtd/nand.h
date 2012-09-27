@@ -21,6 +21,7 @@
 #include <linux/wait.h>
 #include <linux/spinlock.h>
 #include <linux/mtd/mtd.h>
+#include <linux/mtd/bbm.h>
 
 struct mtd_info;
 /* Scan and identify a NAND device */
@@ -389,7 +390,14 @@ struct nand_chip {
 
 	int		chip_delay;
 	unsigned int	options;
-
+#ifdef CONFIG_MTD_NAND_NFC_GANG_SUPPORT
+	unsigned int	num_devs;
+#endif
+#ifdef CONFIG_MTD_NAND_NFC_MLC_SUPPORT
+	unsigned int	oobsize_ovrd;
+	unsigned int	bb_location;
+	unsigned int	bb_page;
+#endif
 	int		page_shift;
 	int		phys_erase_shift;
 	int		bbt_erase_shift;
@@ -470,40 +478,6 @@ struct nand_manufacturers {
 extern struct nand_flash_dev nand_flash_ids[];
 extern struct nand_manufacturers nand_manuf_ids[];
 
-/**
- * struct nand_bbt_descr - bad block table descriptor
- * @options:	options for this descriptor
- * @pages:	the page(s) where we find the bbt, used with option BBT_ABSPAGE
- *		when bbt is searched, then we store the found bbts pages here.
- *		Its an array and supports up to 8 chips now
- * @offs:	offset of the pattern in the oob area of the page
- * @veroffs:	offset of the bbt version counter in the oob are of the page
- * @version:	version read from the bbt page during scan
- * @len:	length of the pattern, if 0 no pattern check is performed
- * @maxblocks:	maximum number of blocks to search for a bbt. This number of
- *		blocks is reserved at the end of the device where the tables are
- *		written.
- * @reserved_block_code: if non-0, this pattern denotes a reserved (rather than
- *              bad) block in the stored bbt
- * @pattern:	pattern to identify bad block table or factory marked good /
- *		bad blocks, can be NULL, if len = 0
- *
- * Descriptor for the bad block table marker and the descriptor for the
- * pattern which identifies good and bad blocks. The assumption is made
- * that the pattern and the version count are always located in the oob area
- * of the first block.
- */
-struct nand_bbt_descr {
-	int	options;
-	int	pages[NAND_MAX_CHIPS];
-	int	offs;
-	int	veroffs;
-	uint8_t	version[NAND_MAX_CHIPS];
-	int	len;
-	int	maxblocks;
-	int	reserved_block_code;
-	uint8_t	*pattern;
-};
 
 /* Options for the bad block table descriptors */
 

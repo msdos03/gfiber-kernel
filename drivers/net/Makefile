@@ -1,6 +1,8 @@
 #
 # Makefile for the Linux network (ethercard) device drivers.
 #
+obj-$(CONFIG_MV_ETH_LEGACY) += ../../arch/arm/plat-feroceon/mv_drivers_lsp/mv_network/mv_ethernet/
+obj-$(CONFIG_MV_ETH_NETA) += ../../arch/arm/plat-feroceon/mv_drivers_lsp/mv_neta/net_dev/
 
 obj-$(CONFIG_MII) += mii.o
 obj-$(CONFIG_MDIO) += mdio.o
@@ -91,6 +93,7 @@ ps3_gelic-objs += ps3_gelic_net.o $(gelic_wireless-y)
 obj-$(CONFIG_TC35815) += tc35815.o
 obj-$(CONFIG_SKGE) += skge.o
 obj-$(CONFIG_SKY2) += sky2.o
+obj-$(CONFIG_SK98LIN) += sk98lin/
 obj-$(CONFIG_SKFP) += skfp/
 obj-$(CONFIG_KS8842)	+= ks8842.o
 obj-$(CONFIG_KS8851)	+= ks8851.o

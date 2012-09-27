@@ -1,0 +1,54 @@
+menu "SoC TPM support"
+depends on MV_INCLUDE_TPM
+
+config  MV_TPM
+	tristate "Support for Marvell TPM Driver"
+      	default y
+	---help---
+
+comment "TPM Driver Options"
+depends on MV_TPM
+
+config  MV_TPM_Z1_VER
+	bool "Support for TPM Z1 Version"
+	depends on MV_TPM
+      	default n
+	---help---
+
+config  MV_TPM_Z2_VER
+	bool "Support for TPM Z2 Version"
+	depends on MV_TPM
+      	default y
+	---help---
+
+config  MV_TPM_FPGA_VER
+	bool "Support for TPM FPGA Version"
+	depends on MV_TPM
+      	default n
+	---help---
+
+config  MV_TPM_INT_LOCK
+	bool "Support for TPM Protection - Int Lock"
+	depends on MV_TPM
+      	default n
+	---help---
+
+config  MV_TPM_DEBUG_PRINT
+	bool "Support for tpm Debug printing"
+	depends on MV_TPM
+      	default N
+	---help---
+
+config  MV_TPM_SFS_2_IOCTL
+	bool "Support for debugging ioctl API via sysfs interface"
+	depends on MV_TPM
+	default N
+	---help---
+	
+config  MV_TPM_SYSFS_HELP
+	bool "Support for tpm sysfs help"
+	depends on MV_TPM
+      	default Y
+	---help---
+
+endmenu

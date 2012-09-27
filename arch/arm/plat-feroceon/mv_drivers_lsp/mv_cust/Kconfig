@@ -1,0 +1,24 @@
+menu "SoC CUST support"
+depends on MV_INCLUDE_CUST
+
+config  MV_CUST
+	bool "Support for Marvell Customer Driver"
+      	default y
+	---help---
+
+config  MV_CUST_IGMP_HANDLE
+        bool "Enable MV_CUST IGMP handling"
+        default y
+        ---help---
+
+config  MV_CUST_UDP_SAMPLE_HANDLE
+        bool "Enable MV_CUST sample UDP handling"
+        default n
+        ---help---
+
+config  MV_CUST_FLOW_MAP_HANDLE
+        bool "Enable MV_CUST flow mapping handling"
+        default y
+        ---help---        
+
+endmenu

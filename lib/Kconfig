@@ -117,6 +117,9 @@ config DECOMPRESS_BZIP2
 config DECOMPRESS_LZMA
 	tristate
 
+config DECOMPRESS_LZMA_NEEDED
+	 boolean
+
 #
 # Generic allocator support is selected if needed
 #

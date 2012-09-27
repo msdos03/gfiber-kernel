@@ -75,6 +75,10 @@ struct rtable
 	/* Miscellaneous cached information */
 	__be32			rt_spec_dst; /* RFC1122 specific destination */
 	struct inet_peer	*peer; /* long-living peer info */
+
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+	bool 			nfp;
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
 };
 
 struct ip_rt_acct

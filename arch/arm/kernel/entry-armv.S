@@ -1202,8 +1202,45 @@ __stubs_start:
  * get out of that mode without clobbering one register.
  */
 vector_fiq:
+#ifdef CONFIG_MV_PHONE_USE_FIQ_PROCESSING
+	/* if no handler installed, bail out */
+	ldr	r9, 1f
+	ldr	r9, [r9]
+	movs	r9, r9
+	beq	fiq_ret
+
+	/* count fiq exceptions */
+	ldr	r11, 2f
+	ldr	r10, [r11]
+	add	r10, r10, #1
+	str	r10, [r11]
+
+	/* call C-language ISR */
+	stmdb	sp!, {r0-r7,r14}
+	mov	lr, pc
+	mov	pc, r9
+	ldmia	sp!, {r0-r7,r14}
+fiq_ret:
+	subs	pc, lr, #4
+
+1:	.long fiq_userptr
+2:	.long fiq_cnt
+
+.section .text
+.globl fiq_userptr
+fiq_userptr:
+	.long 0
+.globl fiq_cnt
+fiq_cnt:
+	.long 0
+.previous
+
+#else /* CONFIG_MV_PHONE_USE_FIQ_PROCESSING */
+
 	disable_fiq
 	subs	pc, lr, #4
+
+#endif /* CONFIG_MV_PHONE_USE_FIQ_PROCESSING */
 
 /*=============================================================================
  * Address exception handler

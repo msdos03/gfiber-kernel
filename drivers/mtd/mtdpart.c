@@ -573,7 +573,7 @@ int deregister_mtd_parser(struct mtd_part_parser *p)
 EXPORT_SYMBOL_GPL(deregister_mtd_parser);
 
 int parse_mtd_partitions(struct mtd_info *master, const char **types,
-			 struct mtd_partition **pparts, unsigned long origin)
+			 struct mtd_partition **pparts, unsigned long origin,const char *cmd)
 {
 	struct mtd_part_parser *parser;
 	int ret = 0;
@@ -587,7 +587,7 @@ int parse_mtd_partitions(struct mtd_info *master, const char **types,
 			       *types);
 			continue;
 		}
-		ret = (*parser->parse_fn)(master, pparts, origin);
+		ret = (*parser->parse_fn)(master, pparts, origin, cmd);
 		if (ret > 0) {
 			printk(KERN_NOTICE "%d %s partitions found on MTD device %s\n",
 			       ret, parser->name, master->name);

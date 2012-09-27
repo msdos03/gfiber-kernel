@@ -108,6 +108,9 @@ struct stack {
 	u32 irq[3];
 	u32 abt[3];
 	u32 und[3];
+#ifdef CONFIG_MV_PHONE_USE_FIQ_PROCESSING
+	u32 fiq[4 * 1024];
+#endif /* CONFIG_MV_PHONE_USE_FIQ_PROCESSING */
 } ____cacheline_aligned;
 
 static struct stack stacks[NR_CPUS];
@@ -322,6 +325,18 @@ void cpu_init(void)
 {
 	unsigned int cpu = smp_processor_id();
 	struct stack *stk = &stacks[cpu];
+#ifdef CONFIG_MV_PHONE_USE_FIQ_PROCESSING
+	/*
+	 * The add instruction with immediate addressing mode has
+	 * limited offset of 1024 words (2^12-1 bytes):
+	 * 	add "r" (stk), "I" (offsetof(struct stack, und[0]))
+	 * Hence, 'mov Rd, Rn' should be used with preloaded Rn.
+	 */
+	unsigned int irq_sp = (unsigned int)&stk->irq[0];
+	unsigned int abt_sp = (unsigned int)&stk->abt[0];
+	unsigned int und_sp = (unsigned int)&stk->und[0];
+	unsigned int fiq_sp = (unsigned int)&stk->fiq[4095];
+#endif /* CONFIG_MV_PHONE_USE_FIQ_PROCESSING */
 
 	if (cpu >= NR_CPUS) {
 		printk(KERN_CRIT "CPU%u: bad primary CPU number\n", cpu);
@@ -341,6 +356,30 @@ void cpu_init(void)
 	/*
 	 * setup stacks for re-entrant exception handlers
 	 */
+#ifdef CONFIG_MV_PHONE_USE_FIQ_PROCESSING
+	__asm__ (
+	"msr	cpsr_c, %1\n\t"
+	"mov	sp, %2\n\t"
+	"msr	cpsr_c, %3\n\t"
+	"mov	sp, %4\n\t"
+	"msr	cpsr_c, %5\n\t"
+	"mov	sp, %6\n\t"
+	"msr	cpsr_c, %7\n\t"
+	"mov	sp, %8\n\t"
+	"msr	cpsr_c, %9"
+	    :
+	    : "r" (stk),
+	      PLC (PSR_F_BIT | PSR_I_BIT | IRQ_MODE),
+	      "r" (irq_sp),
+	      PLC (PSR_F_BIT | PSR_I_BIT | ABT_MODE),
+	      "r" (abt_sp),
+	      PLC (PSR_F_BIT | PSR_I_BIT | UND_MODE),
+	      "r" (und_sp),
+	      PLC (PSR_F_BIT | PSR_I_BIT | FIQ_MODE),
+	      "r" (fiq_sp),
+	      PLC (PSR_F_BIT | PSR_I_BIT | SVC_MODE)
+	    : "r14");
+#else /* CONFIG_MV_PHONE_USE_FIQ_PROCESSING */
 	__asm__ (
 	"msr	cpsr_c, %1\n\t"
 	"add	r14, %0, %2\n\t"
@@ -362,6 +401,7 @@ void cpu_init(void)
 	      "I" (offsetof(struct stack, und[0])),
 	      PLC (PSR_F_BIT | PSR_I_BIT | SVC_MODE)
 	    : "r14");
+#endif /* CONFIG_MV_PHONE_USE_FIQ_PROCESSING */
 }
 
 static struct machine_desc * __init setup_machine(unsigned int nr)
@@ -397,6 +437,7 @@ static int __init arm_add_memory(unsigned long start, unsigned long size)
 	 * Ensure that start/size are aligned to a page boundary.
 	 * Size is appropriately rounded down, start is rounded up.
 	 */
+       if(size != 0) /* overcome bug in U-Boot */
 	size -= start & ~PAGE_MASK;
 	bank->start = PAGE_ALIGN(start);
 	bank->size  = size & PAGE_MASK;
@@ -743,6 +784,12 @@ void __init setup_arch(char **cmdline_p)
 	boot_command_line[COMMAND_LINE_SIZE-1] = '\0';
 	parse_cmdline(cmdline_p, from);
 	paging_init(mdesc);
+#ifdef CONFIG_DEBUG_LL
+	{
+		extern int ll_debug;
+		ll_debug=1;
+	}
+#endif
 	request_standard_resources(&meminfo, mdesc);
 
 #ifdef CONFIG_SMP

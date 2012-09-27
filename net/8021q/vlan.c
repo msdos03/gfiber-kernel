@@ -39,6 +39,13 @@
 
 #define DRV_VERSION "1.8"
 
+
+#if defined(CONFIG_MV_ETH_NFP_VLAN_LEARN)
+extern int nfp_hook_vlan_add(int if_index, struct net_device *dev,
+					int real_if_index, int vlan_id);
+extern int nfp_hook_vlan_del(int if_index);
+#endif /* CONFIG_MV_ETH_NFP_VLAN_LEARN */
+
 /* Global VLAN variables */
 
 int vlan_net_id;
@@ -163,6 +170,10 @@ void unregister_vlan_dev(struct net_device *dev)
 	grp->nr_vlans--;
 
 	synchronize_net();
+
+#if defined(CONFIG_MV_ETH_NFP_VLAN_LEARN)
+	nfp_hook_vlan_del(dev->ifindex);
+#endif /* CONFIG_MV_ETH_NFP_VLAN_LEARN */
 
 	unregister_netdevice(dev);
 
@@ -355,6 +366,10 @@ static int register_vlan_device(struct net_device *real_dev, u16 vlan_id)
 	err = register_vlan_dev(new_dev);
 	if (err < 0)
 		goto out_free_newdev;
+
+#if defined(CONFIG_MV_ETH_NFP_VLAN_LEARN)
+	nfp_hook_vlan_add(new_dev->ifindex, new_dev, real_dev->ifindex, vlan_id);
+#endif /* CONFIG_MV_ETH_NFP_VLAN_LEARN */
 
 	return 0;
 
@@ -776,6 +791,26 @@ static void __exit vlan_cleanup_module(void)
 
 	vlan_gvrp_uninit();
 }
+
+#if defined(CONFIG_MV_ETH_NFP_VLAN_LEARN)
+void vlan_sync(void)
+{
+	struct net_device *dev;
+
+	rtnl_lock();
+	for_each_netdev(&init_net, dev) {
+		if (dev->priv_flags & IFF_802_1Q_VLAN) {
+			struct vlan_dev_info *vlan = vlan_dev_info(dev);
+			struct net_device *real_dev = vlan->real_dev;
+			u16 vlan_id = vlan->vlan_id;
+
+			if (nfp_hook_vlan_add(dev->ifindex, dev, real_dev->ifindex, vlan_id))
+				printk("nfp_hook_vlan_add failed in %s\n",__func__);
+		}
+	}
+	rtnl_unlock();
+}
+#endif /* CONFIG_MV_ETH_NFP_VLAN_LEARN */
 
 module_init(vlan_proto_init);
 module_exit(vlan_cleanup_module);

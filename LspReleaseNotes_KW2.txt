@@ -1,0 +1,777 @@
+15/Jul/2012
+
+
+Release notes for KW2 LSP release 3.3.1-PQ
+==========================================
+
+Note: This LSP is compatible with U-Boot release 4.0.0 and above.
+-----
+
+Table of Contents
+-----------------
+
+1.  Contents of this Release
+2.  HowTo build
+3.  Changes from previous releases
+4.  Known Issues
+5.  Notes
+6.  Disclaimer
+
+
+1. Contents of This Release
+===========================
+
+	Included in current release :
+	- Support for ttyS0.
+	- Interrupts handling.
+	- L2 support + optimized cache opertaions.
+	- PEX support.
+	- Standard network interface support for the KW2 giga port.
+  	- Telephony driver.
+	- Legacy NAND flash driver.
+	- Memory transfer accelerations by using the XOR-DMA engine.
+        - RTC support.
+        - Support for passing Marvell Tag list from uboot.
+        - Reset support.
+        - MV shell Proc FS.
+	- PON drivers.
+	- USB host support.
+	- CESA support.
+	- SD/SDIO/MMC driver.
+	- Basic gateway network interface support for integrated switch.
+	- Initial support for COMM unit.
+	- Marvell SATA.
+	- SPI flash driver.
+
+	- This release is a patch to Linux 2.6.32.11 which can be download from
+          (www.kernel.org)
+
+	Binary drivers:
+	- The GPON/EPON drivers are provided as kernel objects
+	  (mv_gpon.ko and mv_epon.ko respectively).
+	  The files can be found under the binaries directory in the
+	  release source tree.
+	- Because of licensing issues, the Voice SLIC drivers cannot be provided 
+  	  in source code form. Thus, a precompiled library of the Slic
+	  drivers are provided under the mv_phone/objs direcotry.
+
+	Unsupported features:
+	- USB device support.
+	- Advanced Gateway (Switch) network interface features:
+	  + All-Multicast mode is not supported in network interfaces
+	    connected to the Switch.
+	  + L2 IGMP Snooping.
+	  + TSO.
+
+	Configuration:
+	--------------
+    	1. mv88f6500_defconfig
+	2. mv88f6500_gw_defconfig
+	3. mv88f6500_be_defconfig
+
+	Supported boards:
+	-----------------
+	1. DB-88F65XX-BP
+	2. RD-88F6510-SFU
+	3. RD-88F6560
+	4. DB-88F6601
+	5. RD-88F6601
+
+2. HowTo build
+===============
+	This release was built using SDK 3.2
+	get linux-2.6.32.11 from www.kernel.org
+	change its name to the release name (linux_feroceon_...).
+	unzip the release.zip in the directory where you put the kernel, say A to replace all.
+	define ARCH & CROSS_COMPILE env variables
+	'export ARCH=arm'
+	'export CROSS_COMPILE=<compiler name>'
+	cd to the kernel directory.
+	'make mrproper'
+	config the kernel:
+	'make <platform>_defconfig' 
+	'make uImage'
+	the kernel uImage will be found under arch/arm/boot/.
+
+3. Changes from previous releases
+=================================
+- Changes from version 3.3.0
+-----------------------------
+o Support both NAND and SPI flash devices in run time.
+o Support SPI flash MX25L25635E with 32bit address cycle mode.
+o Allocate 32MB window size for SPI flash access by CPU(memory mapped).
+
+- Changes from version 3.2.0
+-----------------------------
+o Avanta-MC SoC Support:
+  + Support 6601 device.
+  + Support new DB-88F6601 and RD-88F6601 boards.
+  + Support new SPI flash M25Q128
+  + Support 2 channels TDM
+o Networking:
+ + Fix Ethernet complex 2xMAC to Switch configuration
+ + Fix Switch port init
+ + Fix NETA rx tx special init
+ + PPPoE fixes
+ + Fix NETA BM for HWF only
+o Voice:
+ + Support Zarlink VE89116 single channel SLIC device
+
+- Changes from version 3.1.0
+-----------------------------
+o Networking:
+  + Fix 2 bugs related to link down in PON port.
+  + Add support for L2 deposit via compile-time flag.
+  + Add portMask and cpuMask arguments to mvSysNetaInit() function.
+  + Rearrange L2FW support.
+  + Add support for steering ingress packets to different RXQs according
+    to VLAN priority (with and without PnC).
+  + Fix bug in mv_eth_tx_policy() function.
+  + Fix GRO support.
+  + Fix bug in eth_tool dependencies check.
+  + Fix bug in BM support when only long pools are used.
+  + Check port validity in all functions called from sysfs.
+  + Add PNC support for DSCP and VLAN priority setting on per port base.
+  + Fix bug in WRR configuration.
+  + Change Kconfig defaults for PNC configuration, GRO and others.
+  + NFP changes:
+    ++ Align NFP sources to NFP drop5
+    ++ NFP as kernel module support for static learning mode only
+    ++ NFP classification support update:
+       +++ Add new priority based classification mode
+       +++ Update exact match classification mode
+    ++ Fix NFP support for external network drivers
+    ++ Fix bugs and cleanup
+o Voice:
+  + Support Zarlink SLIC driver for VE880 and VE792 devices in user space.
+  + Port Zarlink VP-API-II SLIC drivers to latest releases both for user and
+    kernel support.
+
+- Changes from version 3.0.0
+-----------------------------
+o Networking:
+  + Support new NFPv2 implementation(replaced NFPv1).
+  + PNC: 
+    ++ Change RINFO bits configuration. Sysfs command pnc/s_rinfo was changed.
+    ++ Add support for dispatching ingress packets to different RXQs accordingly with VLAN priority.
+    ++ Enable/Disable access to PNC from driver in run-time by new sysfs command gbe/pnc.
+    ++ Remove unused PNC features such: LLC/SNAP detection, IGMP detections, SWF support.
+  + mv_neta_tool support is removed.
+  + Change BM configuration framework (effect MTU change processing).
+  + Fix RX and TX coalescing configuration.
+  + Support connection of 2 giga ports to internal switch.
+  + Fix big-endian workaround for chip revision A0.
+  + Enable / disable NETA driver workarounds in compile time via menu "ERRATA / WA".
+  + Fix ethtool functionality.
+  + Add support for RX weight configuration.
+  + Fix TSO implementation: add gateway driver support.
+  + Merge with DSMP and KW40 projects:
+    ++ Multi NAPI and multi core support
+    ++ WoL support
+  + Fix link state processing for PON port
+  + Update transmitted bytes for PON port
+  + Bugs fixes and code cleanup
+o TDM/CommUnit:
+  + Support both 8-bit and 16-bit sample sizes.
+  + Support CommUnit on RD-6560 board.
+  + Fix legacy TDM error handling.
+  + Fix CommUnit data data coherency in Rx path.
+  + Add CommUnit support for Wideband mode.
+  + Fix CommUnit balancing and linear issues.
+  + Support Silicon Labs SLIC devices: 3226x and 3217x.
+  + Support TDM DCO clock.
+  + Support TDM FIQ registeration.
+o UART:
+  + Fix serial hang during kernel uncompressing.
+
+- Changes from version 2.1.0
+-----------------------------
+o Misc:
+  + Added support for thermal sensor (lm-sensors package can be used to retrieve temperature).
+  + Added support for PCI-E error interrupts reporting.
+  + Added option to disable L2 cache through Linux command line parameters (pass noL2 param as
+    part of the bootargs).
+  + Add support for connecting MAC0 & MAC1 to internal switch on DB board.
+  + Added option to disable modules auto-detection on DB board (By changing moduleAutoDetect field
+    in the boardSpec structure).
+  + Switch multi-address mode:
+    ++ Configure RD-SFU to work in multi-address mode for switch registers access.
+    ++ Add support for automatic configuration of switch multi-address mode on DB board, if Ethernet-complex
+       configuration allows.
+  + Fixed bug in MPP output driver configuration when using RGMII-B.
+  + Added support for configuring GE0 / GE1 into MII mode.
+  + Update eth-phy HAL to support initializing the QSGMII phy through the switch SMI bus.
+  + Added new APIs to GPP HAL to configure GPIO blink duration and counter association.
+  + Fix delay value in mvPexInit() from 500ms to 1ms.
+  + Fixed bug in serial driver that caused serial to hang under certain scenarios (implemented serial 
+    registers access limitations according to the spec).
+o Networking:
+  + Added L2 Forwarding demo support.
+  + Network driver is now a platform device driver.
+  + Support for NFP bridging.
+  + Network driver - support multi-core synchronization:
+    ++ New locking mechanism (global read/write lock and per-Tx queue locks).
+    ++ Use atomic bit operations for multi-core of port flags (when needed).
+  + Support removing (cleanup) and re-initialization of network driver in runtime.
+  + Gateway driver: support runtime VLAN configuration via sysfs commands.
+o CESA:
+  + Support Encryption/Authentication parallel mode.
+  + Enable SHA256 support thru ZDMA descriptor.
+  + Support Tunit clock frequency setting in run time(default to 400MHz).
+
+- Changes from version 2.0.5
+-----------------------------
+o Applied 16 patches on top of LSP version 2.0.5.
+o Support A0 chip revision.
+
+- Changes from version 2.0.4
+-----------------------------
+o Networking:
+  + Force modules detection in Linux (Do not rely on U-Boot scanning result).
+  + TxDone handling improvements:
+    ++ Divide TxDone and cleanup functionalities to two separate timers.
+    ++ Add timer(s) only when necessary (instead of always-present periodic timer).
+  + HAL API change:
+    ++ mvNetaTxqSentDescNumGet() - now it only reads counter without change it.
+    ++ To read and decrement together please call new API: mvNetaTxqSentDescProc().
+  + support buffer pool pre-defined size allocation.
+  + Tx and Rx Special processing support:
+  + support changing Tx and Rx ring size at runtime.
+  + Support changing number of buffers (short & long) for port at runtime
+  + Support new sysfs operations:
+    ++ rx_reset
+    ++ txp_reset
+    ++ buf_num
+  + Bug fixes:
+    ++ Fix NFP handling of FIB and NAT rules when using PnC.
+    ++ Fix NFP NAT rule aging.
+    ++ Fix SKB Recycle bug with fragmented packets.
+    ++ Fix tx_done when TX throughput less than RX.
+  + Support multi-cache-line operations (used in network driver / NFP).
+  + Support multi-core environment (synch with Armada XP code base).
+  + Support forcing link status, speed and duplex according to board environment.
+  + Coding style improvements.
+  + Add MH configuration HAL APIs for TPM
+  + Disappear error messages  for ISR error and Oversize packets (use counters)
+o TDM:
+  + Support PCM clock frequency configuration to 8MHz/4MHz/2MHz for bus master side
+    in compile time.
+  + Rearrange mv_phone files and folders to distinguish between TDM and SLIC source code.
+o CESA:
+  + Support SHA256 authentication algorithm.
+  + Support SHA256 tests in mv_cesa_tool.
+o PM:
+  + Support deep idle power up delay.
+
+- Changes from version 2.0.3
+-----------------------------
+o Support Linux Orion watchdog driver.
+o Change Analog Grp1 configuration register setting. 
+o Networking:
+  + Update sysfs commands for "tos to rxq" and "tos to txq" mapping:
+    echo p txq tos > tos_txq  - set <txq> for outgoing IP packets with <tos>, <tos> is decimal
+    changed to:
+    echo p txq tos > txq_tos  - set <txq> for outgoing IP packets with <tos>, <tos> is hexadecimal
+    
+    echo p rxq tos > tos_rxq  - set <rxq> for incoming IP packets with <tos>, <tos> is decimal
+    changed to:
+    echo p rxq tos > rxq_tos  - set <rxq> for incoming IP packets with <tos>, <tos> is hexadecimal
+  + Fix bug in SKB recycle (free pkt if recycle failed)
+  + Change implementation of mvNetaTxqSentDescNumGet() function, it decrements "transmitted" counter automatically.
+    mvNetaTxqSentDescDec() should not be called directly.
+  + Add functions for legacy parser TOS to RXQ mapping and others.
+  + Add debug messages for ISR and POLL.
+  + Disable update of TX descriptor by HW after transmit (save DRAM accesses) - set bit 12 in port configuration
+    register.
+  + Coding style fixes.
+  + Update code releated to PHY access using GbE SMI interface.
+  + Bug fix in Rx descriptors counters when I/F down during traffic.
+o NAND:
+  + Support new nand flash controller(NFC).
+o PM:
+  + Code tuned to support CPU frequency scaling and CPU deep idle simultaneously.
+o TDM:
+  + Support Rx/Tx voice processing in interrupt context - configurable in defcofig.
+  + Stop DMA engines once mvTdmPcmStop() is dispatched - for legacy unit only.
+  + Remove SLIC timer when all channels are disabled.
+
+- Changes from version 2.0.2
+----------------------------
+o Support RD-88F6560 board.
+o CESA:
+  + Support dual CESA engines.
+  + Support requests processing in chain-mode.
+o PM:
+  + Update CPU frequency parameter transition_latency to 5usec instead of 1ms.
+  + Support DRAM self refresh in deep idle mode.
+o PCIe:
+  + Update interface initialization sequence.
+o TDM:
+  + Support voice test application or MMP selection in run-time.
+o NAND:
+  + Relocate legacy NAND driver to arch/arm/plat-feroceon/mv_drivers_lsp/mv_mtd/
+  + Integrated new NAND controller driver to LSP - not supported yet. 
+o Networking:
+  + Changed CPU performance counters implementation.
+  + NETA driver:
+    ++ FIx bug for TSO.
+    ++ Fix bug for RXQ with more than 255 descriptors.
+    ++ Change API of mvNetaRxDescFill() function.
+    ++ Merge with DSMP driver.
+    ++ Prevent some of ethtool configurations for Giga port connected to switch.
+    ++ Coding style changes.
+    ++ Double invalidate of RX descriptors and buffers to prevent speculative prefetch.
+  + NFP:
+    ++ Add ARP support.
+    ++ Fix mvNfpPnc crush when entry deleted during traffic.
+
+
+- Changes from version 2.0.1
+----------------------------
+o Support SDIO.
+o Support USB host.
+o Support CESA single engine:
+  + Ported IPSec support to OpenSWAN release 2.6.29.
+  + See Known Issues for more details.
+o Support CommUnit - See Known Issues for more details.
+o Remove old files releated to Orion, Disco-Duo and Kirkwood SoC projects.
+o Support 3 defconfig flavors: regular(performance oriented), GW(NAT) and big-endian.
+o TDM:
+  + Fix parallel SPI access bug in SLIC glue driver.
+  + Eliminate SLIC timer routine dispatching in case SLIC module is not exists.
+o PM:
+  + Added CPU Idle support. This enable Linux CPU-Idle framework to shutdown the CPU when it being idle.
+    See LspReadme.txt for more details.
+  + Added CPU frequency scaling support. Using this mechanism, the CPU frequency can be lowered to DDR frequency.
+    See LspReadme.txt for more details.
+o Networking:
+  + Update SKB headroom size to 96B.
+  + Enable SKB recycle.
+  + Don't allocate extrabuff for each TX descriptor if GSO is not supported.
+  + Fix bug in the function mvNetaMaxRxSizeSet().
+  + Add MaxTxSize configuration for TX shaping.
+  + Add new function: MV_STATUS mvNetaTxpMaxTxSizeSet(int port, int txp, int maxTxSize);
+  + Check that TXP and TXQ max burst configuration value must be larger than MaxTxSize.
+  + Update MaxTxSize when MTU changed.
+  + Fix PON MIB counters support:
+    ++ Default RX MIB set to 0.
+    ++ echo mib gp > mib_gpid       - MIB set <mib> for incoming packets with GemPID <gp>
+    ++ echo mib > mib_def           - MIB set <mib> for incoming packets not matched any GemPID
+  + Add new sysfs commands:
+    ++ echo {0|1} > gbe/skb         - enable / disable SKB recycle
+    ++ echo p txp > gbe/wrr_regs    - show WRR registers for <p/txp>
+    ++ echo p rxq v > gbe/rxq       - show RXQ descriptors ring for <p/rxq>. v=0-brief, v=1-full
+    ++ echo p txp txq v > gbe/txq   - show TXQ descriptors ring for <p/txp/txq>. v=0-brief, v=1-full
+  + Fix ethtool functionality:
+  + Fix TSO functionality.
+  + Fix SKB recycle bug.
+  + Fix bug in MTU change.
+  + Fix spinlock functionality.
+  + Add special spinlocks per pool.
+  + Fix PNC AInfo dump.
+  + Fix NFP IPv6 functionality.
+
+
+- Changes from version 2.0.0
+----------------------------
+ o Support big-endian Linux image(use mv88f6500_be_defconfig).
+ o Support NOR flash.
+ o Support SPI flash.
+ o Support 2xPCIe interfaces.
+ o Bug fix: I2C transactions from Linux are supported - eliminate use of
+	    summary bits for main interrupt cause high and main interrupt cause error registers.
+ o Update Marvell Linux I2C driver with following features:
+   + Combine access support.
+   + Add delay after stop.
+   + Port expander support.
+ o Change VMALLOC_END definition from (PAGE_OFFSET + 0x28000000) to (PAGE_OFFSET + 0x30000000) in
+   order to support larger memory range mapping.
+ o Decrease PCIe memory mapping to 16MB.
+ o Networking:
+   + Support Link Detection from QSGMII ports.
+   + Support Link Detection on switch port connected to the GE-PHY using interrupt.
+   + Changed API: mvBoardIsPhyToSwitchP0Connected() -> mvBoardGePhySwitchPortGet().
+   + New API: mvBoardRgmiiASwitchPortGet().
+   + TCAM driver: Fix bug in RXQ display
+   + NFP PMT and HWF support:
+     ++ Add new file mvNfpPmt.c .
+     ++ Add new Kconfig options.
+     ++ Add new sysfs command to allocate TXQ for NFP HWF between inport and outport:
+	echo "rxp p txp txq" > hwf  - use <txp/txq> for NFP HWF flows from <rxp> to <p>
+   + NETA driver(gbe):
+     ++ Set MBUS retry enable.
+   + mv_neta_tool:
+     ++ Add option to display GMAC registers:
+	mv_neta_tool -St gmac <port>
+
+- Changes from version 1.2.0
+----------------------------
+ o Remove Z1 chip revision support.
+ o Support Z2 chip revision.
+ o Support DB-88F65XX-BP and RD-88F6510-SFU boards(Z2).
+ o Networking:
+   + Update PMT entries to 4K.
+   + Update TXQ configuration for hardware forwarding.
+ o The following features are supported for the release:
+   + Support legacy NAND controller.
+   + Support legacy TDM unit(2-channels).
+   + Support single PCIe interface.
+   + Support standard MAC0/MAC1 ethernet complex configuration.
+   + Support new UART controller.
+
+- Changes from version 1.1.0
+----------------------------
+ o Networking:
+   + NFP PPPoE support (disabled by default).
+   + NFP IPv6 support (disabled by default).
+   + NFP choosing TXQ accordingly with TOS value (for IPv4)
+   + Added support for L2 PON special requrements
+	"echo p            > sh_show"    - show port configuration for special TX
+    	"echo p txp txq v  > sh_txq     - set txp/txq for special TX with signal header. txq=-1 means remove entry
+    	"echo p hex v      > sh_mh      - set 2 bytes of MH/GH for special TX with signal header <v>
+    	"echo p hex v      > sh_hw_cmd  - set 4 bytes of TX decriptor field for special TX with signal header <v>
+    	"echo p hex v      > sh_mod     - set 10 bits of modification command for special TX with signal header <v>, 
+					<hex> == 0xFFFF means remove entry.
+   + Run-time configuration of descriptor numbers for RX and TX queues
+	- "echo p txp txq v"	- set number of descriptors <v> for <port/txp/txq>.
+        - "echo p rxq v"	- set number of descriptors <v> for <port/rxq>
+   + NETA driver (neta/gbe)
+	- Change APIs of the following functions:
+		mvNetaPortDisable(MV_NETA_PORT_CTRL* pPortCtrl) => mvNetaPortDisable(int port);
+		mvNetaPortEnable(MV_NETA_PORT_CTRL* pPortCtrl)  => mvNetaPortEnable(int port);
+		mvNetaPortUp(MV_NETA_PORT_CTRL* pPortCtrl)      => mvNetaPortUp(int port);
+		mvNetaPortDown(MV_NETA_PORT_CTRL* pPortCtrl)   	=> mvNetaPortDown(int port);
+		mvNetaLinkStatus(MV_NETA_PORT_CTRL* pPortCtrl, MV_ETH_PORT_STATUS* pStatus); =>
+		  mvNetaLinkStatus(int port, MV_ETH_PORT_STATUS* pStatus) 
+		mvNetaDefaultsSet(MV_NETA_PORT_CTRL* pPortCtrl) => mvNetaDefaultsSet(int port);
+		mvEthTxPolicyRegs(int port, int txp) 		=> mvEthTxpWrrRegs(int port, int txp);
+		mvEthPortCounters(int port);			=> mvEthPortCounters(int port, int txp);
+		mvEthPortRmonCounters(int port);		=> mvEthPortRmonCounters(int port, int txp);
+  	- Move file mvPmt.c from directory neta/gbe to neta/pmt
+   	- Create new file mvPmt.h in the directory neta/pmt
+	- Fix bugs in noBM, noPNC mode
+
+   + PNC driver changes
+	- Change TCAM API
+	  	void sram_sw_set_addinfo(struct tcam_entry* te, unsigned int bit); =>
+		  void sram_sw_set_ainfo(struct tcam_entry* te, unsigned int bits, unsigned int mask);
+	- Change sysfs command
+	from 	- echo a 	> pnc/s_ainfo	- set ainfo bit <a>
+	to 	- echo a b 	> pnc/s_ainfo   - set ainfo value <a> with mask <b>
+	- Fix DSCP configuration
+	- Add IPv4 and IPv6 over PPPoE configuration.
+	- Add IPv6 2 tuple flow configuration.
+   + Performance improvements
+	- Use new file for function reordering (Routing).
+	- Put all debug code under compilation flag.
+
+ o TDM:
+   + Support new software telephony architecture based on TDM/SLIC management seperation.
+     The new model supports mapping of SLIC kernel stack APIs to user space call control
+     application, where TDM(data path) controlled by Marvell soft DSP engine(MMPv2).
+   + VE880/VE792 SLIC/s profile configuration files migrated from kernel space to user space.
+   + Remove support for Silabs 3215 SLIC and 3050 DAA due to new architecture redesign.
+   + Remove SLIC abstraction layer due to new architecture redesign.
+   + Support flexible TDM time slot configuration.         
+   + Support new user space voice test application under /tools/voice/.
+   + Remove support for kernel telephony test module.  
+
+
+- Changes from version 1.0.0-NQ
+-------------------------------
+ o Networking:
+   + Bug fixes:
+    - Fixed bug with promiscuous mode when a Gateway interface is down.
+	- Fixed bug with Tx statistics when using NFP with Gateway interfaces.
+	- Fixed bug with loading Switch driver even when Switch was not connected to any GbE port.
+   + Enabled flow control between GbE port and Switch CPU port.
+   + Added statistics for NFP IPv4 checksum error.
+ o Fixed bug in handling GPIO interrupts for GPP's larger then 31 and
+   smaller than 64.
+ o Fix HAL files copyright header.
+ o Fix bug in Pex clock Sample-At-Reset control functions.
+ o Update RD-88F6560-GW MPP configurations.
+ o Update RD-88F6530-MDU MPP configurations.
+ o Enable runtime detection of CPU to DRAM access configuration.
+
+
+- Changes from version 0.5.0-NQ
+-------------------------------
+ o Networking:
+   + Added RX and TX TOS based QoS support:
+	- Define TXQ for Linux generated traffic accordingly with TOS value in IP header.
+	- Enable up to CONFIG_MV_ETH_PNC_DSCP_PRIO (4) TCAM entries to map TOS value of incoming IP packets to RXQ.
+	- Show RXQ and TXQ TOS map using "sysfs" or "mv_neta_tool"
+   + Add some configurations options for PMT:
+	- Set ETH_TYPE registers.
+	- Set MH registers.
+   + Changed some "mv_neta_tool" and "sysfs" configuration commands:
+	- mv_neta_tool new supported commands:
+	  mv_neta_tool -St tos <port>
+  	  mv_neta_tool -tos <port> <rxq> <tos>
+	- sysfs deleted commands:
+	  echo p txp txq mod > txq_mod  - set owner of TX queue: 0-Free, 1-CPU, 2-HWF
+
+	- sysfs changed commands:
+	  echo a   > pnc/hw_inv_all  -  disable all tcam entries\n" replace "hw_invalidate_all" command
+	  echo a   > pnc/hw_inv      -  disable tcam entry <a>\n" replace "hw_invalidate" command
+	  echo p i > pmt/hw_inv      - disable entry <i> on port <p>\n" replace hw_invalidate command
+
+	- sysfs new commands:
+  	  echo p > gbe/tos             - show RX and TX TOS map for port <p>
+	  echo p > gbe/mac             - show MAC info for port <p>
+	  echo p rxq tos > gbe/tos_rxq - set <rxq> for incoming IP packets with <tos>
+	  echo p txq tos > gbe/tos_txq - set <txq> for outgoing IP packets with <tos>
+	  echo p txp > pmt/hw_regs     - show PM registers
+	  echo p txp i v > pmt/mh_reg  - set MH register <i=0..5> with value <v>
+	  echo p txp i v > pmt/eth_reg - set ETH register <i=0..3> with value <v>
+ o Enable CPU frequency scaling driver.
+ o Changed default NAND partitioning.
+ o Added "pon_type" procfs entry to retrieve board's PON configuration.
+ o Voice:
+   + Support 32 CommUnit channels.
+   + Support Zarlink VE792 SLIC device including power supply
+     initialization.
+   + Implemented CommUnit disable sequence - not fully stable.
+   + Support linear mode - not fully stable.
+   + Enable TDM error statistics monitoring under Linux proc FS.
+   + Fixed end-to-end delay for local call - update CommUnit Rx/Tx
+     interrupts synchronization
+ o Add support for dynamic initialization of EPON MAC address.
+
+
+- Changes from version 0.4.0-NQ
+-------------------------------
+ o Fix copy to user support code, now LSP uses kernel's code for
+   copy-to-user instead of marvell's developed code.
+ o Fixed bug in SDIO initialization.
+ o Fixed SATA host controller initialization for KW2 SoC's.
+ o Fixed bug in ethernet complex detection when SATA & 3xFE are used
+   simultaneously.
+ o Networking:
+   + Network driver printed messages cleanup.
+   + Drop flow control Pause frames in PnC.
+   + Switch: 
+	- Disabling all disconnected ports.
+	- Enabling Flow Control on external ports.
+	- Forcing link up, full-duplex, 1000Mbps speed and flow control for ports connected to a GMAC unit.
+	- Improved Switch state and statistics printout.
+   + Ethtools:
+   	- The interval for ethtool timeout autoneg (MV_ETH_TOOL_AN_TIMEOUT) 
+	  was changed to 5000 (5 seconds) instead of 2000 (2 seconds) due to a timeout
+	- When restaring autonegotioation with mvEthPhyRestarrAN().
+	- AutoNegotation restart was added to ethtools restore setting method and also
+	  in one case in set_pauseparam() (for "ethtool -K autoneg on tx on rx on").
+
+- Changes from version 0.3.0-NQ
+-------------------------------
+ o Added support for Integrated Sata controller.
+ o Add support for SPI flash.
+ o Add auto-detection for user-selected SDIO configuration on KW2-DB.
+ o Fixed issue with Gateway driver not receiving broadcast packets 
+   (packets with MAC broadcast destination address).
+ o Performing SMI accesses using GbE#1 registers.
+ o Fixed minor issue - previously tried to access Switch PHY on port 4 
+   even if port 4 is not connected.
+ o Enabled the Switch CPU port to send flow control PAUSE frames.
+   Notice: The Flow-control feature is still under development and is not 
+   fully supported in this version.
+ o Fixed issue with NFP not checking L4 checksum.
+ o NFP: Removed debug prints.
+
+- Changes from version 0.2.0-NQ
+-------------------------------
+ o Networking:
+   + Support init-time configuration of network ports to appear as Linux network
+     interfaces (e.g. eth0, eth1) or to be "disconnected" from Linux (See LSP Readme for further details).
+   + Support init-time configuration of working with the Switch in Gateway mode / External Switch mode (non-Gateway): 
+     - Separate Switch driver (QD HAL) load from Switch init function
+     - Select Gateway mode / External Switch mode according to the mvNetConfig
+       parameter in U-Boot. (See LSP Readme for further details).
+   + Added support for advanced Gateway driver features:
+     - Runtime VLAN configuration
+     - Promiscuous mode
+     - Adding / deleting specific multicast addresses
+     - NFP between two Gateway interfaces / between Gateway interface and
+       non-Gateway interface
+     - 802.1Q VLAN-tagged traffic
+     - Support QSGMII module
+   + Added Switch ports link change prints even when working in External Switch mode
+   + Added TX no queue feature (tx_noq command in mv_neta_tool).
+
+ o Configure UART driver to work in Polling mode. This might cause the
+   UART to work a little slower for applications with large amount of
+   printouts.
+ o Add support for SGMII output configuration.
+ o Minor data-type fixes in mvBoardTdmSpiCsGet() &
+   mvBoardTdmDevicesCountGet().
+ o Added the ability to connect switch port 5 to KW2 MAC 1 port.
+ o Changed RD-SFU board ethernet complex configuration as follows:
+   - MAC port 0 is connected to switch port 6.
+   - MAC port 1 is connected to switch port 5.
+   - Internal PHY is connected to switch port 4.
+ o Add support for RD-88F6536-MDU board.
+ o Updated Ethernet Complex initialization code to support SGMII,
+   QSGMII, Internal PHYs and switch.
+ o Cesa HAL code cleanup.
+ o TDM:
+   - Added support for CommUnit (Up to 4 channels are currently
+     supported).
+   - Only Zarlink-VE880 SLICs are currently supported.
+   - Added an option to compile the mv_phone.ko driver using a pre-built
+     SLIC drivers library (This is the default kernel setting).
+   - Updated SLIC electrical initialization parameters table (For
+     Zarlink-VE880).
+   - Fix SLIC initialization process.
+   - Enhanced phone_test utilitiy with capability to read SLIC
+     registers.
+
+
+- Changes from version 0.1.0-NQ
+-------------------------------
+ o Initial support for TDM-32 Channels unit.
+
+- Changes from version 0.0.5-NQ
+-------------------------------
+ o Updated LSP kernel version from 2.6.31.8 to 2.6.32.11.
+ o Minor syntax fixes for tools/Makefile file.
+ o Skip ethernet complex registers initialization in Linux, and rely on
+   Uboot's initialization.
+ o Integration of Cesa unit on KW2 Silicon.
+ o Fixed bug in spi HAL in baud-rate calculation function
+   (mvSpiBaudRateSet()).
+ o Updated PON drivers and HALs after KW2 Silicon bringup.
+ o Enable auto-detection of TDM modules.
+ o Provide PON mode according to Sample-At-Reset value.
+ o Enable CPU-Idle support.
+ o Change default NAND device partitioning.
+ o Fix Zarlink-VE880 SLIC timing configuration.
+ o Neta:
+ 	- Configure the number of TCONTS at boot time according to PON
+	  configuration in Sample-At-Reset register.
+	- Added GRO support.
+ o Added gateway support:
+	- Adaptation of switch drivers to support KW2 internal switch.
+ 	- Link detection.
+	- Interface configuration via mvNetConfig parameter in U-Boot:
+	  + setting MAC address and port(s) per interface.
+	  + setting interface MTU.
+	- Runtime configuration of interface's Unicast MAC address.
+	- HW L2 switching according to interface (VLAN) configuration.
+	- Routing between Switch and non-Switch interface.
+	- Change MTU at runtime.
+
+- Changes from version 0.0.4-NQ
+-------------------------------
+ o Add initial support for RD-88F6510-SFU board. Support for this board
+ is minimal and still not stable.
+ o TDM:
+ 	- Update support for Zarlink-VE880 SLIC.
+	- Fix new PLL(x58) support for legacy TDM unit.
+	- Update SPI baud rate for SLIC devices to 2M.
+ o Neta:
+ 	- Partial IGMP support.
+	- Fix scatter-gather bug in Tx path.
+	- Fixed bug in NFP NAT mode.
+	- Fixed Neta register defaults.
+ o Fixed phy register access from Linux.
+ o Add initial support for USB host in DB board.
+
+
+- Version 0.0.4-NQ
+------------------
+ o First LSP to support KW2 SoC.
+   This is a preliminary version intended for integration purposes.
+
+4. Known Issues
+===============
+Networking:
+- For getting GRO offload paramaters , you must have version
+  ethtool-2.6.33-pre1 or higher.
+- MTU change is not supported.
+- When working with QSGMII module connected to the Switch, flow control is not enabled on the Switch external ports.
+- Connecting Switch port 5 to RGMII or internal PHY is currently not supported.
+- Allmulticast mode is not supported for Gateway interfaces.
+- Cannot use Gateway mode for RD-SFU board, must select External Switch mode.
+
+Telephony/CommUnit:
+- No support for Linear mode(A-law/U-law only).
+- False MCSC/MCDMA parity error generation.
+- Zarlink SLIC/s initialization process may end up with false off-hook detection for part/all lines.
+- FSync signal is tied to the TDM enable - therefore all CommUnit blocks are functional prior to SLIC/s
+  initialization process.
+- Periodic interrupt counter drifts by one frame(125usec).
+- Re-enabling the CommUnit may end up with small sampling offset(1 or 2 samples) between voice channels.
+
+USB:
+- Linux doesn't handle well a case of 2 ISO devices(full speed) working
+  simultaneously through the high speed hub.
+
+NAND:
+- When working with 4bit ECC configuration, it is not recommended to perform
+  read from an erased page, since no ECC was calculated for this page.
+  In this case we compared the page data against 512 bytes of 0xFF and if we
+  get a match, then return gracefully, otherwise, there is an uncorrectable
+  error.
+
+CESA:
+- OpenSSL speed test multiple sessions cause to board terminal ,telnet and ssh
+  sessions to stop working.
+
+5. Notes
+========
+
+- This release support up to 512MB of DRAM with current memory layout definition.
+
+5. Disclaimer
+=============
+This document provides preliminary information about the products described, and such 
+information should not be used for purpose of final design. Visit the Marvell(r) web 
+site at www.marvell.com for the latest information on Marvell products.
+
+No part of this document may be reproduced or transmitted in any form or by any means, 
+electronic or mechanical, including photocopying and recording, for any purpose, 
+without the express written permission of Marvell. Marvell retains the right to make 
+changes to this document at any time, without notice. Marvell makes no warranty of 
+any kind, expressed or implied, with regard to any information contained in this 
+document, including, but not limited to, the implied warranties of merchantability 
+or fitness for any particular purpose. Further, Marvell does not warrant the accuracy 
+or completeness of the information, text, graphics, or other items contained within 
+this document. Marvell makes no commitment either to update or to keep current the 
+information contained in this document. Marvell products are not designed for use in 
+life-support equipment or applications that would cause a life-threatening situation 
+if any such products failed. Do not use Marvell products in these types of equipment 
+or applications. The user should contact Marvell to obtain the latest specifications 
+before finalizing a product design. Marvell assumes no responsibility, either for use 
+of these products or for any infringements of patents and trademarks, or other rights 
+of third parties resulting from its use. No license is granted under any patents, 
+patent rights, or trademarks of Marvell.These products may include one or more 
+optional functions. The user has the choice of implementing any particular optional 
+function. Should the user choose to implement any of these optional functions, it is 
+possible that the use could be subject to third party intellectual property rights. 
+Marvell recommends that the user investigate whether third party intellectual property 
+rights are relevant to the intended use of these products and obtain licenses as 
+appropriate under relevant intellectual property rights. 
+Marvell comprises Marvell Technology Group Ltd. (MTGL) and its subsidiaries, Marvell 
+International Ltd. (MIL), Marvell Semiconductor, Inc. (MSI), Marvell Asia Pte Ltd. (MAPL), 
+Marvell Japan K.K. (MJKK), Marvell Semiconductor Israel Ltd. (MSIL), SysKonnect GmbH, 
+and Radlan Computer Communications, Ltd.
+Export Controls.  With respect to any of Marvell's Information, the user or recipient, 
+in the absence of appropriate U.S. government authorization, agrees: 1) not to re-export 
+or release any such information consisting of technology, software or source code 
+controlled for national security reasons by the U.S. Export Control Regulations ("EAR"), 
+to a national of EAR Country Groups D:1 or E:2; 2) not to export the direct product of 
+such technology or such software, to EAR Country Groups D:1 or E:2, if such technology or 
+software and direct products thereof are controlled for national security reasons by the 
+EAR; and, 3) in the case of technology controlled for national security reasons under the 
+EAR where the direct product of the technology is a complete plant or component of a plant, 
+not to export to EAR Country Groups D:1 or E:2 the direct product of the plant or major 
+component thereof, if such direct product is controlled for national security reasons by 
+the EAR, or is subject to controls under the U.S. Munitions List  ("USML").  At all times 
+hereunder, the recipient of any such information agrees that they shall be deemed to have 
+manually signed this document in connection with their receipt of any such information. 
+Copyright (c) 2004.  Marvell.  All rights reserved.  Marvell, the Marvell logo, Moving 
+Forward Faster, Alaska, and GalNet are registered trademarks of Marvell.  Discovery, 
+Fastwriter, GalTis, Horizon, Libertas, Link Street, NetGX, PHY Advantage, Prestera, 
+Raising The Technology Bar, UniMAC, Virtual Cable Tester, and Yukon are trademarks of 
+Marvell.  All other trademarks are the property of their respective owners.

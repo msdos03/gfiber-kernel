@@ -76,7 +76,7 @@ static inline void l2_clean_pa_range(unsigned long start, unsigned long end)
 	 */
 	BUG_ON((start ^ end) >> PAGE_SHIFT);
 
-	raw_local_irq_save(flags);
+	raw_local_irq_fiq_save(flags);
 	va_start = l2_start_va(start);
 	va_end = va_start + (end - start);
 	__asm__("mcr p15, 1, %0, c15, c9, 4\n\t"
@@ -106,7 +106,7 @@ static inline void l2_inv_pa_range(unsigned long start, unsigned long end)
 	 */
 	BUG_ON((start ^ end) >> PAGE_SHIFT);
 
-	raw_local_irq_save(flags);
+	raw_local_irq_fiq_save(flags);
 	va_start = l2_start_va(start);
 	va_end = va_start + (end - start);
 	__asm__("mcr p15, 1, %0, c15, c11, 4\n\t"
@@ -128,11 +128,11 @@ static inline void l2_inv_all(void)
  * inclusive start and end addresses.
  */
 #define CACHE_LINE_SIZE		32
-#define MAX_RANGE_SIZE		1024
+#define MAX_RANGE_SIZE		PAGE_SIZE
 
 static int l2_wt_override;
 
-static unsigned long calc_range_end(unsigned long start, unsigned long end)
+static inline unsigned long calc_range_end(unsigned long start, unsigned long end)
 {
 	unsigned long range_end;
 
@@ -239,7 +239,7 @@ static int __init flush_and_disable_dcache(void)
 	if (cr & CR_C) {
 		unsigned long flags;
 
-		raw_local_irq_save(flags);
+		raw_local_irq_fiq_save(flags);
 		flush_cache_all();
 		set_cr(cr & ~CR_C);
 		raw_local_irq_restore(flags);

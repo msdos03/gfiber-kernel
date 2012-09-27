@@ -2266,6 +2266,25 @@ void netif_nit_deliver(struct sk_buff *skb)
 	rcu_read_unlock();
 }
 
+
+
+#ifdef CONFIG_MV_ETH_NFP_EXT
+static struct sk_buff *handle_nfp_extrcv(struct sk_buff *skb, struct net_device *dev)
+{
+	MV_EXT_PKT_INFO *pktInfo;
+
+	pktInfo = (MV_EXT_PKT_INFO *)&skb->cb;
+	if (pktInfo->flags == 0)
+		pktInfo = NULL;
+
+	if (!mv_eth_nfp_ext(skb->dev, skb, pktInfo))
+		return NULL;
+
+	return skb;
+}
+#endif /* CONFIG_MV_ETH_NFP_EXT */
+
+
 /**
  *	netif_receive_skb - process receive buffer from network
  *	@skb: buffer to process
@@ -2327,6 +2346,12 @@ int netif_receive_skb(struct sk_buff *skb)
 		goto ncls;
 	}
 #endif
+
+#ifdef CONFIG_MV_ETH_NFP_EXT
+	skb = handle_nfp_extrcv(skb, orig_dev);
+	if (!skb)
+		goto out;
+#endif /* CONFIG_MV_ETH_NFP_EXT */
 
 	list_for_each_entry_rcu(ptype, &ptype_all, list) {
 		if (ptype->dev == null_or_orig || ptype->dev == skb->dev ||

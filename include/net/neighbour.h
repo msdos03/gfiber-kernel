@@ -119,18 +119,21 @@ struct neighbour
 	struct sk_buff_head	arp_queue;
 	struct timer_list	timer;
 	const struct neigh_ops	*ops;
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+	bool 			nfp;
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
 	u8			primary_key[0];
 };
 
 struct neigh_ops
 {
 	int			family;
-	void			(*solicit)(struct neighbour *, struct sk_buff*);
-	void			(*error_report)(struct neighbour *, struct sk_buff*);
-	int			(*output)(struct sk_buff*);
-	int			(*connected_output)(struct sk_buff*);
-	int			(*hh_output)(struct sk_buff*);
-	int			(*queue_xmit)(struct sk_buff*);
+	void			(*solicit)(struct neighbour *, struct sk_buff *);
+	void			(*error_report)(struct neighbour *, struct sk_buff *);
+	int			(*output)(struct sk_buff *);
+	int			(*connected_output)(struct sk_buff *);
+	int			(*hh_output)(struct sk_buff *);
+	int			(*queue_xmit)(struct sk_buff *);
 };
 
 struct pneigh_entry
@@ -192,18 +195,18 @@ struct neigh_table
 extern void			neigh_table_init(struct neigh_table *tbl);
 extern void			neigh_table_init_no_netlink(struct neigh_table *tbl);
 extern int			neigh_table_clear(struct neigh_table *tbl);
-extern struct neighbour *	neigh_lookup(struct neigh_table *tbl,
+extern struct neighbour 	*neigh_lookup(struct neigh_table *tbl,
 					     const void *pkey,
 					     struct net_device *dev);
-extern struct neighbour *	neigh_lookup_nodev(struct neigh_table *tbl,
+extern struct neighbour 	*neigh_lookup_nodev(struct neigh_table *tbl,
 						   struct net *net,
 						   const void *pkey);
-extern struct neighbour *	neigh_create(struct neigh_table *tbl,
+extern struct neighbour 	*neigh_create(struct neigh_table *tbl,
 					     const void *pkey,
 					     struct net_device *dev);
 extern void			neigh_destroy(struct neighbour *neigh);
 extern int			__neigh_event_send(struct neighbour *neigh, struct sk_buff *skb);
-extern int			neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new, 
+extern int			neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new,
 					     u32 flags);
 extern void			neigh_changeaddr(struct neigh_table *tbl, struct net_device *dev);
 extern int			neigh_ifdown(struct neigh_table *tbl, struct net_device *dev);
@@ -260,7 +263,7 @@ extern void *neigh_seq_start(struct seq_file *, loff_t *, struct neigh_table *, 
 extern void *neigh_seq_next(struct seq_file *, void *, loff_t *);
 extern void neigh_seq_stop(struct seq_file *, void *);
 
-extern int			neigh_sysctl_register(struct net_device *dev, 
+extern int			neigh_sysctl_register(struct net_device *dev,
 						      struct neigh_parms *p,
 						      int p_id, int pdev_id,
 						      char *p_name,
@@ -289,7 +292,7 @@ static inline void neigh_release(struct neighbour *neigh)
 		neigh_destroy(neigh);
 }
 
-static inline struct neighbour * neigh_clone(struct neighbour *neigh)
+static inline struct neighbour *neigh_clone(struct neighbour *neigh)
 {
 	if (neigh)
 		atomic_inc(&neigh->refcnt);

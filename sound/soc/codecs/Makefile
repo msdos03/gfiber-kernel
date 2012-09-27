@@ -8,6 +8,7 @@ snd-soc-ak4535-objs := ak4535.o
 snd-soc-ak4642-objs := ak4642.o
 snd-soc-cs4270-objs := cs4270.o
 snd-soc-cx20442-objs := cx20442.o
+snd-soc-cs42l51-objs := cs42l51.o
 snd-soc-l3-objs := l3.o
 snd-soc-pcm3008-objs := pcm3008.o
 snd-soc-spdif-objs := spdif_transciever.o

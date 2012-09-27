@@ -1,5 +1,4 @@
 Image
 zImage
-xipImage
-bootpImage
 uImage
+compressed/vmlinux.lds

@@ -15,11 +15,16 @@ ifeq ($(CONFIG_CPU_ENDIAN_BE8),y)
 LDFLAGS_vmlinux	+= --be8
 endif
 
+NFPLIBCMD=$(AR) rcs arch/arm/plat-feroceon/mv_drivers_lsp/mv_neta/nfplib.a arch/arm/plat-feroceon/mv_hal/neta/nfp/*.o arch/arm/plat-feroceon/mv_drivers_lsp/mv_neta/nfp_mgr/*.o
+
 OBJCOPYFLAGS	:=-O binary -R .note -R .note.gnu.build-id -R .comment -S
 GZFLAGS		:=-9
 #KBUILD_CFLAGS	+=-pipe
 # Explicitly specifiy 32-bit ARM ISA since toolchain default can be -mthumb:
 KBUILD_CFLAGS	+=$(call cc-option,-marm,)
+ifeq ($(CONFIG_REORDER),y)
+KBUILD_CFLAGS          += -ffunction-sections
+endif
 
 # Do not use arch/arm/defconfig - it's always outdated.
 # Select a platform tht is kept up-to-date
@@ -57,7 +62,11 @@ arch-$(CONFIG_CPU_32v6)		:=-D__LINUX_ARM_ARCH__=6 $(call cc-option,-march=armv6,
 ifeq ($(CONFIG_CPU_32v6),y)
 arch-$(CONFIG_CPU_32v6K)	:=-D__LINUX_ARM_ARCH__=6 $(call cc-option,-march=armv6k,-march=armv5t -Wa$(comma)-march=armv6k)
 endif
-arch-$(CONFIG_CPU_32v5)		:=-D__LINUX_ARM_ARCH__=5 $(call cc-option,-march=armv5te,-march=armv4t)
+ifneq ($(CONFIG_USE_DSP),y)
+arch-$(CONFIG_CPU_32v5)         :=-D__LINUX_ARM_ARCH__=5 $(call cc-option,-march=armv5t)
+else
+arch-$(CONFIG_CPU_32v5)		    :=-D__LINUX_ARM_ARCH__=5 $(call cc-option,-march=armv5te,-march=armv4t)
+endif
 arch-$(CONFIG_CPU_32v4T)	:=-D__LINUX_ARM_ARCH__=4 -march=armv4t
 arch-$(CONFIG_CPU_32v4)		:=-D__LINUX_ARM_ARCH__=4 -march=armv4
 arch-$(CONFIG_CPU_32v3)		:=-D__LINUX_ARM_ARCH__=3 -march=armv3
@@ -76,11 +85,32 @@ tune-$(CONFIG_CPU_ARM922T)	:=-mtune=arm9tdmi
 tune-$(CONFIG_CPU_ARM925T)	:=-mtune=arm9tdmi
 tune-$(CONFIG_CPU_ARM926T)	:=-mtune=arm9tdmi
 tune-$(CONFIG_CPU_FA526)	:=-mtune=arm9tdmi
+ifeq ($(CONFIG_ARCH_FEROCEON),y)
+  #-KW
+  ifeq ($(CONFIG_ARCH_FEROCEON_KW),y)
+    tune-$(CONFIG_CPU_FEROCEON)	:=$(call cc-option,-mtune=arm9e,-mtune=xscale)
+  endif
+  #-KW2
+  ifeq ($(CONFIG_ARCH_FEROCEON_KW2),y)
+    tune-$(CONFIG_CPU_FEROCEON)	:=$(call cc-option,-mtune=marvell-f)
+  endif
+
+  #-6183
+  ifeq ($(CONFIG_ARCH_FEROCEON_ORION),y)
+    tune-$(CONFIG_CPU_FEROCEON)	:=$(call cc-option,-mtune=arm9e,-mtune=xscale)
+  endif
+  #-DD
+  ifeq ($(CONFIG_ARCH_FEROCEON_MV78XX0),y)
+    tune-$(CONFIG_CPU_FEROCEON)	:=$(call cc-option,-mtune=marvell-f,-mtune=xscale)
+  endif
+else
+  tune-$(CONFIG_CPU_ARM926T)	:=-mtune=arm9tdmi
+endif
 tune-$(CONFIG_CPU_SA110)	:=-mtune=strongarm110
 tune-$(CONFIG_CPU_SA1100)	:=-mtune=strongarm1100
 tune-$(CONFIG_CPU_XSCALE)	:=$(call cc-option,-mtune=xscale,-mtune=strongarm110) -Wa,-mcpu=xscale
 tune-$(CONFIG_CPU_XSC3)		:=$(call cc-option,-mtune=xscale,-mtune=strongarm110) -Wa,-mcpu=xscale
-tune-$(CONFIG_CPU_FEROCEON)	:=$(call cc-option,-mtune=marvell-f,-mtune=xscale)
+#tune-$(CONFIG_CPU_FEROCEON)	:=$(call cc-option,-mtune=marvell-f,-mtune=xscale)
 tune-$(CONFIG_CPU_V6)		:=$(call cc-option,-mtune=arm1136j-s,-mtune=strongarm)
 
 ifeq ($(CONFIG_AEABI),y)
@@ -134,6 +164,15 @@ machine-$(CONFIG_ARCH_IXP2000)		:= ixp2000
 machine-$(CONFIG_ARCH_IXP23XX)		:= ixp23xx
 machine-$(CONFIG_ARCH_IXP4XX)		:= ixp4xx
 machine-$(CONFIG_ARCH_KIRKWOOD)		:= kirkwood
+machine-$(CONFIG_ARCH_FEROCEON_ORION)	:= feroceon-orion
+machine-$(CONFIG_ARCH_FEROCEON_KW)	:= feroceon-kw
+machine-$(CONFIG_ARCH_FEROCEON_KW2)	:= feroceon-kw2
+machine-$(CONFIG_ARCH_FEROCEON_MV78XX0)	:= feroceon-mv78xx0
+plat-$(CONFIG_ARCH_FEROCEON_KW)		:= feroceon
+plat-$(CONFIG_ARCH_FEROCEON_KW2)	:= feroceon
+
+
+
 machine-$(CONFIG_ARCH_KS8695)		:= ks8695
 machine-$(CONFIG_ARCH_L7200)		:= l7200
 machine-$(CONFIG_ARCH_LH7A40X)		:= lh7a40x
@@ -209,7 +248,7 @@ else
 KBUILD_CPPFLAGS += $(patsubst %,-I$(srctree)/%include,$(machdirs) $(platdirs))
 endif
 
-export	TEXT_OFFSET GZFLAGS MMUEXT
+export	TEXT_OFFSET GZFLAGS MMUEXT MACHINE
 
 # Do we have FASTFPE?
 FASTFPE		:=arch/arm/fastfpe
@@ -269,13 +308,20 @@ archclean:
 bp:;	$(Q)$(MAKE) $(build)=$(boot) MACHINE=$(MACHINE) $(boot)/bootpImage
 i zi:;	$(Q)$(MAKE) $(build)=$(boot) MACHINE=$(MACHINE) $@
 
+nfplib:
+ifeq ($(CONFIG_MV_ETH_NFP_LIB),y)
+	make -f scripts/Makefile.build NFPLIB=y obj=$(PWD)/arch/arm/mach-feroceon-kw2/
+	$(NFPLIBCMD)
+else
+	@echo "CONFIG_MV_ETH_NFP_LIB must be set for creating nfplib.a; exiting"
+endif
 
 define archhelp
   echo  '* zImage        - Compressed kernel image (arch/$(ARCH)/boot/zImage)'
   echo  '  Image         - Uncompressed kernel image (arch/$(ARCH)/boot/Image)'
   echo  '* xipImage      - XIP kernel image, if configured (arch/$(ARCH)/boot/xipImage)'
   echo  '  uImage        - U-Boot wrapped zImage'
-  echo  '  bootpImage    - Combined zImage and initial RAM disk' 
+  echo  '  bootpImage    - Combined zImage and initial RAM disk'
   echo  '                  (supply initrd image via make variable INITRD=<path>)'
   echo  '  install       - Install uncompressed kernel'
   echo  '  zinstall      - Install compressed kernel'

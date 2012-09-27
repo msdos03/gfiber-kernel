@@ -101,6 +101,11 @@ static void e1000_receive_skb(struct e1000_adapter *adapter,
 {
 	skb->protocol = eth_type_trans(skb, netdev);
 
+#ifdef CONFIG_MV_ETH_NFP_EXT
+	if (!mv_eth_nfp_ext(adapter->netdev, skb, NULL))
+		return;
+#endif /* CONFIG_MV_ETH_NFP_EXT */
+
 	if (adapter->vlgrp && (status & E1000_RXD_STAT_VP))
 		vlan_gro_receive(&adapter->napi, adapter->vlgrp,
 				 le16_to_cpu(vlan), skb);

@@ -23,6 +23,11 @@
 
 #include "br_private.h"
 
+#if defined(CONFIG_MV_ETH_NFP_FDB_LEARN)
+int nfp_hook_del_br(int ifindex);
+int nfp_hook_del_port_from_br(int bridge_if, int port_if);
+#endif /* CONFIG_MV_ETH_NFP_FDB_LEARN */
+
 /*
  * Determine initial path cost based on speed.
  * using recommendations from 802.1d standard
@@ -159,10 +164,19 @@ static void del_br(struct net_bridge *br)
 	struct net_bridge_port *p, *n;
 
 	list_for_each_entry_safe(p, n, &br->port_list, list) {
+	
+#if defined(CONFIG_MV_ETH_NFP_FDB_LEARN)
+	nfp_hook_del_port_from_br(br->dev->ifindex, p->dev->ifindex);
+#endif /* CONFIG_MV_ETH_NFP_FDB_LEARN */
+
 		del_nbp(p);
 	}
 
 	del_timer_sync(&br->gc_timer);
+
+#if defined(CONFIG_MV_ETH_NFP_FDB_LEARN)
+	nfp_hook_del_br(br->dev->ifindex);
+#endif /* CONFIG_MV_ETH_NFP_FDB_LEARN */
 
 	br_sysfs_delbr(br->dev);
 	unregister_netdevice(br->dev);
@@ -452,6 +466,10 @@ int br_del_if(struct net_bridge *br, struct net_device *dev)
 
 	if (!p || p->br != br)
 		return -EINVAL;
+		
+#if defined(CONFIG_MV_ETH_NFP_FDB_LEARN)
+	nfp_hook_del_port_from_br(br->dev->ifindex, p->dev->ifindex);
+#endif /* CONFIG_MV_ETH_NFP_FDB_LEARN */
 
 	del_nbp(p);
 

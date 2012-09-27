@@ -336,7 +336,7 @@ static void skb_clone_fraglist(struct sk_buff *skb)
 		skb_get(list);
 }
 
-static void skb_release_data(struct sk_buff *skb)
+static inline void skb_release_data(struct sk_buff *skb)
 {
 	if (!skb->cloned ||
 	    !atomic_sub_return(skb->nohdr ? (1 << SKB_DATAREF_SHIFT) + 1 : 1,
@@ -352,12 +352,20 @@ static void skb_release_data(struct sk_buff *skb)
 
 		kfree(skb->head);
 	}
+#ifdef CONFIG_NET_SKB_RECYCLE
+	/* Workaround for the cases when recycle callback was not called */
+	if (skb->hw_cookie) {
+		kfree(skb->hw_cookie);
+		skb->hw_cookie = NULL;
+	}
+	skb->skb_recycle = NULL;
+#endif /* CONFIG_NET_SKB_RECYCLE */	
 }
 
 /*
  *	Free an skbuff by memory without cleaning the state.
  */
-static void kfree_skbmem(struct sk_buff *skb)
+static inline void kfree_skbmem(struct sk_buff *skb)
 {
 	struct sk_buff *other;
 	atomic_t *fclone_ref;
@@ -388,7 +396,7 @@ static void kfree_skbmem(struct sk_buff *skb)
 	}
 }
 
-static void skb_release_head_state(struct sk_buff *skb)
+static inline void skb_release_head_state(struct sk_buff *skb)
 {
 	skb_dst_drop(skb);
 #ifdef CONFIG_XFRM
@@ -399,8 +407,11 @@ static void skb_release_head_state(struct sk_buff *skb)
 		skb->destructor(skb);
 	}
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
-	nf_conntrack_put(skb->nfct);
-	nf_conntrack_put_reasm(skb->nfct_reasm);
+	if(skb->nfct) 
+		nf_conntrack_put(skb->nfct);
+	
+	if(skb->nfct_reasm) 
+		nf_conntrack_put_reasm(skb->nfct_reasm);
 #endif
 #ifdef CONFIG_BRIDGE_NETFILTER
 	nf_bridge_put(skb->nf_bridge);
@@ -415,7 +426,7 @@ static void skb_release_head_state(struct sk_buff *skb)
 }
 
 /* Free everything but the sk_buff shell. */
-static void skb_release_all(struct sk_buff *skb)
+static inline void skb_release_all(struct sk_buff *skb)
 {
 	skb_release_head_state(skb);
 	skb_release_data(skb);
@@ -432,6 +443,11 @@ static void skb_release_all(struct sk_buff *skb)
 
 void __kfree_skb(struct sk_buff *skb)
 {
+#ifdef CONFIG_NET_SKB_RECYCLE
+	if (skb->skb_recycle && !skb->skb_recycle(skb))
+		return;
+#endif /* CONFIG_NET_SKB_RECYCLE */
+ 
 	skb_release_all(skb);
 	kfree_skbmem(skb);
 }
@@ -500,7 +516,7 @@ int skb_recycle_check(struct sk_buff *skb, int skb_size)
 	if (skb_end_pointer(skb) - skb->head < skb_size)
 		return 0;
 
-	if (skb_shared(skb) || skb_cloned(skb))
+	if (skb_shared(skb) || skb_cloned(skb) || skb_has_frags(skb))
 		return 0;
 
 	skb_release_head_state(skb);
@@ -582,6 +598,12 @@ static struct sk_buff *__skb_clone(struct sk_buff *n, struct sk_buff *skb)
 	n->cloned = 1;
 	n->nohdr = 0;
 	n->destructor = NULL;
+
+#ifdef CONFIG_NET_SKB_RECYCLE
+	n->skb_recycle = NULL;
+	n->hw_cookie = NULL;
+#endif /* CONFIG_NET_SKB_RECYCLE */
+
 	C(tail);
 	C(end);
 	C(head);

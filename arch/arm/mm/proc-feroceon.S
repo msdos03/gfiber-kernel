@@ -29,6 +29,10 @@
 #include <asm/ptrace.h>
 #include "proc-macros.S"
 
+#ifdef CONFIG_ARCH_FEROCEON
+#include <mach/kw_macro.h>
+#endif
+
 /*
  * This is the maximum size of an area which will be invalidated
  * using the single invalidate entry instructions.  Anything larger
@@ -52,6 +56,40 @@ __cache_params_loc:
 	.text
 __cache_params:
 	.word	__cache_params_loc
+
+/*
+ *      mv_l2_inv_range(start, end)
+ *
+ *      Invalidate (discard) the specified virtual address range on L2.
+ *      May not write back any entries.  If 'start' or 'end'
+ *      are not cache line aligned, those lines must be written
+ *      back.
+ *
+ *      - start - virtual start address
+ *      - end   - virtual end address
+ *
+ */
+#ifdef CONFIG_CACHE_FEROCEON_L2
+ENTRY(mv_l2_inv_range)
+#ifndef CONFIG_CPU_L2_DCACHE_WRITETHROUGH
+        tst     r0, #CACHE_DLINESIZE - 1
+        mcrne   p15, 1, r0, c15, c9, 1          @ clean L2 entry
+        tst     r1, #CACHE_DLINESIZE - 1
+        mcrne   p15, 1, r1, c15, c9, 1          @ clean L2 entry
+        mcr     p15, 0, r0, c7, c10, 4          @ drain WB
+#endif
+        cmp     r1, r0
+        subne   r1, r1, #1                      @ Prevent cleaning of top address
+                                                @ cache line when top is cache line aligned
+        mrs     r2, cpsr
+        orr     r3, r2, #PSR_F_BIT | PSR_I_BIT
+        msr     cpsr_c, r3                      @ Disable interrupts
+        mcr     p15, 1, r0, c15, c11, 4         @ L2 invalidation zone start addr
+        mcr     p15, 1, r1, c15, c11, 5         @ L2 invalidation zone end addr and
+                                                @ invalidate procedure trigger
+        msr     cpsr_c, r2                      @ Restore interrupts
+        mov     pc, lr
+#endif
 
 /*
  * cpu_feroceon_proc_init()
@@ -123,9 +161,16 @@ ENTRY(cpu_feroceon_reset)
  */
 	.align	5
 ENTRY(cpu_feroceon_do_idle)
+#ifdef CONFIG_ARCH_FEROCEON
+        ldr     r0, support_wait_for_interrupt_address /* this variable set in core.c*/
+        ldr     r0, [r0]
+        cmp     r0, #1    /* check if the device doesn't support wait for interrupt*/
+        bne     1f        /* if yes, then go out*/
+#endif
 	mov	r0, #0
 	mcr	p15, 0, r0, c7, c10, 4		@ Drain write buffer
 	mcr	p15, 0, r0, c7, c0, 4		@ Wait for interrupt
+1:
 	mov	pc, lr
 
 /*
@@ -249,7 +294,7 @@ ENTRY(feroceon_flush_kern_dcache_page)
 ENTRY(feroceon_range_flush_kern_dcache_page)
 	mrs	r2, cpsr
 	add	r1, r0, #PAGE_SZ - CACHE_DLINESIZE	@ top addr is inclusive
-	orr	r3, r2, #PSR_I_BIT
+	orr	r3, r2, #PSR_I_BIT | PSR_F_BIT
 	msr	cpsr_c, r3			@ disable interrupts
 	mcr	p15, 5, r0, c15, c15, 0		@ D clean/inv range start
 	mcr	p15, 5, r1, c15, c15, 1		@ D clean/inv range top
@@ -295,7 +340,7 @@ ENTRY(feroceon_range_dma_inv_range)
 	mcrne	p15, 0, r1, c7, c10, 1		@ clean D entry
 	cmp	r1, r0
 	subne	r1, r1, #1			@ top address is inclusive
-	orr	r3, r2, #PSR_I_BIT
+	orr	r3, r2, #PSR_I_BIT | PSR_F_BIT
 	msr	cpsr_c, r3			@ disable interrupts
 	mcr	p15, 5, r0, c15, c14, 0		@ D inv range start
 	mcr	p15, 5, r1, c15, c14, 1		@ D inv range top
@@ -327,7 +372,7 @@ ENTRY(feroceon_range_dma_clean_range)
 	mrs	r2, cpsr
 	cmp	r1, r0
 	subne	r1, r1, #1			@ top address is inclusive
-	orr	r3, r2, #PSR_I_BIT
+	orr	r3, r2, #PSR_I_BIT | PSR_F_BIT
 	msr	cpsr_c, r3			@ disable interrupts
 	mcr	p15, 5, r0, c15, c13, 0		@ D clean range start
 	mcr	p15, 5, r1, c15, c13, 1		@ D clean range top
@@ -358,7 +403,7 @@ ENTRY(feroceon_range_dma_flush_range)
 	mrs	r2, cpsr
 	cmp	r1, r0
 	subne	r1, r1, #1			@ top address is inclusive
-	orr	r3, r2, #PSR_I_BIT
+	orr	r3, r2, #PSR_I_BIT | PSR_F_BIT
 	msr	cpsr_c, r3			@ disable interrupts
 	mcr	p15, 5, r0, c15, c15, 0		@ D clean/inv range start
 	mcr	p15, 5, r1, c15, c15, 1		@ D clean/inv range top

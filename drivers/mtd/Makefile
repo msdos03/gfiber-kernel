@@ -26,9 +26,14 @@ obj-$(CONFIG_RFD_FTL)		+= rfd_ftl.o
 obj-$(CONFIG_SSFDC)		+= ssfdc.o
 obj-$(CONFIG_MTD_OOPS)		+= mtdoops.o
 
+ifeq ($(CONFIG_ARCH_FEROCEON),y)
+	obj-$(CONFIG_MV_NAND_SUPPORT) += ../../arch/arm/plat-feroceon/mv_drivers_lsp/mv_mtd/
+endif
+
 nftl-objs		:= nftlcore.o nftlmount.o
 inftl-objs		:= inftlcore.o inftlmount.o
 
 obj-y		+= chips/ lpddr/ maps/ devices/ nand/ onenand/ tests/
 
 obj-$(CONFIG_MTD_UBI)		+= ubi/
+

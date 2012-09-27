@@ -11,6 +11,11 @@ menuconfig MTD_NAND
 
 if MTD_NAND
 
+config MTD_NAND_CMD
+        string "Nand Command with no bootargs"
+        default "nand_mtd:0x100000@0x0(uboot)ro,0x200000@0x100000(uimage),0xc80000@0x300000(rootfs),0x100000@0xf80000(varfs),0x4000000@0x100000(flash)"
+        help
+
 config MTD_NAND_VERIFY_WRITE
 	bool "Verify NAND page writes"
 	help

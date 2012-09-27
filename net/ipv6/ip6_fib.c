@@ -46,6 +46,13 @@
 #define RT6_TRACE(x...) do { ; } while (0)
 #endif
 
+#if defined (CONFIG_MV_ETH_NFP_FIB_LEARN)
+extern int nfp_hook_fib_rule_add(int family, const u8 *src_l3, const u8 *dst_l3,
+				const u8 *def_gtw_l3, int iif, int oif);
+extern int nfp_hook_fib_rule_del(int family, const u8 *src_l3, const u8 *dst_l3, int iif, int oif);
+extern int nfp_hook_fib_rule_age(int family, u8 *src_l3, u8 *dst_l3, int iif, int oif);
+#endif /*  CONFIG_MV_ETH_NFP_FIB_LEARN */
+
 static struct kmem_cache * fib6_node_kmem __read_mostly;
 
 enum fib_walk_state_t
@@ -399,6 +406,53 @@ out:
 	return res;
 }
 
+
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+static int fib6_add_node(struct fib6_walker_t *w)
+{
+	struct rt6_info *rt;
+	for (rt = w->leaf; rt; rt = rt->u.dst.rt6_next) {
+		if (rt->rt6i_flags & RTF_CACHE) {
+			if (!nfp_hook_fib_rule_add(AF_INET6, (u8 *)&rt->rt6i_src.addr,
+				(u8 *)&rt->rt6i_dst.addr,
+				(u8 *)&rt->rt6i_gateway,
+				rt->rt6i_iifindex,
+				rt->rt6i_dev->ifindex))
+				rt->nfp = true;
+		}
+	}
+	w->leaf = rt;
+	return 0;
+}
+
+void nfp_fib6_sync(void)
+{
+	struct fib6_table *table;
+	struct hlist_node *node;
+	struct hlist_head *head;
+	unsigned int h;
+	int res;
+	struct net *net = &init_net;
+	struct fib6_walker_t w;
+
+	w.func = fib6_add_node;
+	w.prune = 0;
+
+	rcu_read_lock();
+	for (h = 0; h < FIB6_TABLE_HASHSZ; h++) {
+		head = &net->ipv6.fib_table_hash[h];
+		hlist_for_each_entry_rcu(table, node, head, tb6_hlist) {
+			write_lock_bh(&table->tb6_lock);
+			w.root = &table->tb6_root;
+			res = fib6_walk(&w);
+			write_unlock_bh(&table->tb6_lock);
+		}
+	}
+	rcu_read_unlock();
+
+}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
+
 /*
  *	Routing Table
  *
@@ -651,6 +705,18 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct rt6_info *rt,
 		info->nl_net->ipv6.rt6_stats->fib_route_nodes++;
 		fn->fn_flags |= RTN_RTINFO;
 	}
+
+#if defined (CONFIG_MV_ETH_NFP_FIB_LEARN)
+	rt->nfp = false;
+	if (rt->rt6i_flags & RTF_CACHE)	{
+		if (!nfp_hook_fib_rule_add(AF_INET6, (u8 *)&rt->rt6i_src.addr,
+				(u8 *)&rt->rt6i_dst.addr,
+				(u8 *)&rt->rt6i_gateway,
+				rt->rt6i_iifindex,
+				rt->rt6i_dev->ifindex))
+				rt->nfp = true; 
+	}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
 
 	return 0;
 }
@@ -1140,6 +1206,14 @@ static void fib6_del_route(struct fib6_node *fn, struct rt6_info **rtp,
 	}
 
 	inet6_rt_notify(RTM_DELROUTE, rt, info);
+
+#if defined (CONFIG_MV_ETH_NFP_FIB_LEARN)    
+	if (rt->rt6i_flags & RTF_CACHE)
+		if (rt->nfp)
+			nfp_hook_fib_rule_del(AF_INET6, (u8 *)&rt->rt6i_src.addr, (u8 *)&rt->rt6i_dst.addr,
+							rt->rt6i_iifindex, rt->rt6i_dev->ifindex);				
+#endif /*  CONFIG_MV_ETH_NFP_FIB_LEARN  */
+	
 	rt6_release(rt);
 }
 
@@ -1429,6 +1503,13 @@ static int fib6_age(struct rt6_info *rt, void *arg)
 				  rt);
 			return -1;
 		}
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+		if (rt->nfp) {
+			if (nfp_hook_fib_rule_age(AF_INET6,(u8 *)(&rt->rt6i_src.addr), (u8 *)(&rt->rt6i_dst.addr),
+					rt->rt6i_iifindex, rt->rt6i_dev->ifindex))
+				rt->u.dst.lastuse = now;
+		}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
 		gc_args.more++;
 	}
 

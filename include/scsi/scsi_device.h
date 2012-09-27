@@ -7,8 +7,11 @@
 #include <linux/workqueue.h>
 #include <linux/blkdev.h>
 #include <scsi/scsi.h>
+#include <linux/timer.h>
 #include <asm/atomic.h>
-
+#ifdef CONFIG_MV_SCATTERED_SPINUP
+#include <scsi/scsi_spinup.h>
+#endif
 struct request_queue;
 struct scsi_cmnd;
 struct scsi_lun;
@@ -167,6 +170,14 @@ struct scsi_device {
 
 	struct scsi_dh_data	*scsi_dh_data;
 	enum scsi_device_state sdev_state;
+
+#ifdef CONFIG_MV_SCATTERED_SPINUP
+	enum scsi_device_power_state sdev_power_state;  /*Used to save the disk current power state*/
+	struct timer_list spinup_timeout;	/* Used to time out the spinup process when done. */
+	unsigned int standby_timeout_secs;
+	struct timer_list standby_timeout;	/* Used to time out the standby timeout command. */
+#endif
+
 	unsigned long		sdev_data[0];
 } __attribute__((aligned(sizeof(unsigned long))));
 
@@ -188,13 +199,10 @@ struct scsi_device_handler {
 	void (*detach)(struct scsi_device *);
 	int (*activate)(struct scsi_device *);
 	int (*prep_fn)(struct scsi_device *, struct request *);
-	int (*set_params)(struct scsi_device *, const char *);
 };
 
 struct scsi_dh_data {
 	struct scsi_device_handler *scsi_dh;
-	struct scsi_device *sdev;
-	struct kref kref;
 	char buf[0];
 };
 

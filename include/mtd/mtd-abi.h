@@ -134,7 +134,11 @@ struct nand_oobfree {
  */
 struct nand_ecclayout {
 	__u32 eccbytes;
+#ifdef CONFIG_MTD_NAND_NFC
+	__u32 eccpos[128];
+#else
 	__u32 eccpos[64];
+#endif
 	__u32 oobavail;
 	struct nand_oobfree oobfree[MTD_MAX_OOBFREE_ENTRIES];
 };

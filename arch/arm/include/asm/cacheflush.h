@@ -224,6 +224,26 @@ struct outer_cache_fns {
 	void (*flush_range)(unsigned long, unsigned long);
 };
 
+#ifdef CONFIG_MV_XOR_NET_DMA
+/* 
+ * Clean and Invalidate L1 cache w/o dsb()
+ * The call is intended for multiple calls and when dsb() on commit endpoint
+ * HW would align addresses. If 'end' was already aligned, put it 
+ * one cacheline up.
+ */
+static inline void flush_user_range_fast(unsigned long start, 
+										 unsigned long end, unsigned int vmflags)
+{
+	unsigned long flags;
+
+	raw_local_irq_save(flags);
+	__asm__("mcr p15, 5, %0, c15, c15, 0" : : "r" (start));
+	__asm__("mcr p15, 5, %0, c15, c15, 1" : : "r" (end-1));
+	raw_local_irq_restore(flags);
+
+	/* dsb();*/
+}
+#endif
 /*
  * Select the calling method
  */
@@ -440,6 +460,16 @@ static inline void flush_kernel_dcache_page(struct page *page)
 	/* highmem pages are always flushed upon kunmap already */
 	if ((cache_is_vivt() || cache_is_vipt_aliasing()) && !PageHighMem(page))
 		__cpuc_flush_dcache_page(page_address(page));
+}
+static inline void flush_kernel_dcache_addr(void *addr)
+{
+	if ((cache_is_vivt() || cache_is_vipt_aliasing()))
+		__cpuc_flush_dcache_page(addr);
+}
+static inline void invalidate_kernel_dcache_addr(void *addr)
+{
+	if ((cache_is_vivt() || cache_is_vipt_aliasing()))
+		__cpuc_flush_dcache_page(addr);
 }
 
 #define flush_dcache_mmap_lock(mapping) \

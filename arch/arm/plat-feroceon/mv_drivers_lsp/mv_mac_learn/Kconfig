@@ -1,0 +1,9 @@
+menu "SoC MAC learning support"
+depends on MV_INCLUDE_TPM
+
+config  MV_MAC_LEARN
+	bool "Support for MAC learning through PnC"
+      	default n
+	---help---
+
+endmenu

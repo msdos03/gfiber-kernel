@@ -172,6 +172,43 @@ static int vmap_page_range_noflush(unsigned long start, unsigned long end,
 			return err;
 	} while (pgd++, addr = next, addr != end);
 
+	/*
+	 * In order to support installation of a non-trivial FIQ handler, on ARM
+	 * we need to replicate kernel virtual memory to all processes (so it
+	 * can be accessed from fiq state irrespective of what current process is).
+	 * The code comes from do_translation_fault, and is arm-specific.
+	 */
+#ifdef CONFIG_MV_PHONE_USE_FIQ_PROCESSING
+	if (!err) {
+		struct task_struct *p;
+		for_each_process(p) {
+			task_lock(p);
+			if (!p->mm)
+				goto next_process;
+			if (p->mm == &init_mm)
+				goto next_process;
+			for (addr = start;
+			     addr < end; addr += PAGE_SIZE) {
+				/* "+= PMD_SIZE" may be faster... */
+				unsigned int index;
+				pgd_t *pgd, *pgd_k;
+				pmd_t *pmd, *pmd_k;
+				/*  from do_translation_fault() */
+				index = pgd_index(addr);
+				pgd = p->mm->pgd + index;
+				pgd_k = init_mm.pgd + index;
+				if (!pgd_present(*pgd))
+					set_pgd(pgd, *pgd_k);
+				pmd_k = pmd_offset(pgd_k, addr);
+				pmd   = pmd_offset(pgd, addr);
+				copy_pmd(pmd, pmd_k);
+			}
+		next_process:
+			task_unlock(p);
+		}
+	}
+#endif /* CONFIG_MV_PHONE_USE_FIQ_PROCESSING */
+
 	return nr;
 }
 

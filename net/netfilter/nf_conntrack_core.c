@@ -45,6 +45,20 @@
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
 
+#include <linux/netfilter/ipt_NFP.h>
+
+#if defined(CONFIG_MV_ETH_NFP_CT_LEARN)
+extern void nfp_hook_ct_del(int family, u8 *src_l3, u8 *dst_l3, u16 sport, u16 dport, u8 proto);
+extern int  nfp_hook_ct_age(int family, u8 *src_l3, u8 *dst_l3, u16 sport, u16 dport, u8 proto);
+extern void nfp_ct_sync(int family);
+#ifdef CONFIG_MV_ETH_NFP_NAT
+extern void move_nat_to_nfp(const struct nf_conntrack_tuple *tuple,
+							const struct nf_conntrack_tuple *target,
+							enum nf_nat_manip_type maniptype);
+#endif /* CONFIG_MV_ETH_NFP_NAT */
+extern int move_fwd_to_nfp(const struct nf_conntrack_tuple *tuple, int mode);
+#endif /* CONFIG_MV_ETH_NFP_CT_LEARN */
+
 #define NF_CONNTRACK_VERSION	"0.5.0"
 
 int (*nfnetlink_parse_nat_setup_hook)(struct nf_conn *ct,
@@ -201,6 +215,13 @@ destroy_conntrack(struct nf_conntrack *nfct)
 	 * too. */
 	nf_ct_remove_expectations(ct);
 
+#if defined(CONFIG_NETFILTER_XT_MATCH_LAYER7) || defined(CONFIG_NETFILTER_XT_MATCH_LAYER7_MODULE)
+	if(ct->layer7.app_proto)
+		kfree(ct->layer7.app_proto);
+	if(ct->layer7.app_data)
+		kfree(ct->layer7.app_data);
+#endif
+
 	/* We overload first tuple to link into unconfirmed list. */
 	if (!nf_ct_is_confirmed(ct)) {
 		BUG_ON(hlist_nulls_unhashed(&ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode));
@@ -271,6 +292,82 @@ EXPORT_SYMBOL_GPL(nf_ct_insert_dying_list);
 static void death_by_timeout(unsigned long ul_conntrack)
 {
 	struct nf_conn *ct = (void *)ul_conntrack;
+
+#if defined (CONFIG_MV_ETH_NFP_CT_LEARN)
+	struct nf_conntrack_tuple *t0 = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
+	struct nf_conntrack_tuple *t1 = &ct->tuplehash[IP_CT_DIR_REPLY].tuple;
+	int confirmed_org = 0, confirmed_reply = 0;
+
+	if (t0 && t0->nfp) {
+		if (t0->src.l3num == AF_INET)
+			confirmed_org = nfp_hook_ct_age(t0->src.l3num, (u8 *)&(t0->src.u3.ip),
+					(u8 *)&(t0->dst.u3.ip),
+					ntohs(t0->src.u.all),
+					ntohs(t0->dst.u.all),
+					t0->dst.protonum);
+		else
+			confirmed_org = nfp_hook_ct_age(t0->src.l3num, (u8 *)&(t0->src.u3.ip6),
+					(u8 *)&(t0->dst.u3.ip6),
+					ntohs(t0->src.u.all),
+					ntohs(t0->dst.u.all),
+					t0->dst.protonum);
+	}
+
+	if (t1 && t1->nfp) {
+		if (t1->src.l3num == AF_INET)
+			confirmed_reply = nfp_hook_ct_age(t1->src.l3num, (u8 *)&(t1->src.u3.ip),
+					(u8 *)&(t1->dst.u3.ip),
+					ntohs(t1->src.u.all),
+					ntohs(t1->dst.u.all),
+					t1->dst.protonum);
+		else
+			confirmed_reply = nfp_hook_ct_age(t1->src.l3num, (u8 *)&(t1->src.u3.ip6),
+					(u8 *)&(t1->dst.u3.ip6),
+					ntohs(t1->src.u.all),
+					ntohs(t1->dst.u.all),
+					t1->dst.protonum);
+	}
+
+	if (confirmed_org || confirmed_reply) {
+		ct->timeout.expires = jiffies + (20*HZ);
+		add_timer(&ct->timeout);
+		return;
+	}
+
+	if (t0 && t0->nfp) {
+		t0->nfp = false;
+
+		if (t0->src.l3num == AF_INET)
+			nfp_hook_ct_del(t0->src.l3num, (u8 *)&(t0->src.u3.ip),
+					(u8 *)&(t0->dst.u3.ip),
+					ntohs(t0->src.u.all),
+					ntohs(t0->dst.u.all),
+					t0->dst.protonum);
+		else
+			nfp_hook_ct_del(t0->src.l3num, (u8 *)&(t0->src.u3.ip6),
+					(u8 *)&(t0->dst.u3.ip6),
+					ntohs(t0->src.u.all),
+					ntohs(t0->dst.u.all),
+					t0->dst.protonum);
+	}
+
+	if (t1 && t1->nfp) {
+		t1->nfp = false;
+
+		if (t1->src.l3num == AF_INET)
+			nfp_hook_ct_del(t1->src.l3num, (u8 *)&(t1->src.u3.ip),
+					(u8 *)&(t1->dst.u3.ip),
+					ntohs(t1->src.u.all),
+					ntohs(t1->dst.u.all),
+					t1->dst.protonum);
+		else
+			nfp_hook_ct_del(t1->src.l3num, (u8 *)&(t1->src.u3.ip6),
+					(u8 *)&(t1->dst.u3.ip6),
+					ntohs(t1->src.u.all),
+					ntohs(t1->dst.u.all),
+					t1->dst.protonum);
+	}
+#endif /* CONFIG_MV_ETH_NFP_CT_LEARN */
 
 	if (!test_bit(IPS_DYING_BIT, &ct->status) &&
 	    unlikely(nf_conntrack_event(IPCT_DESTROY, ct) < 0)) {
@@ -591,6 +688,18 @@ struct nf_conn *nf_conntrack_alloc(struct net *net,
 	ct->ct_net = net;
 #endif
 
+#if defined(CONFIG_MV_ETH_NFP_CT_LEARN)
+	ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.nfp = false;
+	ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.ifindex = -1;
+	ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.nfpCapable = false;
+	ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.info = NULL;
+
+	ct->tuplehash[IP_CT_DIR_REPLY].tuple.nfp = false;
+	ct->tuplehash[IP_CT_DIR_REPLY].tuple.ifindex = -1;
+	ct->tuplehash[IP_CT_DIR_REPLY].tuple.nfpCapable = false;
+	ct->tuplehash[IP_CT_DIR_REPLY].tuple.info = NULL;
+#endif /* CONFIG_MV_ETH_NFP_CT_LEARN */
+
 	/*
 	 * changes to lookup keys must be done before setting refcnt to 1
 	 */
@@ -603,6 +712,14 @@ EXPORT_SYMBOL_GPL(nf_conntrack_alloc);
 void nf_conntrack_free(struct nf_conn *ct)
 {
 	struct net *net = nf_ct_net(ct);
+
+#if defined(CONFIG_MV_ETH_NFP_CT_LEARN)
+	if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.info)
+		kfree(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.info);
+
+	if (ct->tuplehash[IP_CT_DIR_REPLY].tuple.info)
+		kfree(ct->tuplehash[IP_CT_DIR_REPLY].tuple.info);
+#endif /* CONFIG_MV_ETH_NFP_CT_LEARN */
 
 	nf_ct_ext_destroy(ct);
 	atomic_dec(&net->ct.count);
@@ -1238,6 +1355,84 @@ EXPORT_SYMBOL_GPL(nf_conntrack_set_hashsize);
 
 module_param_call(hashsize, nf_conntrack_set_hashsize, param_get_uint,
 		  &nf_conntrack_htable_size, 0600);
+
+#if defined(CONFIG_MV_ETH_NFP_CT_LEARN)
+void nfp_ct_sync(int family)
+{
+	struct nf_conntrack_tuple_hash *h;
+	struct nf_conn *ct;
+	struct nf_conntrack_tuple *tuple;
+	struct nf_conntrack_tuple target_tuple;
+	struct hlist_nulls_node *n;
+	unsigned int bucket = 0;
+	enum ip_conntrack_dir dir;
+	struct net *net = &init_net;
+	unsigned long status;
+
+	spin_lock_bh(&nf_conntrack_lock);
+	/* Go over all tuples in the Linux database */
+	for (; bucket < net->ct.htable_size; bucket++) {
+		hlist_nulls_for_each_entry(h, n, &net->ct.hash[bucket], hnnode) {
+			dir = NF_CT_DIRECTION(h);
+			tuple = &h[IP_CT_DIR_ORIGINAL].tuple;
+
+			ct = nf_ct_tuplehash_to_ctrack(h);
+			if (tuple->src.l3num != family)
+				continue;
+
+			/* We want to add only NFP capable rules*/
+			if (!tuple->nfpCapable)
+				continue;
+
+			if ((tuple->info->mode != IPT_NFP_DROP) && (tuple->info->mode != IPT_NFP_FWD))
+				continue;
+
+			tuple->nfp = true;
+
+			if (tuple->info->mode == IPT_NFP_DROP) {
+				move_fwd_to_nfp(tuple, 0);
+				continue;
+			}
+
+			status = ct->status;
+
+#ifdef CONFIG_MV_ETH_NFP_NAT
+			if (status & IPS_NAT_MASK) {
+				/* NFP NAT is supported only in IPv4 */
+				if (tuple->src.l3num == AF_INET) {
+					/* status says if the original direction requires SNAT or DNAT (or both) */
+					/* if we currently work on the reply direction, we need to "reverse" the NAT status, */
+					/* e.g. if original direction was SNAT, reply should be DNAT. */
+					if (dir != IP_CT_DIR_ORIGINAL)
+						status ^= IPS_NAT_MASK;
+
+					nf_ct_invert_tuplepr(&target_tuple, &ct->tuplehash[!dir].tuple);
+
+					if ((status & IPS_NAT_MASK) == IPS_DST_NAT) {
+						move_nat_to_nfp(tuple, &target_tuple, IP_NAT_MANIP_DST);
+					} else if ((status & IPS_NAT_MASK) == IPS_SRC_NAT) {
+						move_nat_to_nfp(tuple, &target_tuple, IP_NAT_MANIP_SRC);
+					} else {
+						move_nat_to_nfp(tuple, &target_tuple, IP_NAT_MANIP_DST);
+						move_nat_to_nfp(tuple, &target_tuple, IP_NAT_MANIP_SRC);
+					}
+
+					continue;
+				} else {
+					/* NFP does not support NAT for IPv6, so nothing to do with this tuple */
+					tuple->nfp = false;
+					continue;
+				}
+			}
+#endif /* CONFIG_MV_ETH_NFP_NAT */
+			/* If we got till here, it must be IPT_NFP_FWD */
+			move_fwd_to_nfp(tuple, 1);
+		}
+	}
+
+	spin_unlock_bh(&nf_conntrack_lock);
+}
+#endif /* CONFIG_MV_ETH_NFP_CT_LEARN */
 
 static int nf_conntrack_init_init_net(void)
 {

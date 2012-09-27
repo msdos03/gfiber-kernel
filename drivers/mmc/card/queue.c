@@ -19,7 +19,11 @@
 #include <linux/mmc/host.h>
 #include "queue.h"
 
+#ifdef CONFIG_ARCH_FEROCEON
+#define MMC_QUEUE_BOUNCESZ	(65536 << 2)
+#else
 #define MMC_QUEUE_BOUNCESZ	65536
+#endif
 
 #define MMC_QUEUE_SUSPENDED	(1 << 0)
 

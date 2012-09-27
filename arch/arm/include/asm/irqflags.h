@@ -40,6 +40,21 @@
 	:							\
 	: "memory", "cc");					\
 	})
+/*
+ * Save the current interrupt enable state & disable IRQs
+ */
+#define raw_local_irq_fiq_save(x)				\
+	({							\
+		unsigned long temp;				\
+		(void) (&temp == &x);				\
+	__asm__ __volatile__(					\
+	"mrs	%0, cpsr		@ local_irq_fiq_save\n"	\
+"	orr	%1, %0, #0xC0\n"				\
+"	msr	cpsr_c, %1"					\
+	: "=r" (x), "=r" (temp)					\
+	:							\
+	: "memory", "cc");					\
+	})
 	
 /*
  * Enable IRQs

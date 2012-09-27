@@ -24,6 +24,12 @@ menuconfig HWMON
 
 if HWMON
 
+config THERMAL_SENSOR_KW2
+	bool "KW2 Thermal Sensor"
+	default y
+	help
+	  Enable chip temperature monitoring via sysfs.
+
 config HWMON_VID
 	tristate
 	default n

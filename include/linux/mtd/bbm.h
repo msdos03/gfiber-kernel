@@ -84,12 +84,19 @@ struct nand_bbt_descr {
 /* Search good / bad pattern on the first and the second page */
 #define NAND_BBT_SCAN2NDPAGE	0x00004000
 
+#ifdef CONFIG_MTD_NAND_NFC_MLC_SUPPORT
+/* Search the bad block indicators according to Marvell's Naked symantics */
+#define NAND_BBT_SCANMVCUSTOM	0x10000000
+#endif
+
 /* The maximum number of blocks to scan for a bbt */
 #define NAND_BBT_SCAN_MAXBLOCKS	4
 
 /*
  * Constants for oob configuration
  */
+#define NAND_SMALL_BADBLOCK_POS		5
+#define NAND_LARGE_BADBLOCK_POS		0
 #define ONENAND_BADBLOCK_POS	0
 
 /*

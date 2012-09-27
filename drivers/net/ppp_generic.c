@@ -55,6 +55,7 @@
 
 #define PPP_VERSION	"2.4.2"
 
+
 /*
  * Network protocols we support.
  */
@@ -2178,6 +2179,25 @@ int ppp_unit_number(struct ppp_channel *chan)
 	return unit;
 }
 
+/* added for backporting from 3.0.6 kernel for NFP */
+/*
+ * Return the PPP device interface name of a channel.
+ */
+
+char *ppp_dev_name(struct ppp_channel *chan)
+{
+	struct channel *pch = chan->ppp;
+	char *name = NULL;
+
+	if (pch) {
+		read_lock_bh(&pch->upl);
+		if (pch->ppp && pch->ppp->dev)
+			name = pch->ppp->dev->name;
+		read_unlock_bh(&pch->upl);
+	}
+	return name;
+}
+
 /*
  * Disconnect a channel from the generic layer.
  * This must be called in process context.
@@ -2551,6 +2571,7 @@ ppp_create_interface(struct net *net, int unit, int *retp)
 	ppp->dev = dev;
 	ppp->mru = PPP_MRU;
 	init_ppp_file(&ppp->file, INTERFACE);
+
 	ppp->file.hdrlen = PPP_HDRLEN - 2;	/* don't count proto bytes */
 	for (i = 0; i < NUM_NP; ++i)
 		ppp->npmode[i] = NPMODE_PASS;

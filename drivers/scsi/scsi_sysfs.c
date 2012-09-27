@@ -910,6 +910,19 @@ int scsi_sysfs_add_sdev(struct scsi_device *sdev)
 void __scsi_remove_device(struct scsi_device *sdev)
 {
 	struct device *dev = &sdev->sdev_gendev;
+#ifdef CONFIG_MV_SCATTERED_SPINUP
+	if (scsi_spinup_enabled()) {
+		if (sdev->standby_timeout_secs > 0) {
+			/* if the device had any standby timer */
+			standby_delete_timer(sdev);
+		}
+		if (sdev->spinup_timeout.function) {
+			/* deleting any spinup timer thats may be still there and freeing the semaphore */
+			spinup_delete_timer(sdev);
+			scsi_spinup_up();
+		}
+	}
+#endif
 
 	if (sdev->is_visible) {
 		if (scsi_device_set_state(sdev, SDEV_CANCEL) != 0)

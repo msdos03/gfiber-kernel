@@ -72,6 +72,9 @@ extern int ppp_channel_index(struct ppp_channel *);
 /* Get the unit number associated with a channel, or -1 if none */
 extern int ppp_unit_number(struct ppp_channel *);
 
+/* added for backporting from 3.0.6 kernel for NFP */
+char *ppp_dev_name(struct ppp_channel *chan);
+
 /*
  * SMP locking notes:
  * The channel code must ensure that when it calls ppp_unregister_channel,

@@ -1157,8 +1157,8 @@ static int do_journal_get_write_access(handle_t *handle,
  */
 static void ext3_truncate_failed_write(struct inode *inode)
 {
-	truncate_inode_pages(inode->i_mapping, inode->i_size);
-	ext3_truncate(inode);
+       truncate_inode_pages(inode->i_mapping, inode->i_size);
+       ext3_truncate(inode);
 }
 
 static int ext3_write_begin(struct file *file, struct address_space *mapping,

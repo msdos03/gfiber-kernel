@@ -742,7 +742,7 @@ config OUTER_CACHE
 
 config CACHE_FEROCEON_L2
 	bool "Enable the Feroceon L2 cache controller"
-	depends on ARCH_KIRKWOOD || ARCH_MV78XX0
+	depends on ARCH_KIRKWOOD || ARCH_MV78XX0 || ARCH_FEROCEON_KW || ARCH_FEROCEON_KW2
 	default y
 	select OUTER_CACHE
 	help
@@ -776,3 +776,12 @@ config ARM_L1_CACHE_SHIFT
 	int
 	default 6 if ARCH_OMAP3
 	default 5
+
+config ARM_ARMV5_L2_CACHE_COHERENCY_FIX
+	bool "Enable L2 coherency problem fix on ARMv5"
+	depends on OUTER_CACHE && CPU_CACHE_VIVT
+	default y
+	help
+	Fixes coherency problems on ARM systems that have
+	a non-disableable VIVT L1 cache and a PIPT L2 one.
+

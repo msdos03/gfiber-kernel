@@ -1,0 +1,109 @@
+menu "SoC PON support"
+depends on MV_INCLUDE_PON
+
+config MV_PON_TCONTS
+        int "GPON maximum T-CONT's number"
+        default 8 
+        ---help---
+
+config MV_EPON_LLID
+        int "EPON maximum LLID number"
+        default 1
+        ---help---
+
+config PON_Z1
+	bool "Support for PON Z1 Driver"
+      	default y
+	---help---
+
+config PON_Z2
+	bool "Support for PON Z2 Driver"
+      	default n
+	---help---
+
+config PON_FPGA
+	bool "Support for PON Driver for FPGA"
+      	default n
+	---help---
+
+config  MV_GPON
+	bool "Support for Marvell GPON Driver"
+	depends on MV_INCLUDE_PON
+	default y
+	---help---
+
+config  MV_EPON
+	bool "Support for Marvell EPON Driver"
+	depends on MV_INCLUDE_PON
+	default y
+	---help---
+
+
+comment "GPON Driver Options"
+depends on MV_GPON
+
+config  MV_GPON_HW_INTERRUPT
+	bool "Support for GPON HW Interrupt"
+	depends on MV_GPON
+      	default y
+	---help---
+
+config  MV_GPON_DEBUG_PRINT
+	bool "Support for GPON Debug printing"
+	depends on MV_GPON
+      	default y
+	---help---
+
+config  MV_GPON_STATIC_GEM_PORT
+	bool "Support for GPON Static Gem Port"
+	depends on MV_GPON
+      	default y
+	---help---
+
+config  MV_GPON_PERFORMANCE_CHECK
+	bool "Support for GPON Performance Validation"
+	depends on MV_GPON
+      	default n
+	---help---
+
+comment "EPON Driver Options"
+depends on MV_EPON
+
+config  MV_EPON_HW_INTERRUPT
+	bool "Support for EPON HW Interrupt"
+	depends on MV_EPON
+      	default y
+	---help---
+
+config  MV_EPON_DBA_LOW_RATE_VALUE
+        int "DBA report low rate value (Bytes)"
+	depends on MV_EPON
+        default 2000 
+        ---help---
+        
+config  MV_EPON_DBA_LOW_RATE_THRESHOLD
+        int "DBA report low rate threshold (msec)"
+	depends on MV_EPON
+        default 20 
+        ---help---
+
+config  MV_EPON_DBA_LOW_RATE_CONST_VALUE
+        int "DBA report low rate const value (Bytes)"
+	depends on MV_EPON
+        default 256 
+        ---help---
+
+config  MV_EPON_DBA_HIGH_RATE_THRESHOLD
+        int "DBA report high rate threshold (Bytes)"
+	depends on MV_EPON
+        default 8192 
+        ---help---
+
+config  MV_EPON_DBA_HIGH_RATE_VALUE
+        int "DBA report high rate value (Bytes)"
+	depends on MV_EPON
+        default 2000 
+        ---help---
+
+endmenu
+

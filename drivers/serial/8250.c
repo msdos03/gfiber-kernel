@@ -457,6 +457,22 @@ static void dwapb_serial_out(struct uart_port *p, int offset, int value)
 {
 	int save_offset = offset;
 	offset = map_8250_out_reg(p, offset) << p->regshift;
+
+#ifdef CONFIG_ARCH_FEROCEON_KW2
+	/* If we are accessing DLH (0x4), DLL (0x0), LCR(0xC) or 0x1C
+	** we need to make sure that the busy bit is cleared in USR register.
+	*/
+	if ((((readb(p->membase + 0xC) & 0x80) &&
+	     ((save_offset == UART_DLL) || (save_offset == UART_DLM) ||
+	      (offset == 0x1C))) ||
+	     (save_offset == UART_LCR)) && !(readb(p->membase + 0x14) & 0x1)) {
+		unsigned int status;
+		do {
+			status = *((volatile u32 *)p->private_data);
+		} while (status & 0x1);
+	}
+#endif
+
 	/* Save the LCR value so it can be re-written when a
 	 * Busy Detect interrupt occurs. */
 	if (save_offset == UART_LCR) {
@@ -1734,7 +1750,9 @@ static void serial8250_timeout(unsigned long data)
 	unsigned int iir;
 
 	iir = serial_in(up, UART_IIR);
-	if (!(iir & UART_IIR_NO_INT))
+#ifndef CONFIG_ARCH_FEROCEON_KW2
+	if (iir != UART_IIR_NO_INT)
+#endif
 		serial8250_handle_port(up);
 	mod_timer(&up->timer, jiffies + poll_timeout(up->port.timeout));
 }

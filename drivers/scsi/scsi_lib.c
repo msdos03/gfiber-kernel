@@ -31,6 +31,9 @@
 #include "scsi_priv.h"
 #include "scsi_logging.h"
 
+#ifdef CONFIG_MV_SCATTERED_SPINUP
+#include <scsi/scsi_spinup.h>
+#endif
 
 #define SG_MEMPOOL_NR		ARRAY_SIZE(scsi_sg_pools)
 #define SG_MEMPOOL_SIZE		2
@@ -1530,6 +1533,106 @@ static void scsi_request_fn(struct request_queue *q)
 
 		scsi_target(sdev)->target_busy++;
 		shost->host_busy++;
+
+#ifdef CONFIG_MV_SCATTERED_SPINUP
+	if ((cmd->device->host->hostt->support_scattered_spinup == 1) && /*the flag is requaired in order to support the scattered spinup*/
+		(scsi_spinup_enabled()))	/*kernel line parsed ok?*/
+	{
+		switch (cmd->cmnd[0])
+		{
+			case START_STOP:
+				switch (cmd->cmnd[4] & START_STOP_BIT)
+				{
+					case 0x0: /* STOP command */
+						/* drive is going to sleep */
+						//printk("\n Disk [%d] going to standby...\n", cmd->device->id);
+						cmd->device->sdev_power_state = SDEV_PW_STANDBY;
+					break;
+					case 0x1: /* START command */
+						/* drive is going to spin up, checking if possible */
+						if (scsi_spinup_device(cmd) == 1) {
+							/* not possible: drive queued for spinup in side scsi_spinup_device(), device queue is blocked and the current command is requeued */
+							scsi_internal_device_block(cmd->device);
+							goto not_ready;
+						}
+						/* drive was able to get the semaphore, will spinup now */
+					break;
+					default:
+					break;
+				}
+			break;
+			case READ_6:
+			case WRITE_6:
+			case READ_10:
+			case WRITE_10:
+			case SEEK_10:
+			case VERIFY_10:
+			case VERIFY:
+			case READ_16:
+			case WRITE_16:
+			case VERIFY_16:
+				/* drive is going to spin up, checking if possible */
+				if (scsi_spinup_device(cmd) == 1) {
+					/* not possible: drive queued for spinup in side scsi_spinup_device(), device queue is blocked and the current command is requeued */
+					scsi_internal_device_block(cmd->device);
+					goto not_ready;
+				}
+				/* drive was able to get the semaphore, will spinup now */
+			break;
+			case ATA_16:
+				switch (cmd->cmnd[14])
+				{
+					case STANDBY_IMMEDIATE:
+						/* drive is going to sleep */
+						//printk("\n Disk [%d] going to standby...\n", cmd->device->id);
+						cmd->device->sdev_power_state = SDEV_PW_STANDBY;
+					break;
+					case STANDBY_TIMEOUT:
+						if (cmd->cmnd[6] == 0) {
+							/* resetting the timeout standby value of 0 means remove standby timeout */
+							cmd->device->sdev_power_state = SDEV_PW_ON;
+							cmd->device->standby_timeout_secs = 0;
+						} else {
+							/*setting the timeout standby and starting the timer*/
+							//printk("\n Disk [%d] going to timeout standby with value [%d]...\n", cmd->device->id, (int) cmd->cmnd[6]);
+							cmd->device->sdev_power_state = SDEV_PW_STANDBY_TIMEOUT_WAIT;
+							standby_add_timer(cmd->device, timeout_to_jiffies((int) cmd->cmnd[6]), standby_times_out);
+						}
+					break;
+					default:
+					break;
+				}
+			break;
+			case ATA_12:
+				switch (cmd->cmnd[9])
+				{
+					case STANDBY_IMMEDIATE:
+						/* drive is going to sleep */
+						//printk("\n Disk [%d] going to standby...\n", cmd->device->id);
+						cmd->device->sdev_power_state = SDEV_PW_STANDBY;
+					break;
+					case STANDBY_TIMEOUT:
+						if (cmd->cmnd[4] == 0) {
+							/* resetting the timeout standby value of 0 means remove standby timeout */
+							cmd->device->sdev_power_state = SDEV_PW_ON;
+							cmd->device->standby_timeout_secs = 0;
+						} else {
+							/*setting the timeout standby and starting the timer*/
+							//printk("\n Disk [%d] going to timeout standby with value [%d]...\n", cmd->device->id, (int) cmd->cmnd[4]);
+							cmd->device->sdev_power_state = SDEV_PW_STANDBY_TIMEOUT_WAIT;
+							standby_add_timer(cmd->device, timeout_to_jiffies((int) cmd->cmnd[4]), standby_times_out);
+						}
+					break;
+					default:
+					break;
+				}
+			break;
+			default:
+			break;
+		}
+
+	}
+#endif		
 
 		/*
 		 * XXX(hch): This is rather suboptimal, scsi_dispatch_cmd will

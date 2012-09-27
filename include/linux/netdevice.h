@@ -2013,6 +2013,27 @@ static inline u32 dev_ethtool_get_flags(struct net_device *dev)
 		return 0;
 	return dev->ethtool_ops->get_flags(dev);
 }
+
+#ifdef CONFIG_MV_ETH_NFP_EXT
+
+/* Supported flags */
+#define MV_EXT_L3_VALID_MASK	0x0001
+#define MV_EXT_L4_VALID_MASK	0x0002
+#define MV_EXT_VLAN_EXIST_MASK  0x0004
+#define MV_EXT_PPP_EXIST_MASK	0x0008
+#define MV_EXT_IP_FRAG_MASK	    0x0010
+
+typedef struct {
+	u16 flags;
+	u16 l3_type;
+	u16 l3_offset;
+	u8  l3_hdrlen;
+	u8  l4_proto;
+} MV_EXT_PKT_INFO;
+
+int mv_eth_nfp_ext(struct net_device *dev, struct sk_buff *skb, MV_EXT_PKT_INFO *pkt_info);
+#endif /* CONFIG_MV_ETH_NFP_EXT */
+
 #endif /* __KERNEL__ */
 
 #endif	/* _LINUX_NETDEVICE_H */

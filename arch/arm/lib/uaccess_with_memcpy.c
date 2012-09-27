@@ -49,13 +49,16 @@ pin_page_for_write(const void __user *_addr, pte_t **ptep, spinlock_t **ptlp)
 	return 1;
 }
 
-static unsigned long noinline
+#ifndef CONFIG_MV_XOR_MEMCOPY
+#define asm_memcpy memcpy
+#endif
+
 __copy_to_user_memcpy(void __user *to, const void *from, unsigned long n)
 {
 	int atomic;
 
 	if (unlikely(segment_eq(get_fs(), KERNEL_DS))) {
-		memcpy((void *)to, from, n);
+		asm_memcpy((void *)to, from, n);
 		return 0;
 	}
 
@@ -82,7 +85,7 @@ __copy_to_user_memcpy(void __user *to, const void *from, unsigned long n)
 		if (tocopy > n)
 			tocopy = n;
 
-		memcpy((void *)to, from, tocopy);
+		asm_memcpy((void *)to, from, tocopy);
 		to += tocopy;
 		from += tocopy;
 		n -= tocopy;
@@ -226,3 +229,33 @@ no_src:
 subsys_initcall(test_size_treshold);
 
 #endif
+
+#ifdef CONFIG_MV_XOR_MEMCOPY
+//EXPORT_SYMBOL(asm_memcpy);
+
+extern void * xor_memcpy(void *, const void*, __kernel_size_t);
+extern void * asm_memcpy(void *, const void*, __kernel_size_t);
+
+void* memcpy(void * dest, const void * src, size_t n)
+{
+	if (n < CONFIG_MV_XOR_MEMCOPY_THRESHOLD) 
+		return asm_memcpy(dest, src, n);
+	return xor_memcpy(dest, src, n);
+}
+
+#elif defined (CONFIG_MV_IDMA_MEMCOPY)
+
+extern void * dma_memcpy(void *, const void*, __kernel_size_t);
+extern void * asm_memcpy(void *, const void *, __kernel_size_t);
+
+void* memcpy(void * dest, const void * src, size_t n)
+{
+	if (n < CONFIG_MV_IDMA_MEMCOPY_THRESHOLD) 
+		return asm_memcpy(dest, src, n);
+	return dma_memcpy(dest, src, n);
+}
+#endif
+
+
+
+

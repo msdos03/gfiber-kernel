@@ -81,8 +81,9 @@ config USB_GADGET_DEBUG_FS
 
 config USB_GADGET_VBUS_DRAW
 	int "Maximum VBUS Power usage (2-500 mA)"
-	range 2 500
-	default 2
+	range 0 500
+	default 2 if !ARCH_FEROCEON
+	default 0 if ARCH_FEROCEON
 	help
 	   Some devices need to draw power from USB when they are
 	   configured, perhaps to operate circuitry or to recharge
@@ -121,24 +122,6 @@ choice
 #
 # Integrated controllers
 #
-
-config USB_GADGET_AT91
-	boolean "Atmel AT91 USB Device Port"
-	depends on ARCH_AT91 && !ARCH_AT91SAM9RL && !ARCH_AT91CAP9 && !ARCH_AT91SAM9G45
-	select USB_GADGET_SELECTED
-	help
-	   Many Atmel AT91 processors (such as the AT91RM2000) have a
-	   full speed USB Device Port with support for five configurable
-	   endpoints (plus endpoint zero).
-
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "at91_udc" and force all
-	   gadget drivers to also be dynamically linked.
-
-config USB_AT91
-	tristate
-	depends on USB_GADGET_AT91
-	default USB_GADGET
 
 config USB_GADGET_ATMEL_USBA
 	boolean "Atmel USBA"
@@ -508,6 +491,36 @@ config USB_LANGWELL
 #
 # LAST -- dummy/emulated controller
 #
+config USB_GADGET_AT91
+	boolean "AT91 USB Device Port"
+	depends on ARCH_AT91 && !ARCH_AT91SAM9RL && !ARCH_AT91CAP9
+	select USB_GADGET_SELECTED
+	help
+	   Many Atmel AT91 processors (such as the AT91RM2000) have a
+	   full speed USB Device Port with support for five configurable
+	   endpoints (plus endpoint zero).
+
+	   Say "y" to link the driver statically, or "m" to build a
+	   dynamically linked module called "at91_udc" and force all
+	   gadget drivers to also be dynamically linked.
+
+config USB_AT91
+	tristate
+	depends on USB_GADGET_AT91
+	default USB_GADGET
+
+config USB_GADGET_MRVL
+        boolean "Marvell USB Device Port"
+        depends on (USB=y || (USB=m && USB_GADGET=m)) && EXPERIMENTAL
+	select USB_GADGET_DUALSPEED
+        help
+	  ...
+
+config USB_MRVL
+        tristate
+        depends on USB_GADGET_MRVL
+        default USB_GADGET
+        select USB_GADGET_SELECTED
 
 config USB_GADGET_DUMMY_HCD
 	boolean "Dummy HCD (DEVELOPMENT)"

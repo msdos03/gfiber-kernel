@@ -48,6 +48,11 @@ struct scsi_host_template {
 	const char *name;
 
 	/*
+	* support to scattered spinup in various drivers
+	*/
+	unsigned char support_scattered_spinup;
+
+	/*
 	 * Used to initialize old-style drivers.  For new-style drivers
 	 * just perform all work in your module initialization function.
 	 *

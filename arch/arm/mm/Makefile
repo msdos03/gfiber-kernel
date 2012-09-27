@@ -1,6 +1,10 @@
 #
 # Makefile for the linux arm-specific parts of the memory manager.
 #
+     
+ifeq ($(CONFIG_ARCH_FEROCEON),y)
+	include $(srctree)/$(MACHINE)/config/mvRules.mk
+endif
 
 obj-y				:= dma-mapping.o extable.o fault.o init.o \
 				   iomap.o

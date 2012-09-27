@@ -36,6 +36,12 @@
 #include <linux/string.h>
 #include <linux/log2.h>
 
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+extern int nfp_hook_arp_add(int family, const u8 *ip, u8 *mac, int if_index);
+extern int nfp_hook_arp_delete(int family, const u8 *ip);
+extern int nfp_hook_arp_is_confirmed(int family, const u8 *ip);
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
+
 #define NEIGH_DEBUG 1
 
 #define NEIGH_PRINTK(x...) printk(x)
@@ -635,6 +641,15 @@ void neigh_destroy(struct neighbour *neigh)
 	if (neigh_del_timer(neigh))
 		printk(KERN_WARNING "Impossible event.\n");
 
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+	if (neigh->nfp) {
+		nfp_hook_arp_delete(neigh->tbl->family, neigh->primary_key);
+
+		NEIGH_PRINTK2("0x%8lx: neigh %p, ref=%d, state=%d, nfp=%d is connected in %s.\n",
+			jiffies, neigh, atomic_read(&neigh->refcnt), neigh->nud_state, neigh->nfp, __func__);
+	}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
+
 	while ((hh = neigh->hh) != NULL) {
 		neigh->hh = hh->hh_next;
 		hh->hh_next = NULL;
@@ -651,7 +666,7 @@ void neigh_destroy(struct neighbour *neigh)
 	dev_put(neigh->dev);
 	neigh_parms_put(neigh->parms);
 
-	NEIGH_PRINTK2("neigh %p is destroyed.\n", neigh);
+	NEIGH_PRINTK2("0x%8lx: neigh %p is destroyed in %s.\n", jiffies, neigh, __func__);
 
 	atomic_dec(&neigh->tbl->entries);
 	kmem_cache_free(neigh->tbl->kmem_cachep, neigh);
@@ -667,7 +682,7 @@ static void neigh_suspect(struct neighbour *neigh)
 {
 	struct hh_cache *hh;
 
-	NEIGH_PRINTK2("neigh %p is suspected.\n", neigh);
+	NEIGH_PRINTK2("0x%8lx: neigh %p is suspected in %s.\n", jiffies, neigh, __func__);
 
 	neigh->output = neigh->ops->output;
 
@@ -684,7 +699,15 @@ static void neigh_connect(struct neighbour *neigh)
 {
 	struct hh_cache *hh;
 
-	NEIGH_PRINTK2("neigh %p is connected.\n", neigh);
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+	neigh->nfp = false;
+	if (!nfp_hook_arp_add(neigh->tbl->family, neigh->primary_key, neigh->ha, neigh->dev->ifindex)) {
+		neigh->nfp = true;
+
+		NEIGH_PRINTK2("0x%8lx: neigh %p, ref=%d, state=%d, nfp=%d is connected in %s.\n",
+			jiffies, neigh, atomic_read(&neigh->refcnt), neigh->nud_state, neigh->nfp, __func__);
+	}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
 
 	neigh->output = neigh->ops->connected_output;
 
@@ -731,6 +754,19 @@ static void neigh_periodic_work(struct work_struct *work)
 			if (time_before(n->used, n->confirmed))
 				n->used = n->confirmed;
 
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+			if ((atomic_read(&n->refcnt) == 1) && (state != NUD_FAILED) &&
+				time_after(jiffies, n->used + n->parms->gc_staletime)) {
+				if (n->nfp) {
+					if (nfp_hook_arp_is_confirmed(n->tbl->family, n->primary_key)) {
+						neigh_event_send(n, NULL);
+					}
+					NEIGH_PRINTK2("0x%8lx: neigh %p ref=%d, state=%d, NFP ARP aging in %s\n",
+						jiffies, n, atomic_read(&n->refcnt), n->nud_state, __func__);
+				}
+			}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
+
 			if (atomic_read(&n->refcnt) == 1 &&
 			    (state == NUD_FAILED ||
 			     time_after(jiffies, n->used + n->parms->gc_staletime))) {
@@ -762,7 +798,7 @@ next_elt:
 	write_unlock_bh(&tbl->lock);
 }
 
-static __inline__ int neigh_max_probes(struct neighbour *n)
+static inline int neigh_max_probes(struct neighbour *n)
 {
 	struct neigh_parms *p = n->parms;
 	return (n->nud_state & NUD_PROBE ?
@@ -775,7 +811,7 @@ static void neigh_invalidate(struct neighbour *neigh)
 	struct sk_buff *skb;
 
 	NEIGH_CACHE_STAT_INC(neigh->tbl, res_failed);
-	NEIGH_PRINTK2("neigh %p is failed.\n", neigh);
+	NEIGH_PRINTK2("0x%8lx: neigh %p is failed in %s.\n", jiffies, neigh, __func__);
 	neigh->updated = jiffies;
 
 	/* It is very thin place. report_unreachable is very complicated
@@ -815,19 +851,21 @@ static void neigh_timer_handler(unsigned long arg)
 	}
 
 	if (state & NUD_REACHABLE) {
+
 		if (time_before_eq(now,
 				   neigh->confirmed + neigh->parms->reachable_time)) {
-			NEIGH_PRINTK2("neigh %p is still alive.\n", neigh);
+			NEIGH_PRINTK2("0x%8lx: neigh %p is still alive in %s.\n", now, neigh, __func__);
 			next = neigh->confirmed + neigh->parms->reachable_time;
 		} else if (time_before_eq(now,
 					  neigh->used + neigh->parms->delay_probe_time)) {
-			NEIGH_PRINTK2("neigh %p is delayed.\n", neigh);
+			NEIGH_PRINTK2("0x%8lx: neigh %p is delayed in %s.\n", now, neigh, __func__);
 			neigh->nud_state = NUD_DELAY;
 			neigh->updated = jiffies;
 			neigh_suspect(neigh);
+
 			next = now + neigh->parms->delay_probe_time;
 		} else {
-			NEIGH_PRINTK2("neigh %p is suspected.\n", neigh);
+			NEIGH_PRINTK2("0x%8lx: neigh %p is suspected in %s.\n", now, neigh, __func__);
 			neigh->nud_state = NUD_STALE;
 			neigh->updated = jiffies;
 			neigh_suspect(neigh);
@@ -843,7 +881,7 @@ static void neigh_timer_handler(unsigned long arg)
 			notify = 1;
 			next = neigh->confirmed + neigh->parms->reachable_time;
 		} else {
-			NEIGH_PRINTK2("neigh %p is probed.\n", neigh);
+			NEIGH_PRINTK2("0x%8lx: neigh %p is probed in %s.\n", now, neigh, __func__);
 			neigh->nud_state = NUD_PROBE;
 			neigh->updated = jiffies;
 			atomic_set(&neigh->probes, 0);
@@ -915,7 +953,8 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 			return 1;
 		}
 	} else if (neigh->nud_state & NUD_STALE) {
-		NEIGH_PRINTK2("neigh %p is delayed.\n", neigh);
+		NEIGH_PRINTK2("0x%8lx: neigh %p ref=%d is delayed in %s.\n",
+				now, neigh, atomic_read(&neigh->refcnt), __func__);
 		neigh->nud_state = NUD_DELAY;
 		neigh->updated = jiffies;
 		neigh_add_timer(neigh,
@@ -1566,6 +1605,8 @@ static int neigh_delete(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 		err = neigh_update(neigh, NULL, NUD_FAILED,
 				   NEIGH_UPDATE_F_OVERRIDE |
 				   NEIGH_UPDATE_F_ADMIN);
+		NEIGH_PRINTK2("0x%8lx: neigh %p ref=%d, release in %s\n",
+				jiffies, neigh, atomic_read(&neigh->refcnt), __func__);
 		neigh_release(neigh);
 		goto out_dev_put;
 	}
@@ -2080,7 +2121,7 @@ static void neigh_update_notify(struct neighbour *neigh)
 static int neigh_dump_table(struct neigh_table *tbl, struct sk_buff *skb,
 			    struct netlink_callback *cb)
 {
-	struct net * net = sock_net(skb->sk);
+	struct net *net = sock_net(skb->sk);
 	struct neighbour *n;
 	int rc, h, s_h = cb->args[1];
 	int idx, s_idx = idx = cb->args[2];
@@ -2254,7 +2295,7 @@ static struct neighbour *neigh_get_next(struct seq_file *seq,
 
 			if (n->nud_state & ~NUD_NOARP)
 				break;
-		next:
+next:
 			n = n->next;
 		}
 
@@ -2816,6 +2857,35 @@ void neigh_sysctl_unregister(struct neigh_parms *p)
 EXPORT_SYMBOL(neigh_sysctl_unregister);
 
 #endif	/* CONFIG_SYSCTL */
+
+#if defined(CONFIG_MV_ETH_NFP_FIB_LEARN)
+void neigh_sync(int family)
+{
+	struct neigh_table *tbl;
+	struct neighbour *n;
+	int t, h, idx;
+
+	read_lock(&neigh_tbl_lock);
+	for (tbl = neigh_tables, t = 0; tbl; tbl = tbl->next, t++) {
+		if (tbl->family == family) {
+			for (h = 0; h <= tbl->hash_mask; h++) {
+				for (n = tbl->hash_buckets[h], idx = 0; n; n = n->next) {
+					if (n->dev == NULL)
+						continue;
+					n->nfp = false;
+					if (!nfp_hook_arp_add(n->tbl->family,
+							n->primary_key,
+							n->ha,
+							n->dev->ifindex)) {
+						n->nfp = true;
+					}
+				}
+			}
+		}
+	}
+	read_unlock(&neigh_tbl_lock);
+}
+#endif /* CONFIG_MV_ETH_NFP_FIB_LEARN */
 
 static int __init neigh_init(void)
 {

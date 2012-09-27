@@ -153,6 +153,19 @@ static int ct_seq_show(struct seq_file *s, void *v)
 		goto release;
 #endif
 
+#if defined(CONFIG_MV_ETH_NFP_CT_LEARN)
+	if ((ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.nfp) && (ct->tuplehash[IP_CT_DIR_REPLY].tuple.nfp)) {
+		if (seq_printf(s, "[NFP (both)] "))
+			goto release;
+	} else if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.nfp) {
+		if (seq_printf(s, "[NFP (orig)] "))
+			goto release;
+	} else if (ct->tuplehash[IP_CT_DIR_REPLY].tuple.nfp) {
+		if (seq_printf(s, "[NFP (reply)] "))
+			goto release;
+	}
+#endif /* CONFIG_MV_ETH_NFP_CT_LEARN */
+
 	if (seq_printf(s, "use=%u\n", atomic_read(&ct->ct_general.use)))
 		goto release;
 	ret = 0;

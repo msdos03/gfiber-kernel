@@ -171,7 +171,12 @@
 
 #define VIOTAPE_MAJOR		230
 
+#define MV_TS_MAJOR		231	/* Marvell Transport Stream driver */
+
 #define BLOCK_EXT_MAJOR		259
 #define SCSI_OSD_MAJOR		260	/* open-osd's OSD scsi device */
+
+#define MV_PON_MAJOR		300
+#define MV_TPM_MAJOR		301
 
 #endif

@@ -3674,9 +3674,11 @@ int32_t tpm_init_system_mib_reset(tpm_reset_level_enum_t reset_type)
 	tpm_db_switch_init_get(&switch_init);
 	if (switch_init)
 		tpm_init_switch();
-	else
+#if 0 /* No GMAC1 on MC RD board */
+		else
 		/* Init GMAC1 in loopback mod if no switch*/
 		tpm_init_gmac_loopback(TPM_ENUM_GMAC_1);
+#endif
 	/*Init TX scheduling */
 	ret_code = tpm_init_tx_queue_sched();
 	IF_ERROR(ret_code);

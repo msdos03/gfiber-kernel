@@ -254,7 +254,7 @@ typedef struct
 {
     char *sysfs_name;
     int (*sysfs_func)( char *buf);
-    } show_sysfs_name_func_t;
+} show_sysfs_name_func_t;
 
 static show_sysfs_name_func_t show_sysfs_name_func_ara[] =
 {
@@ -308,6 +308,9 @@ static show_sysfs_name_func_t show_sysfs_name_func_ara[] =
     {"help_mac_learn_rule_add",      sfs_help_mac_learn_rule_add},
     {"help_mac_learn_def_act_set",   sfs_help_mac_learn_def_act_set},
 
+    {"show_frwd_rule",               sfs_show_frwd_rule},
+    {"show_l2_key_mac_addr",         sfs_show_l2_key_mac_addr},
+    {"show_l2_rule",                 sfs_show_l2_rule},
 };
 static int num_show_name_funcs = sizeof(show_sysfs_name_func_ara)/sizeof(show_sysfs_name_func_ara[0]);
 
@@ -404,6 +407,11 @@ static DEVICE_ATTR(help_tpm_self_check,                             S_IRUSR, tpm
 static DEVICE_ATTR(help_flush_atu,                                  S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(help_flush_vtu,                                  S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
+
+/* sysfs for dumping forwarding table in yaml. */
+static DEVICE_ATTR(show_frwd_rule,                                  S_IRUSR, tpm_cfg_show, NULL);
+static DEVICE_ATTR(show_l2_key_mac_addr,                            S_IRUSR, tpm_cfg_show, NULL);
+static DEVICE_ATTR(show_l2_rule,                                    S_IRUSR, tpm_cfg_show, NULL);
 
 // rule set
 static DEVICE_ATTR(frwd_rule_set,                                   S_IWUSR, tpm_cfg_show, tpm_cfg_store);
@@ -622,6 +630,8 @@ static struct attribute *tpm_cfg_l2_sw_attrs[] =
     &dev_attr_help_mac_learn_rule_add.attr,
     &dev_attr_help_mac_learn_def_act_set.attr,
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
+    &dev_attr_show_l2_key_mac_addr.attr,
+    &dev_attr_show_l2_rule.attr,
 
     &dev_attr_l2_key_ethertype_rule_set.attr,
     &dev_attr_l2_key_gemport_rule_set.attr,
@@ -809,6 +819,7 @@ static struct attribute *tpm_cfg_frwd_sw_attrs[] =
     &dev_attr_help_rule_table_display.attr,
     &dev_attr_help_delete_entry_rule_table.attr,
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
+    &dev_attr_show_frwd_rule.attr,
 
     &dev_attr_frwd_rule_set.attr,
 

@@ -1209,6 +1209,68 @@ void show_tpm_l2_key_db   (void)
     }
 }
 
+static tpmcfg_l2_prim_key_entry_t tpm_sysfs_l2_rule_table[DB_TPMCFG_MAX_ENTRIES];
+
+static tpm_generic_rule_db_t tpm_l2_rule_db =
+{
+    .max_num_entries    = DB_TPMCFG_MAX_ENTRIES,
+    .num_entries        = 0,
+    .size_entry         = sizeof(tpmcfg_l2_prim_key_entry_t),
+    .entryAra           = tpm_sysfs_l2_rule_table
+};
+
+
+static void init_tpm_l2_rule_db(void)
+{
+    tpmcfg_l2_prim_key_entry_t *pentry = (tpmcfg_l2_prim_key_entry_t *)tpm_l2_rule_db.entryAra;
+    int                   indx;
+
+    printk(KERN_INFO "%s: Clearing DB\n", __FUNCTION__);
+    for (indx = 0; indx < tpm_l2_rule_db.max_num_entries; indx++, pentry++)
+    {
+        pentry->used = 0;
+    }
+}
+
+tpmcfg_l2_prim_key_entry_t *find_tpm_l2_prim_key_entry_by_owner_id_and_rule_num(uint32_t owner_id, uint32_t rule_num) {
+    tpmcfg_l2_prim_key_entry_t *pentry = (tpmcfg_l2_prim_key_entry_t *)tpm_l2_rule_db.entryAra;
+    int                   indx;
+
+    for (indx = 0; indx < tpm_l2_rule_db.max_num_entries; indx++, pentry++)
+    {
+        if (pentry->owner_id == owner_id && pentry->rule_num == rule_num && pentry->used)
+            return pentry;
+    }
+    return 0;
+}
+
+tpmcfg_l2_prim_key_entry_t *find_free_tpm_l2_prim_key_entry(void) {
+    tpmcfg_l2_prim_key_entry_t *pentry = (tpmcfg_l2_prim_key_entry_t *)tpm_l2_rule_db.entryAra;
+    int                   indx;
+
+    for (indx = 0; indx < tpm_l2_rule_db.max_num_entries; indx++, pentry++)
+    {
+        if (!pentry->used) return pentry;
+    }
+    return 0;
+}
+
+GT_BOOL del_tpm_l2_prim_key_entry(uint32_t owner_id, uint32_t rule_num) {
+    tpmcfg_l2_prim_key_entry_t *pentry = (tpmcfg_l2_prim_key_entry_t *)tpm_l2_key_db.entryAra;
+    int                   indx;
+
+    for (indx = 0; indx < tpm_l2_key_db.max_num_entries; indx++, pentry++)
+    {
+        if (pentry->owner_id == owner_id && pentry->rule_num == rule_num && pentry->used)
+        {
+            pentry->used = 0;
+            return GT_TRUE;
+        };
+    }
+    return GT_FALSE;
+}
+
+
 /********************************************************************************/
 /*                          L3 ACL table and API                                */
 /********************************************************************************/
@@ -1824,6 +1886,7 @@ void tpm_sysfs_rule_db_init(void)
     init_tpm_vlan_db();
     init_tpm_mod_db();
     init_tpm_l2_key_db();
+    init_tpm_l2_rule_db();
     init_tpm_l3_key_db();
     init_tpm_ipv4_key_db();
     init_tpm_ipv6_key_db();
@@ -1870,5 +1933,82 @@ tpm_error_code_t tpm_proc_send_genquery_to_uni(tpm_trg_port_type_t dest_port_bm,
 
 
 	return(TPM_RC_OK);
+}
+
+int sfs_show_frwd_rule (char *buf)
+{
+    tpmcfg_frwd_entry_t *pentry = (tpmcfg_frwd_entry_t *)tpm_frwd_rule_db.entryAra;
+    int                 indx;
+    int                 off = 0;
+
+    for (indx = 0; indx < tpm_frwd_rule_db.max_num_entries; indx++, pentry++)
+    {
+        if (pentry->name[0] != 0)
+        {
+            off += sprintf(buf+off, "--- !FrwdRule\n");
+            off += sprintf(buf+off, "gem_port: %d\n", pentry->frwd.gem_port);
+            off += sprintf(buf+off, "port_bitmap: %-3d\n", pentry->frwd.trg_port);
+            off += sprintf(buf+off, "queue: %d\n", pentry->frwd.trg_queue);
+            off += sprintf(buf+off, "rule_name: %s\n", pentry->name);
+        }
+    }
+    return off;
+}
+
+int sfs_show_l2_key_mac_addr (char *buf)
+{
+    tpmcfg_l2_key_entry_t *pentry = (tpmcfg_l2_key_entry_t *)tpm_l2_key_db.entryAra;
+    int                   indx;
+    int                   off = 0;
+    char                  d1[60];
+    char                  d2[60];
+    char                  d1_mask[60];
+    char                  d2_mask[60];
+
+    for (indx = 0; indx < tpm_l2_key_db.max_num_entries; indx++, pentry++)
+    {
+        if (pentry->name[0] != 0)
+        {
+            off += sprintf(buf+off, "--- !L2KeyMacAddr\n");
+            format_mac_addr(pentry->l2_acl.mac.mac_da, d1);
+            format_mac_addr(pentry->l2_acl.mac.mac_da_mask, d1_mask);
+            format_mac_addr(pentry->l2_acl.mac.mac_sa, d2);
+            format_mac_addr(pentry->l2_acl.mac.mac_sa_mask, d2_mask);
+            off += sprintf(buf+off, "da: %s\n", d1);
+            off += sprintf(buf+off, "da_mask: %s\n", d1_mask);
+            off += sprintf(buf+off, "rule_name: %s\n", pentry->name);
+            off += sprintf(buf+off, "sa: %s\n", d2);
+            off += sprintf(buf+off, "sa_mask: %s\n", d2_mask);
+        }
+    }
+    return off;
+}
+
+int sfs_show_l2_rule (char *buf)
+{
+    tpmcfg_l2_prim_key_entry_t *pentry = (tpmcfg_l2_prim_key_entry_t *)tpm_l2_rule_db.entryAra;
+    int                   indx;
+    int                   off = 0;
+
+    for (indx = 0; indx < tpm_l2_rule_db.max_num_entries; indx++, pentry++)
+    {
+        if (pentry->used)
+        {
+            off += sprintf(buf+off, "--- !L2Rule\n");
+            off += sprintf(buf+off, "action: %d\n", pentry->action);
+            off += sprintf(buf+off, "frwd_name: %s\n", pentry->frwd_name);
+            off += sprintf(buf+off, "key_name: %s\n", pentry->key_name);
+            off += sprintf(buf+off, "mod_name: %s\n", pentry->mod_name);
+            off += sprintf(buf+off, "next_phase: %s\n", pentry->next_phase);
+            off += sprintf(buf+off, "owner_id: %d\n", pentry->owner_id);
+            off += sprintf(buf+off, "parse_flags_bm: 0x%x\n", pentry->parse_flags_bm);
+            off += sprintf(buf+off, "parse_rule_bm: 0x%x\n", pentry->parse_rule_bm);
+            off += sprintf(buf+off, "pkt_mod_bm: 0x%x\n", pentry->pkt_mod_bm);
+            off += sprintf(buf+off, "rule_idx: %d\n", pentry->rule_idx);
+            off += sprintf(buf+off, "rule_num: %d\n", pentry->rule_num);
+            off += sprintf(buf+off, "src_port: %s\n", pentry->src_port);
+        }
+    }
+    return off;
 }
 

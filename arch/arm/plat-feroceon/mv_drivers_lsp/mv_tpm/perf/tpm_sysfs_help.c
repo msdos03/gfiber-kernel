@@ -836,7 +836,7 @@ int sfs_help_no_rule_add(char* buf)
 {
     int off = 0;
 
-    off += sprintf(buf+off, "echo [owner_id] [rule_idx]            > no_rule_add_l2                - delete L2 rule from hardware\n");
+    off += sprintf(buf+off, "echo [owner_id] [rule_num]            > no_rule_add_l2                - delete L2 rule from hardware\n");
     off += sprintf(buf+off, "echo [owner_id] [rule_idx]            > no_rule_add_l3                - delete L3 rule from hardware\n");
     off += sprintf(buf+off, "echo [owner_id] [rule_idx]            > no_rule_add_ipv4              - delete IPv4 rule from hardware\n");
     off += sprintf(buf+off, "echo [owner_id] [rule_idx]            > no_rule_add_ipv6_dip_acl      - delete a IPv6 DIP ACL\n");

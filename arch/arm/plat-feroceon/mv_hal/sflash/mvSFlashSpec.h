@@ -127,6 +127,10 @@ extern "C" {
 #define     MV_M25Q128_MAX_SPI_FREQ             20000000    /* 20MHz */
 #define     MV_M25Q128_MAX_FAST_SPI_FREQ        50000000    /* 50MHz */
 #define     MV_M25Q128_FAST_READ_DUMMY_BYTES    1
+#define     MV_N25Q256_DEVICE_ID                0xBA19
+#define     MV_N25Q256_MAX_SPI_FREQ             20000000    /* 20MHz */
+#define     MV_N25Q256_MAX_FAST_SPI_FREQ        50000000    /* 50MHz */
+#define     MV_N25Q256_FAST_READ_DUMMY_BYTES    1
 
 
 /* Sector Sizes and population per device model*/
@@ -134,10 +138,12 @@ extern "C" {
 #define     MV_M25P64_SECTOR_SIZE               0x10000 /* 64K */
 #define     MV_M25P128_SECTOR_SIZE              0x40000 /* 256K */
 #define     MV_M25Q128_SECTOR_SIZE              0x10000 /* 64K */
+#define     MV_N25Q256_SECTOR_SIZE              0x10000 /* 64K */
 #define     MV_M25P32_SECTOR_NUMBER             64
 #define     MV_M25P64_SECTOR_NUMBER             128
 #define     MV_M25P128_SECTOR_NUMBER            64
 #define     MV_M25Q128_SECTOR_NUMBER            256
+#define     MV_N25Q256_SECTOR_NUMBER            512
 #define	    MV_M25P_PAGE_SIZE			0x100   /* 256 byte */
 #define	    MV_M25Q_PAGE_SIZE			0x100   /* 256 byte */
 
@@ -152,6 +158,7 @@ extern "C" {
 #define		MV_M25P_SE_CMND_OPCD			    0xD8	/* Sector Erase */
 #define		MV_M25P_BE_CMND_OPCD			    0xC7	/* Bulk Erase */
 #define		MV_M25P_RES_CMND_OPCD			    0xAB	/* Read Electronic Signature */
+#define		MV_N25Q_EN4B_CMND_OPCD			    0xB7	/* Enable 4-byte mode */
 
 /* Status Register Write Protect Bit Masks - 3bits */
 #define		MV_M25P_STATUS_REG_WP_MASK	        (0x07 << MV_SFLASH_STATUS_REG_WP_OFFSET)

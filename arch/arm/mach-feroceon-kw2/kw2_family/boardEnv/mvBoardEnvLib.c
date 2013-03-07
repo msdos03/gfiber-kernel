@@ -1432,6 +1432,24 @@ MV_32 mvBoarGpioPinNumGet(MV_BOARD_GPP_CLASS gppClass, MV_U32 index)
 	return MV_ERROR;
 }
 
+MV_32 mvBoardGpioPolarityGet(MV_BOARD_GPP_CLASS gppClass)
+{
+	MV_U32 boardId, i;
+
+	boardId = mvBoardIdGet();
+
+	if (!((boardId >= BOARD_ID_BASE) && (boardId < MV_MAX_BOARD_ID))) {
+		mvOsPrintf("mvBoardGpioPolarityGet:Board unknown.\n");
+		return MV_ERROR;
+	}
+
+	for (i = 0; i < BOARD_INFO(boardId)->numBoardGppInfo; i++) {
+		if (BOARD_INFO(boardId)->pBoardGppInfo[i].devClass == gppClass)
+			return !BOARD_INFO(boardId)->pBoardGppInfo[i].activeLow;
+	}
+	return MV_ERROR;
+}
+
 /*******************************************************************************
 * mvBoardReset - mvBoardReset
 *

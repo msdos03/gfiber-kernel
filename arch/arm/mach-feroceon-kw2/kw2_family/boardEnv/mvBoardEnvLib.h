@@ -345,6 +345,7 @@ typedef struct _boardLedInfo {
 typedef struct _boardGppInfo {
 	MV_BOARD_GPP_CLASS devClass;
 	MV_U8 gppPinNum;
+	MV_U8 activeLow;
 } MV_BOARD_GPP_INFO;
 
 typedef struct _boardTwsiInfo {
@@ -508,6 +509,7 @@ MV_U32 mvBoardSysClkGet(MV_VOID);
 MV_U32 mvBoardDebugLedNumGet(MV_U32 boardId);
 MV_VOID mvBoardDebugLed(MV_U32 hexNum);
 MV_32 mvBoarGpioPinNumGet(MV_BOARD_GPP_CLASS class, MV_U32 index);
+MV_32 mvBoardGpioPolarityGet(MV_BOARD_GPP_CLASS class);
 MV_VOID mvBoardReset(MV_VOID);
 MV_32 mvBoardResetGpioPinGet(MV_VOID);
 MV_32 mvBoardSDIOGpioPinGet(MV_BOARD_GPP_CLASS type);

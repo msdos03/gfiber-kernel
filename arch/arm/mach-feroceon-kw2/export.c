@@ -219,6 +219,7 @@ EXPORT_SYMBOL(mv_pon_link_state_register);
 EXPORT_SYMBOL(mvGppBlinkEn);
 EXPORT_SYMBOL(mvGppTypeSet);
 EXPORT_SYMBOL(mvBoarGpioPinNumGet);
+EXPORT_SYMBOL(mvBoardGpioPolarityGet);
 #endif /* CONFIG_MV_PON */
 
 /*************************************************************************************************************

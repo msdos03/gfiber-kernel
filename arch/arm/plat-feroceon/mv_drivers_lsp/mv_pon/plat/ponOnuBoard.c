@@ -786,13 +786,15 @@ void      onuPonPatternBurstTimerHndl(void)
 *******************************************************************************/
 MV_STATUS onuPonTxPowerOn(MV_BOOL txOn)
 {
+	MV_U8		gpioPolarity;
 	MV_U32		gpioGroup, gpioMask;
 	MV_U32		devId = mvCtrlModelGet();
 	MV_STATUS	status = MV_OK;
 
 	PON_GPIO_GET(BOARD_GPP_PON_XVR_TX_POWER, gpioGroup, gpioMask);
 	if (gpioMask != PON_GPIO_NOT_USED) {
-		if (txOn == MV_TRUE)
+		gpioPolarity = mvBoardGpioPolarityGet(BOARD_GPP_PON_XVR_TX_POWER);
+		if ((txOn && gpioPolarity) || (!txOn && !gpioPolarity))
 			status = mvGppValueSet(gpioGroup, gpioMask, gpioMask);
 		else
 			status = mvGppValueSet(gpioGroup, gpioMask, 0);

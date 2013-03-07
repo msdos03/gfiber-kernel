@@ -223,6 +223,7 @@ MV_CPU_DEC_WIN* mv_sys_map(void)
 			return SYSMAP_88F6500;
  		case DB_88F6601_BP_ID:
 		case RD_88F6601_MC_ID:
+		case GFLT200_ID:
 			return SYSMAP_88F6601;
 		default:
 			printk("ERROR: can't find system address map\n");

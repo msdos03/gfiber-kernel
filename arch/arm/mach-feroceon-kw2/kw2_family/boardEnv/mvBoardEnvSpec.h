@@ -108,6 +108,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DB_88F6601_BP_ID		(BOARD_ID_BASE+0x5)
 #define RD_88F6601_MC_ID		(BOARD_ID_BASE+0x6)
 #define DB_CUSTOMER_ID			(BOARD_ID_BASE+0x7)
+#define GFLT200_ID			DB_CUSTOMER_ID
 #define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 1)
 
 /***************************************************************************
@@ -461,5 +462,52 @@ MPP#	NAME			IN/OUT
 #define RD_88F6601_GPP_POL_LOW		(BIT23)
 #define RD_88F6601_GPP_POL_MID		0x0
 
+/***************************************************************************
+** GFLT200
+****************************************************************************/
+#define GFLT200_MPP0_7			0x22222220
+#define GFLT200_MPP8_15			0x00000002
+#define GFLT200_MPP16_23		0x00000000
+#define GFLT200_MPP24_31		0x40000000
+#define GFLT200_MPP32_37		0x00000004
+
+/* GPPs
+ 1 SPI_MOSI (out)
+ 2 SPI_SCK (out)
+ 3 SPI_CS_L (out)
+ 4 SPI_MISO (in)
+ 5 I2C_SDA (inout)
+ 6 I2C_SCLK (inout)
+ 7 UART0_TX (out)
+ 8 UART0_RX (in)
+ 9 VDD_MARGIN_EN (out)
+10 VDD_MARGIN_CTRL (out)
+11 PON_LINK_LED (out)
+12 PON_ERROR_LED (out)
+13 BOARD_VER[0] (in)
+15 BOARD_VER[1] (in)
+17 SW_RESET (out)
+18 BOARD_VER[2] (in)
+21 PON_TX_DIS (out)
+23 GE_DATA_LED (out)
+24 GE_LINK_LED (out)
+26 PON_C2_DATA (out)
+27 PON_C2_CLK (out)
+28 SPI_WP_L (out)
+29 PON_RX_LOS (in)
+31 UART1_RX (out)
+32 UART2_TX (in)
+36 PON_RX_PMON (in)
+37 PON_PWR_EN_L (out)
+*/
+
+#define GFLT200_GPP_OUT_ENA_LOW		(BIT13 | BIT15 | BIT18 | BIT29)
+#define GFLT200_GPP_OUT_ENA_MID		(BIT4)
+
+#define GFLT200_GPP_OUT_VAL_LOW		(BIT9 | BIT10 | BIT21 | BIT26 | BIT27 | BIT28)
+#define GFLT200_GPP_OUT_VAL_MID		0x0
+
+#define GFLT200_GPP_POL_LOW		0x0
+#define GFLT200_GPP_POL_MID		0x0
 
 #endif /* __INCmvBoardEnvSpech */

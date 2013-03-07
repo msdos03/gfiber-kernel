@@ -669,7 +669,8 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 			profile[0] = ESC_OPT_RGMIIA_MAC0 | ESC_OPT_GEPHY_MAC1;
 		if (DB_88F6601_BP_ID == mvBoardIdGet())
 			profile[0] = ESC_OPT_SGMII | ESC_OPT_GEPHY_MAC0 | ESC_OPT_LP_SERDES_FE_GE_PHY;
-		if (RD_88F6601_MC_ID == mvBoardIdGet())
+		if ((RD_88F6601_MC_ID == mvBoardIdGet())
+			|| (GFLT200_ID == mvBoardIdGet()))
 			profile[0] = ESC_OPT_GEPHY_MAC0;
 		break;
 	}

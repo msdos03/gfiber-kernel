@@ -249,13 +249,25 @@ int mvPonCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd, uns
 				goto ioctlErr;
 			}
 			ponDev.drvMode = drvMode;
-
 		} else {
+			ret = get_user(drvMode, (E_PonDriverMode __user *)arg);
+			if (ret != 0) {
+				mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+					"ERROR: (%s:%d) copy from user failed\n", __FILE_DESC__, __LINE__);
+				goto ioctlErr;
+			}
+			if (ponDev.drvMode == drvMode) {
+					mvPonPrint(PON_PRINT_INFO, PON_API_MODULE,
+							"INFO: (%s:%d) Same driver mode, no change\n",
+							__FILE_DESC__, __LINE__);
+					ret = 0;
+			} else {
 			/* Switching between EPON-GPON modes requires reboot initiated by US application */
-			mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
-					"ERROR: (%s:%d) command MVPON_IOCTL_INIT is not supported in this mode\n",
-					__FILE_DESC__, __LINE__);
-			goto ioctlErr;
+					mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+							"ERROR: (%s:%d) command MVPON_IOCTL_INIT is not supported in this mode\n",
+							__FILE_DESC__, __LINE__);
+					goto ioctlErr;
+			}
 		}
 		break;
 

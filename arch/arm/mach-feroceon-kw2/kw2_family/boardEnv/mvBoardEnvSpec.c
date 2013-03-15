@@ -1204,6 +1204,7 @@ MV_BOARD_GPP_INFO gflt200InfoBoardGppInfo[] = {
 	/* {{MV_BOARD_GPP_CLASS devClass, MV_U8 gppPinNum}} */
 	/*{BOARD_GPP_PON_XVR_TX, 17, 0},*/
 	/*{BOARD_GPP_PON_XVR_TX_IND, 24, 0},*/
+	{BOARD_GPP_PON_XVR_TX, 21, 1},
 	{BOARD_GPP_PON_XVR_TX_POWER, 37, 1},
 };
 
@@ -1278,7 +1279,7 @@ MV_BOARD_INFO gflt200Info = {
 	.switchInfoNum = 0,
 
 	/* PON configuration. */
-	.ponConfigValue = BOARD_GPON_CONFIG,
+	.ponConfigValue = BOARD_PON_NONE,
 
 	/* TDM configuration */
 	/* We hold a different configuration array for each possible slic that

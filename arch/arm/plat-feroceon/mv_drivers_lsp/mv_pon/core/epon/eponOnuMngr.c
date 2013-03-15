@@ -629,6 +629,10 @@ void onuEponPonMngAlarmHandlerExecute(MV_U32 macId)
     if (onuEponForceTxDownStateGet(0) != MV_TRUE)
       linkStatusCallback(MV_FALSE);
   }
+  /* TODO(kedong): Disable laser when the RX is gone. Need to be cleaned up
+   * when wavelength selection code is ready.
+   */
+  onuPonTxLaserOn(MV_FALSE);
 
   if (onuEponDbOnuHoldoverStateGet() != ONU_HOLDOVER_NOT_ACTIVE)
   {

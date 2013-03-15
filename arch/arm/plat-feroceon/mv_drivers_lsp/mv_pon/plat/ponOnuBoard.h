@@ -146,6 +146,7 @@ MV_STATUS onuPonPatternBurstOff(void);
 void      onuPonPatternBurstTimerHndl(void);
 MV_STATUS onuPonTxPowerOn(MV_BOOL txOn);
 MV_STATUS onuPonTxPowerControlInit(void);
+MV_STATUS onuPonTxLaserOn(MV_BOOL txOn);
 
 #endif /* PON_FPGA */
 

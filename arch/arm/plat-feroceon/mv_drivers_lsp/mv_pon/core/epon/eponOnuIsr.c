@@ -1164,6 +1164,11 @@ MV_STATUS mvP2PStart(void)
     {
       linkStatusCallback(MV_TRUE);
     }
+    /* TODO(kedong): Enable laser when the RX is ready. Need to be cleaned up
+     * when wavelength selection code is ready.
+     */
+    onuPonTxLaserOn(MV_TRUE);
+
 #endif
 
     return(MV_OK);

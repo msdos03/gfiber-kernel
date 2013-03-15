@@ -228,6 +228,7 @@ void onuEponAlarmProcess(void)
       {
         linkStatusCallback(MV_TRUE);
       }
+      onuPonTxLaserOn(MV_TRUE);
     }
 
     onuEponPreviousAlarm = onuEponCurrentAlarmState;  

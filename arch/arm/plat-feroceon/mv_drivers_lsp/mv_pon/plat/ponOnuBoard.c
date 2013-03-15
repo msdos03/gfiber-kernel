@@ -850,4 +850,41 @@ MV_STATUS onuPonTxPowerControlInit(void)
 	return(status);
 }
 
+/*******************************************************************************
+**
+**  onuPonTxLaserOn
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function turns ON/OFF TX laser using MPP
+**
+**  PARAMETERS:  MV_BOOL on - MV_TRUE - turn TX laser ON, othervise OFF
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuPonTxLaserOn(MV_BOOL on)
+{
+	MV_STATUS status;
+	MV_U32    gpioGroup, gpioMask;
+	MV_U8     gpioPolarity;
+	MV_U32    trans_value = 0;
+	MV_U32    board_id = mvBoardIdGet();
+
+	if (GFLT200_ID == board_id) {
+		PON_GPIO_GET(BOARD_GPP_PON_XVR_TX, gpioGroup, gpioMask);
+		if (gpioMask == PON_GPIO_NOT_USED)
+			return(MV_ERROR);
+		gpioPolarity = mvBoardGpioPolarityGet(BOARD_GPP_PON_XVR_TX);
+		if ((on && gpioPolarity) || (!on && !gpioPolarity))
+			status = mvGppValueSet(gpioGroup, gpioMask, gpioMask);
+		else
+			status = mvGppValueSet(gpioGroup, gpioMask, 0);
+		transmit_up = on;
+	}
+
+	return(MV_OK);
+}
+
 #endif /* PON_FPGA */

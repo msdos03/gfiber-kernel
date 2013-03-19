@@ -209,8 +209,10 @@ void onuEponIsrRoutine(MV_U32 event, MV_U32 status)
 
 		} else if (state == MV_TRUE) { /* alarm is ON */
 
-			/* set EPON mode */
-			onuEponDbModeSet(E_EPON_IOCTL_STD_MODE);
+			/* set EPON mode only if it is not P2P */
+			if (E_EPON_IOCTL_P2P_MODE != onuEponDbModeGet()) {
+				onuEponDbModeSet(E_EPON_IOCTL_STD_MODE);
+			}
 			/* config PCS synchronization configuration  - FEC disabled */
 			mvOnuEponMacPcsDelaySet(0x1C58);
 			/* clear Rx Ctrl message FIFO */

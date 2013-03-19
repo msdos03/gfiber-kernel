@@ -201,6 +201,7 @@ void onuEponAlarmProcess(void)
     }
     else /* ((onuEponChangeAlarm & onuEponCurrentAlarmState) == 0) */
     {
+      LINKSTATUSFUNC linkStatusCallback;
       if (onuEponChangeAlarm & ONU_EPON_XVR_SD_MASK)
       {
         mvPonPrint(PON_PRINT_INFO, PON_ALARM_MODULE, 
@@ -214,6 +215,18 @@ void onuEponAlarmProcess(void)
                    "INFO: (%s:%d) === SERDES SD On ===\n\r", __FILE_DESC__, __LINE__);
 
         onuEponLosAlarm |= 0x02<<8;
+      }
+      /* TODO(kedong): There is no OAM message between ONU and OLT, thus the
+       * link will be always down if we don't explicitly bring up the interface.
+       * Here we hook the link status update code to the XVR alarm off code to
+       * always indicate the link up if the XVR signal is detected. Once the
+       * wavelength selection code is ready, we should remove the follow link
+       * status check code.
+       */
+      linkStatusCallback = onuEponDbLinkStatusCallbackGet();
+      if (linkStatusCallback != NULL)
+      {
+        linkStatusCallback(MV_TRUE);
       }
     }
 

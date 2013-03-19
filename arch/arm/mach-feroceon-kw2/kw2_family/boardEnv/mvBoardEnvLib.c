@@ -1425,7 +1425,8 @@ MV_32 mvBoarGpioPinNumGet(MV_BOARD_GPP_CLASS gppClass, MV_U32 index)
 	boardId = mvBoardIdGet();
 
 	if (!((boardId >= BOARD_ID_BASE) && (boardId < MV_MAX_BOARD_ID))) {
-		mvOsPrintf("mvBoardRTCGpioPinGet:Board unknown.\n");
+		mvOsPrintf("mvBoardRTCGpioPinGet:Board unknown - id %d\n",
+				boardId);
 		return MV_ERROR;
 	}
 
@@ -1446,7 +1447,8 @@ MV_32 mvBoardGpioPolarityGet(MV_BOARD_GPP_CLASS gppClass)
 	boardId = mvBoardIdGet();
 
 	if (!((boardId >= BOARD_ID_BASE) && (boardId < MV_MAX_BOARD_ID))) {
-		mvOsPrintf("mvBoardGpioPolarityGet:Board unknown.\n");
+		mvOsPrintf("mvBoardGpioPolarityGet:Board unknown - id %d\n",
+				boardId);
 		return MV_ERROR;
 	}
 

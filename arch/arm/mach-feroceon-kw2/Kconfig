@@ -11,4 +11,13 @@ config  MV88F6500
 
 endchoice
 
+choice
+	prompt "Feroceon-KW2 board type"
+
+config MACH_GFLT200
+	bool "GFLT200 board"
+	depends on MV88F6500
+
+endchoice
+
 endif

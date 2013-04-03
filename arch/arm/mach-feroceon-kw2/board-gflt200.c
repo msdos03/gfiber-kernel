@@ -1,10 +1,28 @@
+#include <linux/device.h>
 #include <linux/err.h>
+#include <linux/gpio.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/sysfs.h>
 
 #define BOARD_NAME		"gflt200"
+#define GPIO_BOARD_VER_0	13
+#define GPIO_BOARD_VER_1	15
+#define GPIO_BOARD_VER_2	18
+
+static ssize_t board_hw_ver_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int hw_ver = gpio_get_value(GPIO_BOARD_VER_0)
+			| (gpio_get_value(GPIO_BOARD_VER_1) << 1)
+			| (gpio_get_value(GPIO_BOARD_VER_2) << 2);
+
+	return sprintf(buf, "%d\n", hw_ver);
+}
+
+static DEVICE_ATTR(hw_ver, S_IRUGO, board_hw_ver_show, NULL);
 
 int __init board_init(void)
 {
@@ -24,6 +42,12 @@ int __init board_init(void)
 				"board");
 	if (rc)
 		pr_err(BOARD_NAME ": error %d creating link 'board'\n", rc);
+
+	/* /sys/devices/platform/board/hw_ver */
+	rc = device_create_file(&pdev->dev, &dev_attr_hw_ver);
+	if (rc)
+		pr_err(BOARD_NAME ": error %d creating attribute 'hw_ver'\n",
+			rc);
 
 	return 0;
 }

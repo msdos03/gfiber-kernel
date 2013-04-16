@@ -1937,7 +1937,8 @@ tpm_error_code_t tpm_proc_send_genquery_to_uni(tpm_trg_port_type_t dest_port_bm,
 
 int sfs_show_frwd_rule (char *buf)
 {
-    tpmcfg_frwd_entry_t *pentry = (tpmcfg_frwd_entry_t *)tpm_frwd_rule_db.entryAra;
+    tpmcfg_frwd_entry_t *pentry =
+        (tpmcfg_frwd_entry_t *)tpm_frwd_rule_db.entryAra;
     int                 indx;
     int                 off = 0;
 
@@ -1955,6 +1956,24 @@ int sfs_show_frwd_rule (char *buf)
     return off;
 }
 
+int sfs_show_l2_key_ethertype (char *buf)
+{
+    tpmcfg_l2_key_entry_t *pentry = (tpmcfg_l2_key_entry_t *)tpm_l2_key_db.entryAra;
+    int                   indx;
+    int                   off = 0;
+
+    for (indx = 0; indx < tpm_l2_key_db.max_num_entries; indx++, pentry++)
+    {
+        if (pentry->name[0] != 0 && l2_key_type_ethertype == pentry->l2_key_type)
+        {
+            off += sprintf(buf+off, "--- !L2KeyEtherType\n");
+            off += sprintf(buf+off, "rule_name: %s\n", pentry->name);
+            off += sprintf(buf+off, "ethertype: 0x%x\n", pentry->l2_acl.ether_type);
+        }
+    }
+    return off;
+}
+
 int sfs_show_l2_key_mac_addr (char *buf)
 {
     tpmcfg_l2_key_entry_t *pentry = (tpmcfg_l2_key_entry_t *)tpm_l2_key_db.entryAra;
@@ -1967,7 +1986,7 @@ int sfs_show_l2_key_mac_addr (char *buf)
 
     for (indx = 0; indx < tpm_l2_key_db.max_num_entries; indx++, pentry++)
     {
-        if (pentry->name[0] != 0)
+        if (pentry->name[0] != 0 && l2_key_type_macaddr == pentry->l2_key_type)
         {
             off += sprintf(buf+off, "--- !L2KeyMacAddr\n");
             format_mac_addr(pentry->l2_acl.mac.mac_da, d1);
@@ -1979,6 +1998,53 @@ int sfs_show_l2_key_mac_addr (char *buf)
             off += sprintf(buf+off, "rule_name: %s\n", pentry->name);
             off += sprintf(buf+off, "sa: %s\n", d2);
             off += sprintf(buf+off, "sa_mask: %s\n", d2_mask);
+        }
+    }
+    return off;
+}
+
+int sfs_show_l2_key_vlan (char *buf)
+{
+    tpmcfg_l2_key_entry_t *pentry = (tpmcfg_l2_key_entry_t *)tpm_l2_key_db.entryAra;
+    int                   indx;
+    int                   off = 0;
+
+    for (indx = 0; indx < tpm_l2_key_db.max_num_entries; indx++, pentry++)
+    {
+        if (pentry->name[0] != 0 && l2_key_type_vlan == pentry->l2_key_type)
+        {
+            off += sprintf(buf+off, "--- !L2KeyVlan\n");
+            off += sprintf(buf+off, "rule_name: %s\n", pentry->name);
+            off += sprintf(buf+off, "vlan_rule1: %s\n", pentry->vlan_rule1);
+            off += sprintf(buf+off, "vlan_rule2: %s\n", pentry->vlan_rule2);
+        }
+    }
+    return off;
+}
+
+int sfs_show_vlan_rule (char *buf)
+{
+    tpmcfg_vlan_entry_t *pentry =
+        (tpmcfg_vlan_entry_t *)tpm_vlan_rule_db.entryAra;
+    int                 indx;
+    int                 off = 0;
+
+    for (indx = 0; indx < tpm_vlan_rule_db.max_num_entries; indx++, pentry++)
+    {
+        if (pentry->name[0] != 0)
+        {
+            off += sprintf(buf+off, "--- !VlanRule\n");
+            off += sprintf(buf+off, "rule_name: %s\n", pentry->name);
+            off += sprintf(buf+off, "tpid: 0x%x\n", pentry->vlan.tpid);
+            off += sprintf(buf+off, "tpid_mask: 0x%x\n",
+                           pentry->vlan.tpid_mask);
+            off += sprintf(buf+off, "vid: %d\n", pentry->vlan.vid);
+            off += sprintf(buf+off, "vid_mask: 0x%x\n", pentry->vlan.vid_mask);
+            off += sprintf(buf+off, "cfi: %d\n", pentry->vlan.cfi);
+            off += sprintf(buf+off, "cfi_mask: 0x%x\n", pentry->vlan.cfi_mask);
+            off += sprintf(buf+off, "pbit: %d\n", pentry->vlan.pbit);
+            off += sprintf(buf+off, "pbit_mask: 0x%x\n",
+                           pentry->vlan.pbit_mask);
         }
     }
     return off;

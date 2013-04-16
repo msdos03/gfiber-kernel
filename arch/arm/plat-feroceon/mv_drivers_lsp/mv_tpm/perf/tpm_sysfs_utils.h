@@ -198,10 +198,28 @@ extern tpmcfg_mod_entry_t  *find_free_tpm_mod_entry   (void);
 extern GT_BOOL             del_tpm_mod_entry_by_name  (char *name);
 extern void                show_tpm_mod_db(void);
 
+typedef enum
+{
+    l2_key_type_macaddr,
+    l2_key_type_vlan,
+    l2_key_type_ethertype,
+    l2_key_type_gemport,
+    l2_key_type_pppoe
+} tpmcfg_l2_key_type_t;
+
 // L2 ACL entry and DB API
 typedef struct
 {
     char                   name[DB_TPMCFG_MAX_NAME+1];
+    tpmcfg_l2_key_type_t   l2_key_type;
+    /* This is a hack. Vlan name is not saved as part of l2_key. Therefore it is
+     * kind of hard to track which vlan rule l2_key_vlan is using. But
+     * tpm_l2_acl_key_t is actually used by tcam. The size should not be
+     * altered. We have to put aside some space just for VLAN name in case the
+     * l2_key_type is l2_key_vlan.
+     */
+    char                   vlan_rule1[DB_TPMCFG_MAX_NAME+1];
+    char                   vlan_rule2[DB_TPMCFG_MAX_NAME+1];
     tpm_l2_acl_key_t       l2_acl;
 } tpmcfg_l2_key_entry_t;
 
@@ -316,7 +334,10 @@ extern tpm_error_code_t tpm_set_mc_vid_cfg(
 tpm_error_code_t tpm_proc_send_genquery_to_uni(tpm_trg_port_type_t dest_port_bm, uint32_t packet_num);
 
 extern int sfs_show_frwd_rule(char *buf);
+extern int sfs_show_l2_key_ethertype(char *buf);
 extern int sfs_show_l2_key_mac_addr(char *buf);
+extern int sfs_show_l2_key_vlan(char *buf);
 extern int sfs_show_l2_rule(char *buf);
+extern int sfs_show_vlan_rule(char *buf);
 
 #endif  /* _TPM_USR_TPM_SYSFS_DB_H_*/

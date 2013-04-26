@@ -1541,6 +1541,7 @@ void sfs_tpm_cfg_set_l2_key_ethertype_rule  (const char *buf, size_t len)
             else
             {
                 strcpy(pentry->name, name);
+                pentry->l2_key_type = l2_key_type_ethertype;
                 pentry->l2_acl.ether_type  = (uint16_t)temp_ety;
             }
         }
@@ -1600,6 +1601,7 @@ void sfs_tpm_cfg_set_l2_key_gemport_rule  (const char *buf, size_t len)
             else
             {
                 strcpy(pentry->name, name);
+                pentry->l2_key_type = l2_key_type_gemport;
                 pentry->l2_acl.gem_port  = (uint16_t)temp_gemport;
             }
         }
@@ -1678,6 +1680,7 @@ void sfs_tpm_cfg_set_l2_key_mac_addr_rule  (const char *buf, size_t len)
             else
             {
                 strcpy(pentry->name, name);
+                pentry->l2_key_type = l2_key_type_macaddr;
                 pentry->l2_acl.mac.mac_sa[0] = (uint8_t)sa[0]; pentry->l2_acl.mac.mac_sa[1] = (uint8_t)sa[1]; pentry->l2_acl.mac.mac_sa[2] = (uint8_t)sa[2];
                 pentry->l2_acl.mac.mac_sa[3] = (uint8_t)sa[3]; pentry->l2_acl.mac.mac_sa[4] = (uint8_t)sa[4]; pentry->l2_acl.mac.mac_sa[5] = (uint8_t)sa[5];
 
@@ -1752,6 +1755,7 @@ void sfs_tpm_cfg_set_l2_key_pppoe_rule  (const char *buf, size_t len)
             else
             {
                 strcpy(pentry->name, name);
+                pentry->l2_key_type = l2_key_type_pppoe;
                 pentry->l2_acl.pppoe_hdr.ppp_session = (uint16_t)temp_session;
                 pentry->l2_acl.pppoe_hdr.ppp_proto   = (uint16_t)temp_prototype;
             }
@@ -1819,6 +1823,9 @@ void sfs_tpm_cfg_set_l2_key_vlan_rule  (const char *buf, size_t len)
             else
             {
                 strcpy(pentry->name, name);
+                strcpy(pentry->vlan_rule1, vlan1_name);
+                strcpy(pentry->vlan_rule2, vlan2_name);
+                pentry->l2_key_type = l2_key_type_vlan;
 
                 if (pvlan1entry != 0)
                 {

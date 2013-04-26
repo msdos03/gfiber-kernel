@@ -309,8 +309,11 @@ static show_sysfs_name_func_t show_sysfs_name_func_ara[] =
     {"help_mac_learn_def_act_set",   sfs_help_mac_learn_def_act_set},
 
     {"show_frwd_rule",               sfs_show_frwd_rule},
+    {"show_l2_key_ethertype",        sfs_show_l2_key_ethertype},
     {"show_l2_key_mac_addr",         sfs_show_l2_key_mac_addr},
+    {"show_l2_key_vlan",             sfs_show_l2_key_vlan},
     {"show_l2_rule",                 sfs_show_l2_rule},
+    {"show_vlan_rule",               sfs_show_vlan_rule},
 };
 static int num_show_name_funcs = sizeof(show_sysfs_name_func_ara)/sizeof(show_sysfs_name_func_ara[0]);
 
@@ -410,12 +413,14 @@ static DEVICE_ATTR(help_flush_vtu,                                  S_IRUSR, tpm
 
 /* sysfs for dumping forwarding table in yaml. */
 static DEVICE_ATTR(show_frwd_rule,                                  S_IRUSR, tpm_cfg_show, NULL);
+static DEVICE_ATTR(show_l2_key_ethertype,                           S_IRUSR, tpm_cfg_show, NULL);
 static DEVICE_ATTR(show_l2_key_mac_addr,                            S_IRUSR, tpm_cfg_show, NULL);
+static DEVICE_ATTR(show_l2_key_vlan,                                S_IRUSR, tpm_cfg_show, NULL);
 static DEVICE_ATTR(show_l2_rule,                                    S_IRUSR, tpm_cfg_show, NULL);
+static DEVICE_ATTR(show_vlan_rule,                                  S_IRUSR, tpm_cfg_show, NULL);
 
 // rule set
 static DEVICE_ATTR(frwd_rule_set,                                   S_IWUSR, tpm_cfg_show, tpm_cfg_store);
-
 static DEVICE_ATTR(vlan_rule_set,                                   S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(mod_mh_rule_set,                                 S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(mod_vlan_rule_set,                               S_IWUSR, tpm_cfg_show, tpm_cfg_store);
@@ -630,7 +635,9 @@ static struct attribute *tpm_cfg_l2_sw_attrs[] =
     &dev_attr_help_mac_learn_rule_add.attr,
     &dev_attr_help_mac_learn_def_act_set.attr,
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
+    &dev_attr_show_l2_key_ethertype.attr,
     &dev_attr_show_l2_key_mac_addr.attr,
+    &dev_attr_show_l2_key_vlan.attr,
     &dev_attr_show_l2_rule.attr,
 
     &dev_attr_l2_key_ethertype_rule_set.attr,
@@ -848,6 +855,7 @@ static struct attribute *tpm_cfg_vlan_sw_attrs[] =
     &dev_attr_help_rule_table_display.attr,
     &dev_attr_help_delete_entry_rule_table.attr,
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
+    &dev_attr_show_vlan_rule.attr,
 
     &dev_attr_vlan_rule_set.attr,
 
@@ -1100,7 +1108,6 @@ static struct attribute *tpm_cfg_flat_sw_attrs[] =
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
 
     &dev_attr_frwd_rule_set.attr,
-
     &dev_attr_vlan_rule_set.attr,
     &dev_attr_mod_vlan_rule_set.attr,
     &dev_attr_mod_ipv4_addr_rule_set.attr,

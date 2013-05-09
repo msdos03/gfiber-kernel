@@ -223,7 +223,7 @@ void print_board_info(void)
 /* Platform devices list */
 
 static struct mv64xxx_i2c_pdata kw_i2c_pdata = {
-       .freq_m         = 8, /* assumes 166 MHz TCLK */
+       .freq_m         = 12, /* assumes 200 MHz TCLK */
        .freq_n         = 3,
        .timeout        = 1000, /* Default timeout of 1 second */
 };

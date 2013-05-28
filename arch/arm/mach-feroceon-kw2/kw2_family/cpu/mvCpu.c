@@ -112,7 +112,7 @@ static MV_U32 mvCpuClockEntryGet(MV_VOID)
 	/* Search for a matching entry */
 	i = 0;
 	if ((RD_88F6601_MC_ID == boardId) || (DB_88F6601_BP_ID == boardId)
-		|| (GFLT200_ID == boardId)){
+		|| (GFLT200_ID == boardId) || (GFLT110_ID == boardId)){
 		while (cpuDdrTbl6601[i].satrValue != -1) {
 			if (cpuDdrTbl6601[i].satrValue == clockSatr) {
 				res = i;
@@ -161,7 +161,7 @@ MV_U32 mvCpuPclkGet(MV_VOID)
 		return 0;
 	else {
 		if ((RD_88F6601_MC_ID == boardId) || (DB_88F6601_BP_ID == boardId)
-			|| (GFLT200_ID == boardId))
+			|| (GFLT200_ID == boardId) || (GFLT110_ID == boardId))
 			return cpuDdrTbl6601[idx].cpuClk;
 		else
 			return cpuDdrL2Tbl[idx].cpuClk;
@@ -195,7 +195,7 @@ MV_U32 mvCpuL2ClkGet(MV_VOID)
 		return 0;
 	else {
 		if ((RD_88F6601_MC_ID == boardId) || (DB_88F6601_BP_ID == boardId)
-			|| (GFLT200_ID == boardId))
+			|| (GFLT200_ID == boardId) || (GFLT110_ID == boardId))
 			return cpuDdrTbl6601[idx].l2Clk;
 		else
 			return cpuDdrL2Tbl[idx].l2Clk;
@@ -223,8 +223,9 @@ MV_BOOL mvCpuL2Exists(MV_VOID)
 
 	if ((RD_88F6510_SFU_ID == mvBoardId) ||
 		(RD_88F6601_MC_ID == mvBoardId) ||
-		(DB_88F6601_BP_ID == mvBoardId)
-		|| (GFLT200_ID == mvBoardId))
+		(DB_88F6601_BP_ID == mvBoardId) ||
+		(GFLT200_ID == mvBoardId) ||
+		(GFLT110_ID == mvBoardId))
 		return MV_FALSE;
 
 	/* Read S@R register value */

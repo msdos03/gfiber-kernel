@@ -1308,6 +1308,137 @@ MV_BOARD_INFO gflt200Info = {
 	.moduleAutoDetect = MV_FALSE
 };
 
+/***************************************************************************
+** GFLT110
+****************************************************************************/
+/* NAND not supported  */
+
+MV_BOARD_TWSI_INFO gflt110InfoBoardTwsiDev[] = {
+	/* {{MV_BOARD_DEV_CLASS devClass, MV_U8 twsiDevAddr, MV_U8 twsiDevAddrType}} */
+};
+
+MV_BOARD_MAC_INFO gflt110InfoBoardMacInfo[] = {
+	/* {{MV_BOARD_MAC_SPEED boardMacSpeed, MV_U8 boardEthSmiAddr}} */
+	{BOARD_MAC_SPEED_AUTO, 0x0},
+	{BOARD_MAC_SPEED_AUTO, 0x1},
+	{N_A,N_A}
+};
+
+MV_BOARD_MPP_TYPE_INFO gflt110InfoBoardMppTypeInfo[] = {
+	{
+		.boardMppTdm = MV_BOARD_AUTO,
+		.ethSataComplexOpt = ESC_OPT_GEPHY_MAC0,
+		.ethPortsMode = 0x0
+	}
+};
+
+MV_BOARD_GPP_INFO gflt110InfoBoardGppInfo[] = {
+	/* {{MV_BOARD_GPP_CLASS devClass, MV_U8 gppPinNum}} */
+	{BOARD_GPP_PON_XVR_TX, 17},
+	{BOARD_GPP_PON_XVR_TX_POWER, 37},
+	{BOARD_GPP_PON_XVR_TX_IND, 24},
+};
+
+MV_DEV_CS_INFO gflt110InfoBoardDeCsInfo[] = {
+	/*{deviceCS, params, devType, devWidth} */
+#ifdef MV_SPI
+	{SPI_CS0, N_A, BOARD_DEV_SPI_FLASH, 8},		/* SPI DEV */
+#endif
+#if !defined(MV_SPI)
+	{N_A, N_A, N_A, N_A}			/* No device */
+#endif
+};
+
+MV_BOARD_MPP_INFO gflt110InfoBoardMppConfigValue[] = {
+	{{
+	  RD_88F6601_MPP0_7,
+	  RD_88F6601_MPP8_15,
+	  RD_88F6601_MPP16_23,
+	  RD_88F6601_MPP24_31,
+	  RD_88F6601_MPP32_37
+	  }
+	 }
+};
+
+/*
+MV_BOARD_SPEC_INIT gflt110BoardSpecInit[] = {
+	{
+		.reg = PMU_POWER_IF_POLARITY_REG,
+		.mask = (BIT1),
+		.val = 0
+	},
+	{
+		.reg = TBL_TERM,
+		.val = TBL_TERM
+	}
+};
+*/
+MV_BOARD_INFO gflt110Info = {
+	.boardName = "GFLT110",
+	.numBoardMppTypeValue = MV_ARRAY_SIZE(gflt110InfoBoardMppTypeInfo),
+	.pBoardMppTypeValue = gflt110InfoBoardMppTypeInfo,
+	.numBoardMppConfigValue = MV_ARRAY_SIZE(gflt110InfoBoardMppConfigValue),
+	.pBoardMppConfigValue = gflt110InfoBoardMppConfigValue,
+	.intsGppMaskLow = 0,
+	.intsGppMaskMid = 0,
+	.intsGppMaskHigh = 0,
+	.numBoardDeviceIf = MV_ARRAY_SIZE(gflt110InfoBoardDeCsInfo),
+	.pDevCsInfo = gflt110InfoBoardDeCsInfo,
+	.numBoardTwsiDev = MV_ARRAY_SIZE(gflt110InfoBoardTwsiDev),
+	.pBoardTwsiDev = gflt110InfoBoardTwsiDev,
+	.numBoardMacInfo = MV_ARRAY_SIZE(gflt110InfoBoardMacInfo),
+	.pBoardMacInfo = gflt110InfoBoardMacInfo,
+	.numBoardGppInfo = MV_ARRAY_SIZE(gflt110InfoBoardGppInfo),
+	.pBoardGppInfo = gflt110InfoBoardGppInfo,
+	.activeLedsNumber = 0,
+	.pLedGppPin = NULL,
+	.ledsPolarity = 0,
+
+	/* GPP values */
+	.gppOutEnValLow = RD_88F6601_GPP_OUT_ENA_LOW,
+	.gppOutEnValMid = RD_88F6601_GPP_OUT_ENA_MID,
+	.gppOutEnValHigh = 0,
+	.gppOutValLow = RD_88F6601_GPP_OUT_VAL_LOW,
+	.gppOutValMid = RD_88F6601_GPP_OUT_VAL_MID,
+	.gppOutValHigh = 0,
+	.gppPolarityValLow = RD_88F6601_GPP_POL_LOW,
+	.gppPolarityValMid = RD_88F6601_GPP_POL_MID,
+	.gppPolarityValHigh = 0,
+
+	/* External Switch Configuration */
+	.pSwitchInfo = NULL,
+	.switchInfoNum = 0,
+
+	/* PON configuration. */
+	.ponConfigValue = BOARD_GPON_CONFIG,
+
+	/* TDM configuration */
+	/* We hold a different configuration array for each possible slic that
+	 ** can be connected to board.
+	 ** When modules are scanned, then we select the index of the relevant
+	 ** slic's information array.
+	 ** For RD and Customers boards we only need to initialize a single
+	 ** entry of the arrays below, and set the boardTdmInfoIndex to 0.
+	 */
+	.numBoardTdmInfo = {0},
+	.pBoardTdmInt2CsInfo = {NULL},
+	.boardTdmInfoIndex = -1,
+
+	.pBoardSpecInit = NULL,			/* gflt110BoardSpecInit, */
+
+	.deepIdlePwrUpDelay = 2400,	/* 12uS */
+
+	/* NAND init params */
+	.nandFlashParamsValid = MV_FALSE,
+	.nandFlashReadParams = 0,
+	.nandFlashWriteParams = 0,
+	.nandFlashControl = 0,
+	.pBoardTdmSpiInfo = NULL,
+
+	/* Enable modules auto-detection. */
+	.moduleAutoDetect = MV_FALSE
+};
+
 MV_BOARD_INFO *boardInfoTbl[] = {
 	&db88f6535Info,
 	&rd88f6510Info,
@@ -1317,5 +1448,5 @@ MV_BOARD_INFO *boardInfoTbl[] = {
 	&db88f6601Info,
 	&rd88f6601Info,
 	&gflt200Info,
+	&gflt110Info,
 };
-

@@ -51,6 +51,7 @@
 /* Typedefs
 ------------------------------------------------------------------------------*/
 typedef struct {
+	uint32_t fdb_idx;
 	uint8_t valid;
 	uint8_t state;
 	uint8_t port;
@@ -88,6 +89,7 @@ void mac_learn_db_nonstatic_count_inc(void);
 void mac_learn_db_nonstatic_count_dec(void);
 int32_t mac_learn_db_nonstatic_count_get(uint32_t *nonstatic_ount);
 void mac_learn_db_valid_print(void);
+int32_t mac_learn_db_entry_state_update(uint32_t fdb_idx, uint8_t entry_state);
 int32_t mac_learn_fdb_init(void);
 
 #endif

@@ -169,7 +169,12 @@ typedef void (*DISABLENOTIFYFUNC)(MV_BOOL disable);
 
 /* Init API
 ------------------------------------------------------------------------------*/
-MV_STATUS onuGponApiInit(MV_U8 *serialNumber, MV_U8 *password, MV_BOOL disabled, MV_U32 sn_src);
+MV_STATUS onuGponApiInit(MV_U8 *serialNumber, 
+                         MV_U8 *password, 
+                         MV_BOOL disabled, 
+                         MV_U32 sn_src, 
+                         MV_U32 fecHyst, 
+                         MV_U32 couplingMode);
 
 /* Notify API
 ------------------------------------------------------------------------------*/
@@ -232,6 +237,7 @@ void      onuGponApiUponDebugSet(MV_U32 mode);
 MV_U32    onuGponApiUponDebugGet(void);
 MV_STATUS onuGponApiAdminStateSet(MV_U32 mode);
 MV_STATUS onuGponApiFecStatusGet(MV_U32 *fecMode);
+MV_STATUS onuGponApiCouplingModeSet(MV_U32 couplingMode);
 
 /* Sn Mask  API
 ------------------------------------------------------------------------------*/

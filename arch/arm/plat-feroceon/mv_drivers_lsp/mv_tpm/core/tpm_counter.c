@@ -507,28 +507,9 @@ tpm_error_code_t tpm_count_get_api_section_range_id(uint32_t owner_id,
 	tpm_pnc_ranges_t l_range_id;
 	int32_t ret_code = TPM_RC_OK;
 
-	/* Check whether the API group is supported, currently only support three types */
-	if ((api_type != TPM_API_L2_PRIM) && (api_type != TPM_API_L3_TYPE)
-	    && (api_type != TPM_API_IPV4)) {
-		TPM_OS_ERROR(TPM_PNCL_MOD, "api_type[%d] is not supported \n", api_type);
-		return ERR_GENERAL;
-	}
-
 	/* Convert to API section ID */
-	switch (api_type) {
-	case TPM_API_L2_PRIM:
-		l_api_section = TPM_L2_PRIM_ACL;
-		break;
-	case TPM_API_L3_TYPE:
-		l_api_section = TPM_L3_TYPE_ACL;
-		break;
-	case TPM_API_IPV4:
-		l_api_section = TPM_IPV4_ACL;
-		break;
-	default:
-		l_api_section = TPM_IPV4_ACL;
-		break;
-	}
+	ret_code = tpm_db_api_section_get_from_api_type(api_type, &l_api_section);
+	IF_ERROR(ret_code);
 
 	/* Get PnC range ID */
 	ret_code = tpm_db_api_section_main_pnc_get(l_api_section, &l_range_id);

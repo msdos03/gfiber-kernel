@@ -256,6 +256,8 @@ typedef enum
   mvAsicReg_GPON_UTM_CONFIG_OMCI_PORT_VALID     = 134,  /* UtmCfgOmciPvalid                */
   mvAsicReg_GPON_UTM_CONFIG_TC_PERIOD           = 135,  /* UtmCfgTcPeriod                  */
   mvAsicReg_GPON_UTM_CONFIG_TC_PERIOD_VALID     = 136,  /* UtmCfgTcPeriodValid             */
+  mvAsicReg_GPON_UTM_ACTIVE_TX_BITMAP           = 137,  /* UtmActiveTxBitmap               */
+  mvAsicReg_GPON_UTM_ACTIVE_TX_BITMAP_VALID     = 138,  /* UtmActiveTxBitmapValid          */
 
   /* SGL Registers */
   /* ============= */
@@ -419,52 +421,56 @@ typedef enum
 
   /*  EPON PCS Registers         */
   /* =========================== */
-  mvAsicReg_EPON_PCS_CONFIGURATION                   = 284,
-  mvAsicReg_EPON_PCS_DELAY_CONFIG                    = 285,
-  mvAsicReg_EPON_PCS_STATS_FEC_0                     = 286,
-  mvAsicReg_EPON_PCS_STATS_FEC_1                     = 287,
-  mvAsicReg_EPON_PCS_STATS_FEC_2                     = 288,
-  mvAsicReg_EPON_PCS_STATS_0                         = 290,
-  mvAsicReg_EPON_PCS_STATS_1                         = 291,
-  mvAsicReg_EPON_PCS_STATS_2                         = 292,
-  mvAsicReg_EPON_PCS_STATS_3                         = 293,
-  mvAsicReg_EPON_PCS_STATS_4                         = 294,
-  mvAsicReg_EPON_PCS_FRAME_SZ_LIMITS                 = 295,
+  mvAsicReg_EPON_PCS_CONFIGURATION                   = 284, 
+  
+  mvAsicReg_EPON_PCS_CONFIGURATION_RX_ENABLE         = 285, 
+  mvAsicReg_EPON_PCS_CONFIGURATION_TX_ENABLE         = 286,
+
+  mvAsicReg_EPON_PCS_DELAY_CONFIG                    = 287,
+  mvAsicReg_EPON_PCS_STATS_FEC_0                     = 288,
+  mvAsicReg_EPON_PCS_STATS_FEC_1                     = 289,
+  mvAsicReg_EPON_PCS_STATS_FEC_2                     = 290,
+  mvAsicReg_EPON_PCS_STATS_0                         = 292,
+  mvAsicReg_EPON_PCS_STATS_1                         = 293,
+  mvAsicReg_EPON_PCS_STATS_2                         = 294,
+  mvAsicReg_EPON_PCS_STATS_3                         = 295,
+  mvAsicReg_EPON_PCS_STATS_4                         = 296,
+  mvAsicReg_EPON_PCS_FRAME_SZ_LIMITS                 = 297,
 
   /*  EPON DDM Registers         */
   /* =========================== */
-  mvAsicReg_EPON_DDM_DELAY_CONFIG                    = 296,
-  mvAsicReg_EPON_DDM_TX_POLARITY                     = 297,
+  mvAsicReg_EPON_DDM_DELAY_CONFIG                    = 298,
+  mvAsicReg_EPON_DDM_TX_POLARITY                     = 299,
   /* statistics */
-  mvAsicReg_EPON_STAT_RXP_FCS_ERROR_CNT              = 298,
-  mvAsicReg_EPON_STAT_RXP_SHORT_ERROR_CNT            = 299,
-  mvAsicReg_EPON_STAT_RXP_LONG_ERROR_CNT             = 300,
-  mvAsicReg_EPON_STAT_RXP_DATA_FRAMES_CNT            = 301,
-  mvAsicReg_EPON_STAT_RXP_CTRL_FRAMES_CNT            = 302,
-  mvAsicReg_EPON_STAT_RXP_REPORT_FRAMES_CNT          = 303,
-  mvAsicReg_EPON_STAT_RXP_GATE_FRAMES_CNT            = 304,
-  mvAsicReg_EPON_STAT_TXP_CTRL_REG_REQ_FRAMES_CNT    = 305,
-  mvAsicReg_EPON_STAT_TXP_CTRL_REG_ACK_FRAMES_CNT    = 306,
-  mvAsicReg_EPON_STAT_TXP_CTRL_REPORT_FRAMES_CNT     = 307,
-  mvAsicReg_EPON_STAT_TXP_DATA_FRAMES_CNT            = 308,
-  mvAsicReg_EPON_STAT_TXP_TX_ALLOWED_BYTE_CNT        = 309,
+  mvAsicReg_EPON_STAT_RXP_FCS_ERROR_CNT              = 300,
+  mvAsicReg_EPON_STAT_RXP_SHORT_ERROR_CNT            = 301,
+  mvAsicReg_EPON_STAT_RXP_LONG_ERROR_CNT             = 302,
+  mvAsicReg_EPON_STAT_RXP_DATA_FRAMES_CNT            = 303,
+  mvAsicReg_EPON_STAT_RXP_CTRL_FRAMES_CNT            = 304,
+  mvAsicReg_EPON_STAT_RXP_REPORT_FRAMES_CNT          = 305,
+  mvAsicReg_EPON_STAT_RXP_GATE_FRAMES_CNT            = 306,
+  mvAsicReg_EPON_STAT_TXP_CTRL_REG_REQ_FRAMES_CNT    = 307,
+  mvAsicReg_EPON_STAT_TXP_CTRL_REG_ACK_FRAMES_CNT    = 308,
+  mvAsicReg_EPON_STAT_TXP_CTRL_REPORT_FRAMES_CNT     = 309,
+  mvAsicReg_EPON_STAT_TXP_DATA_FRAMES_CNT            = 310,
+  mvAsicReg_EPON_STAT_TXP_TX_ALLOWED_BYTE_CNT        = 311,
 
   /*  EPON Control Packet queue Registers   */
   /* =====================================  */
-  mvAsicReg_EPON_CPQ_RX_CTRL_Q_READ                  = 310,
-  mvAsicReg_EPON_CPQ_RX_CTRL_Q_USED                  = 311,
-  mvAsicReg_EPON_CPQ_RX_RPRT_Q_READ                  = 312,
-  mvAsicReg_EPON_CPQ_RX_RPRT_Q_USED                  = 313,
-  mvAsicReg_EPON_CPQ_RX_CTRL_HQ_READ_L               = 314,
-  mvAsicReg_EPON_CPQ_RX_CTRL_HQ_READ_H               = 315,
-  mvAsicReg_EPON_CPQ_RX_CTRL_HQ_USED                 = 316,
-  mvAsicReg_EPON_CPQ_RX_RPRT_HQ_READ_L               = 317,
-  mvAsicReg_EPON_CPQ_RX_RPRT_HQ_READ_H               = 318,
-  mvAsicReg_EPON_CPQ_RX_RPRT_HQ_USED                 = 319,
-  mvAsicReg_EPON_CPQ_TX_CTRL_Q_WRITE                 = 320,
-  mvAsicReg_EPON_CPQ_TX_CTRL_Q_FREE                  = 321,
-  mvAsicReg_EPON_CPQ_TX_CTRL_HQ_WRITE                = 322,
-  mvAsicReg_EPON_CPQ_TX_CTRL_HQ_FREE                 = 323,
+  mvAsicReg_EPON_CPQ_RX_CTRL_Q_READ                  = 312,
+  mvAsicReg_EPON_CPQ_RX_CTRL_Q_USED                  = 313,
+  mvAsicReg_EPON_CPQ_RX_RPRT_Q_READ                  = 314,
+  mvAsicReg_EPON_CPQ_RX_RPRT_Q_USED                  = 315,
+  mvAsicReg_EPON_CPQ_RX_CTRL_HQ_READ_L               = 316,
+  mvAsicReg_EPON_CPQ_RX_CTRL_HQ_READ_H               = 317,
+  mvAsicReg_EPON_CPQ_RX_CTRL_HQ_USED                 = 318,
+  mvAsicReg_EPON_CPQ_RX_RPRT_HQ_READ_L               = 319,
+  mvAsicReg_EPON_CPQ_RX_RPRT_HQ_READ_H               = 320,
+  mvAsicReg_EPON_CPQ_RX_RPRT_HQ_USED                 = 321,
+  mvAsicReg_EPON_CPQ_TX_CTRL_Q_WRITE                 = 322,
+  mvAsicReg_EPON_CPQ_TX_CTRL_Q_FREE                  = 323,
+  mvAsicReg_EPON_CPQ_TX_CTRL_HQ_WRITE                = 324,
+  mvAsicReg_EPON_CPQ_TX_CTRL_HQ_FREE                 = 325,
 
 
   /*  P2P Registers                         */

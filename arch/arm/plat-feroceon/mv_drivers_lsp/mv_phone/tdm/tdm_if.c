@@ -98,7 +98,15 @@ static int proc_rx_over_read(char *buffer, char **buffer_location, off_t offset,
                             int buffer_length, int *zero, void *ptr);
 static int proc_tx_under_read(char *buffer, char **buffer_location, off_t offset,
                             int buffer_length, int *zero, void *ptr);
+#ifdef CONFIG_MV_TDM_EXT_STATS
+static int proc_dump_ext_stats(char *buffer, char **buffer_location, off_t offset,
+                            int buffer_length, int *zero, void *ptr);
+#endif
 
+#ifdef CONFIG_MV_TDM_SUPPORT
+/* TDM SW Reset */
+static void tdm_if_stop_channels(unsigned long args);
+#endif
 
 /* Module */
 static int __init tdm_if_module_init(void);
@@ -109,6 +117,9 @@ static tdm_if_register_ops_t* tdm_if_register_ops;
 #if !(defined CONFIG_MV_PHONE_USE_IRQ_PROCESSING) && !(defined CONFIG_MV_PHONE_USE_FIQ_PROCESSING)
 static DECLARE_TASKLET(tdm_if_rx_tasklet, tdm_if_pcm_rx_process, 0);
 static DECLARE_TASKLET(tdm_if_tx_tasklet, tdm_if_pcm_tx_process, 0);
+#endif
+#ifdef CONFIG_MV_TDM_SUPPORT
+static DECLARE_TASKLET(tdm_if_stop_tasklet, tdm_if_stop_channels, 0);
 #endif
 static DEFINE_SPINLOCK(tdm_if_lock);
 static unsigned char *rxBuff = NULL, *txBuff = NULL;
@@ -121,6 +132,8 @@ static int irq_init = 0;
 static int tdm_init = 0;
 static int buff_size = 0;
 static unsigned short test_enable = 0;
+static int pcm_stop_flag;
+static int pcm_stop_status;
 
 #ifdef CONFIG_MV_PHONE_USE_FIQ_PROCESSING
 extern int __must_check
@@ -159,14 +172,49 @@ static int proc_tx_under_read(char *buffer, char **buffer_location, off_t offset
 	return sprintf(buffer, "%u\n", tx_under);
 }
 
+#ifdef CONFIG_MV_TDM_EXT_STATS
+static int proc_dump_ext_stats(char *buffer, char **buffer_location, off_t offset,
+                            int buffer_length, int *zero, void *ptr)
+{
+	char *str;
+	MV_TDM_EXTENDED_STATS tdm_ext_stats;
+
+	if (offset > 0)
+		return 0;
+
+	mvTdmExtStatsGet(&tdm_ext_stats);
+
+	str = buffer;
+	str += sprintf(str, "\nTDM Extended Statistics:\n");
+	str += sprintf(str, "intRxCount  	= %u\n", tdm_ext_stats.intRxCount);
+	str += sprintf(str, "intTxCount  	= %u\n", tdm_ext_stats.intTxCount);
+	str += sprintf(str, "intRx0Count 	= %u\n", tdm_ext_stats.intRx0Count);
+	str += sprintf(str, "intTx0Count 	= %u\n", tdm_ext_stats.intTx0Count);
+	str += sprintf(str, "intRx1Count 	= %u\n", tdm_ext_stats.intRx1Count);
+	str += sprintf(str, "intTx1Count 	= %u\n", tdm_ext_stats.intTx1Count);
+	str += sprintf(str, "intRx0Miss  	= %u\n", tdm_ext_stats.intRx0Miss);
+	str += sprintf(str, "intTx0Miss		= %u\n", tdm_ext_stats.intTx0Miss);
+	str += sprintf(str, "intRx1Miss		= %u\n", tdm_ext_stats.intRx1Miss);
+	str += sprintf(str, "intTx1Miss		= %u\n", tdm_ext_stats.intTx1Miss);
+	str += sprintf(str, "pcmRestartCount	= %u\n", tdm_ext_stats.pcmRestartCount);
+
+	return (int)(str - buffer);
+}
+#endif
+
 MV_STATUS tdm_if_init(tdm_if_register_ops_t* register_ops, tdm_if_params_t* tdm_if_params)
 {
 	MV_TDM_PARAMS tdm_params;
-	
+
+	if (tdm_init) {
+		printk("Marvell Telephony Driver already started...\n");
+		return MV_OK;
+	}
+
 	printk("Loading Marvell Telephony Driver\n");
 
 	/* Check if any SLIC module exists */
-	if(mvBoardTdmDevicesCountGet() == 0) {
+	if (mvBoardTdmDevicesCountGet() == 0) {
 		mvCtrlPwrClckSet(TDM_32CH_UNIT_ID, 0, MV_FALSE);
 		mvCtrlPwrClckSet(TDM_2CH_UNIT_ID, 0, MV_FALSE);
 		printk("%s: Warning, no SLIC module is connected\n",__FUNCTION__);
@@ -180,22 +228,22 @@ MV_STATUS tdm_if_init(tdm_if_register_ops_t* register_ops, tdm_if_params_t* tdm_
 	}
 
 	/* Shut down unused unit */
-	if(mvCtrlTdmUnitTypeGet() == TDM_2CH_UNIT_ID) {
+	if (mvCtrlTdmUnitTypeGet() == TDM_2CH_UNIT_ID) {
 		mvCtrlPwrClckSet(TDM_32CH_UNIT_ID, 0, MV_FALSE);
 	}
 	else { /* TDM_32CH_UNIT_ID */
 		mvCtrlPwrClckSet(TDM_2CH_UNIT_ID, 0, MV_FALSE);
 	}
 
-	if((register_ops == NULL) || (tdm_if_params == NULL)) {
+	if ((register_ops == NULL) || (tdm_if_params == NULL)) {
 		printk("%s: bad parameters\n",__FUNCTION__);
 		return MV_ERROR;
 
 	}
 
 	/* Check callbacks */
-	if(register_ops->tdm_if_pcm_ops.pcm_tx_callback == NULL ||
-	   register_ops->tdm_if_pcm_ops.pcm_rx_callback == NULL ) {
+	if (register_ops->tdm_if_pcm_ops.pcm_tx_callback == NULL ||
+	    register_ops->tdm_if_pcm_ops.pcm_rx_callback == NULL ) {
 		printk("%s: missing parameters\n",__FUNCTION__);
 		return MV_ERROR;
 	}
@@ -209,6 +257,8 @@ MV_STATUS tdm_if_init(tdm_if_register_ops_t* register_ops, tdm_if_params_t* tdm_
 #endif
 	irq_init = 0;
 	tdm_init = 0;
+	pcm_stop_flag = 0;
+	pcm_stop_status = 0;
 
 	/* Extract test enable */
 	test_enable = tdm_if_params->test_enable;
@@ -233,8 +283,13 @@ MV_STATUS tdm_if_init(tdm_if_register_ops_t* register_ops, tdm_if_params_t* tdm_
 	tdm_if_register_ops->tdm_if_ctl_ops.ctl_pcm_start = tdm_if_pcm_start;
 	tdm_if_register_ops->tdm_if_ctl_ops.ctl_pcm_stop = tdm_if_pcm_stop;
 
+	/* Soft reset to PCM I/F */
+#ifdef CONFIG_MV_TDM_SUPPORT
+	mvTdmPcmIfReset();
+#endif
+
 	/* TDM init */
-	if(mvSysTdmInit(&tdm_params) != MV_OK) {
+	if (mvSysTdmInit(&tdm_params) != MV_OK) {
 			printk("%s: Error, TDM initialization failed !!!\n",__FUNCTION__);
 			return MV_ERROR;
 	}
@@ -257,11 +312,16 @@ MV_STATUS tdm_if_init(tdm_if_register_ops_t* register_ops, tdm_if_params_t* tdm_
 
 	/* Create TDM procFS statistics */
 	tdm_stats = proc_mkdir("tdm", NULL);
-	create_proc_read_entry("tdm_init", 0, tdm_stats, proc_tdm_init_read, NULL);
-	create_proc_read_entry("rx_miss", 0, tdm_stats, proc_rx_miss_read, NULL);
-	create_proc_read_entry("tx_miss", 0, tdm_stats, proc_tx_miss_read, NULL);
-	create_proc_read_entry("rx_over", 0, tdm_stats, proc_rx_over_read, NULL);
-	create_proc_read_entry("tx_under", 0, tdm_stats, proc_tx_under_read, NULL);
+	if (tdm_stats != NULL) {
+		create_proc_read_entry("tdm_init", 0, tdm_stats, proc_tdm_init_read, NULL);
+		create_proc_read_entry("rx_miss", 0, tdm_stats, proc_rx_miss_read, NULL);
+		create_proc_read_entry("tx_miss", 0, tdm_stats, proc_tx_miss_read, NULL);
+		create_proc_read_entry("rx_over", 0, tdm_stats, proc_rx_over_read, NULL);
+		create_proc_read_entry("tx_under", 0, tdm_stats, proc_tx_under_read, NULL);
+#ifdef CONFIG_MV_TDM_EXT_STATS
+		create_proc_read_entry("tdm_extended_stats", 0, tdm_stats, proc_dump_ext_stats, NULL);
+#endif
+	}
 
 	TRC_REC("Marvell Telephony Driver Loaded Successfully\n");
 
@@ -278,12 +338,12 @@ MV_STATUS tdm_if_init(tdm_if_register_ops_t* register_ops, tdm_if_params_t* tdm_
 void tdm_if_exit(void)
 {
 	/* Check if already stopped */
-	if(!irq_init && !pcm_enable && !tdm_init)
+	if (!irq_init && !pcm_enable && !tdm_init)
 		return;
 
 	TRC_REC("->%s\n",__FUNCTION__);
 
-	if(irq_init) {
+	if (irq_init) {
 		/* Release interrupt */
 #ifndef CONFIG_MV_PHONE_USE_FIQ_PROCESSING
                 free_irq(irqnr, NULL);
@@ -294,25 +354,28 @@ void tdm_if_exit(void)
 	}
 
 	/* Stop PCM data sampling */
-	if(pcm_enable)
+	if (pcm_enable)
 		tdm_if_pcm_stop();
 
-	if(tdm_init) {
+	if (tdm_init) {
 #ifdef CONFIG_MV_TDM_SUPPORT
 		mvTdmRelease();
 #else
 		mvCommUnitRelease();
 #endif
+		/* Remove proc directory & entries */
+		remove_proc_entry("tdm_init", tdm_stats);
+		remove_proc_entry("rx_miss", tdm_stats);
+		remove_proc_entry("tx_miss", tdm_stats);
+		remove_proc_entry("rx_over", tdm_stats);
+		remove_proc_entry("tx_under", tdm_stats);
+#ifdef CONFIG_MV_TDM_EXT_STATS
+		remove_proc_entry("tdm_extended_stats", tdm_stats);
+#endif
+		remove_proc_entry("tdm", NULL);
+
 		tdm_init = 0;
 	}
-
-	/* Remove proc directory & entries */
-	remove_proc_entry("tdm_init", tdm_stats);
-	remove_proc_entry("rx_miss", tdm_stats);
-	remove_proc_entry("tx_miss", tdm_stats);
-	remove_proc_entry("rx_over", tdm_stats);
-	remove_proc_entry("tx_under", tdm_stats);
-	remove_proc_entry("tdm", NULL);
 
 	TRC_REC("<-%s\n",__FUNCTION__);
 
@@ -328,8 +391,10 @@ static void tdm_if_pcm_start(void)
 	TRC_REC("->%s\n",__FUNCTION__);
 
 	spin_lock_irqsave(&tdm_if_lock, flags);
-	if(!pcm_enable) {
+	if (!pcm_enable) {
 		rxBuff = txBuff = NULL;
+		pcm_stop_flag = 0;
+		pcm_stop_status = 0;
 		pcm_enable = 1;
 #ifdef CONFIG_MV_TDM_SUPPORT
 		mvTdmPcmStart();
@@ -350,9 +415,8 @@ static void tdm_if_pcm_stop(void)
 	TRC_REC("->%s\n",__FUNCTION__);
 
 	spin_lock_irqsave(&tdm_if_lock, flags);
-	if(pcm_enable) {
+	if (pcm_enable) {
 		pcm_enable = 0;
-		rxBuff = txBuff = NULL;
 #ifdef CONFIG_MV_TDM_SUPPORT
 		mvTdmPcmStop();
 #else
@@ -369,12 +433,15 @@ static irqreturn_t tdm_if_isr(int irq, void* dev_id)
 {
 	MV_TDM_INT_INFO tdm_int_info;
 	unsigned int int_type;
+#ifdef CONFIG_MV_TDM_SUPPORT
+	int ret;
+#endif
 
 	TRC_REC("->%s\n",__FUNCTION__);
 
 	/* Extract interrupt information from low level ISR */
 #ifdef CONFIG_MV_TDM_SUPPORT
-	mvTdmIntLow(&tdm_int_info);
+	ret = mvTdmIntLow(&tdm_int_info);
 #else
 	mvCommUnitIntLow(&tdm_int_info);
 #endif
@@ -383,13 +450,34 @@ static irqreturn_t tdm_if_isr(int irq, void* dev_id)
 	/*device_id = tdm_int_info.cs;*/
 	
 	/* Nothing to do - return */
-	if(int_type == MV_EMPTY_INT)
+	if (int_type == MV_EMPTY_INT)
 		goto out;
+
+#ifdef CONFIG_MV_TDM_SUPPORT
+	if ((ret == -1) && (pcm_stop_status == 0))  {
+		pcm_stop_status = 1;
+
+		/* If Rx/Tx tasklets already scheduled, let them do the work. */
+		if ((!rxBuff) && (!txBuff)) {
+			TRC_REC("Stopping the TDM\n");
+			tdm_if_pcm_stop();
+			pcm_stop_flag = 0;
+			tasklet_hi_schedule(&tdm_if_stop_tasklet);
+		} else {
+			TRC_REC("Some tasklet is running, mark pcm_stop_flag\n");
+			pcm_stop_flag = 1;
+		}
+	}
+
+	/* Restarting PCM, skip Rx/Tx handling */
+	if (pcm_stop_status)
+		goto skip_rx_tx;
+#endif
 
 	/* Support multiple interrupt handling */
 	/* RX interrupt */
-	if(int_type & MV_RX_INT) {
-		if(rxBuff != NULL) {
+	if (int_type & MV_RX_INT) {
+		if (rxBuff != NULL) {
 			rx_miss++;
 			TRC_REC("%s: Warning, missed Rx buffer processing !!!\n",__FUNCTION__);
 		}
@@ -407,8 +495,8 @@ static irqreturn_t tdm_if_isr(int irq, void* dev_id)
 	}
 
 	/* TX interrupt */
-	if(int_type & MV_TX_INT) {
-		if(txBuff != NULL) {
+	if (int_type & MV_TX_INT) {
+		if (txBuff != NULL) {
 			tx_miss++;
 			TRC_REC("%s: Warning, missed Tx buffer processing !!!\n",__FUNCTION__);
 		}
@@ -425,17 +513,20 @@ static irqreturn_t tdm_if_isr(int irq, void* dev_id)
 		}
 	}
 
+#ifdef CONFIG_MV_TDM_SUPPORT
+skip_rx_tx:
+#endif
 	/* PHONE interrupt */
-	if(int_type & MV_PHONE_INT) {
+	if (int_type & MV_PHONE_INT) {
 		/* TBD */
 	}
 
 	/* ERROR interrupt */
-	if(int_type & MV_ERROR_INT) {
-		if(int_type & MV_RX_ERROR_INT)
+	if (int_type & MV_ERROR_INT) {
+		if (int_type & MV_RX_ERROR_INT)
 			rx_over++;
 
-		if(int_type & MV_TX_ERROR_INT)
+		if (int_type & MV_TX_ERROR_INT)
 			tx_under++;
 	}
 
@@ -451,8 +542,10 @@ static inline void tdm_if_pcm_rx_process(void)
 static void tdm_if_pcm_rx_process(unsigned long arg)
 #endif
 {
+	unsigned long flags;
+
 	TRC_REC("->%s\n",__FUNCTION__);
-	if(pcm_enable) {
+	if (pcm_enable) {
 		if(rxBuff == NULL) {
 			TRC_REC("%s: Error, empty Rx processing\n",__FUNCTION__);
 			return;
@@ -460,10 +553,10 @@ static void tdm_if_pcm_rx_process(unsigned long arg)
 
 		/* Fill TDM Rx aggregated buffer */
 #ifdef CONFIG_MV_TDM_SUPPORT
-		if(mvTdmRx(rxBuff) == MV_OK)
+		if (mvTdmRx(rxBuff) == MV_OK)
 			tdm_if_register_ops->tdm_if_pcm_ops.pcm_rx_callback(rxBuff, buff_size); /* Dispatch Rx handler */
 #else
-		if(mvCommUnitRx(rxBuff) == MV_OK) {
+		if (mvCommUnitRx(rxBuff) == MV_OK) {
 			tdm_if_register_ops->tdm_if_pcm_ops.pcm_rx_callback(rxBuff, buff_size); /* Dispatch Rx handler */
 			/* Since data buffer is shared among MCDMA and CPU, need to invalidate 	
 				before it accessed by MCDMA	*/
@@ -474,9 +567,21 @@ static void tdm_if_pcm_rx_process(unsigned long arg)
 			printk("%s: could not fill Rx buffer\n",__FUNCTION__);
 
 	}
-	
+
+	spin_lock_irqsave(&tdm_if_lock, flags);
+
 	/* Clear rxBuff for next iteration */
 	rxBuff = NULL;
+
+#ifdef CONFIG_MV_TDM_SUPPORT
+	if ((pcm_stop_flag == 1) && !txBuff) {
+		TRC_REC("Stopping TDM from Rx tasklet\n");
+		tdm_if_pcm_stop();
+		pcm_stop_flag = 0;
+		tasklet_hi_schedule(&tdm_if_stop_tasklet);
+	}
+#endif
+	spin_unlock_irqrestore(&tdm_if_lock, flags);
 
 	TRC_REC("<-%s\n",__FUNCTION__);
 	return;
@@ -489,10 +594,12 @@ static inline void tdm_if_pcm_tx_process(void)
 static void tdm_if_pcm_tx_process(unsigned long arg)
 #endif
 {
+	unsigned long flags;
+
 	TRC_REC("->%s\n",__FUNCTION__);
 
-	if(pcm_enable) {
-		if(txBuff == NULL) {
+	if (pcm_enable) {
+		if (txBuff == NULL) {
 			TRC_REC("%s: Error, empty Tx processing\n",__FUNCTION__);
 			return;
 		}
@@ -500,7 +607,7 @@ static void tdm_if_pcm_tx_process(unsigned long arg)
 		/* Dispatch Tx handler */
 		tdm_if_register_ops->tdm_if_pcm_ops.pcm_tx_callback(txBuff, buff_size);
 
-		if(test_enable == 0) {
+		if (test_enable == 0) {
 			/* Fill Tx aggregated buffer */
 #ifdef CONFIG_MV_TDM_SUPPORT
 			if(mvTdmTx(txBuff) != MV_OK)
@@ -511,8 +618,20 @@ static void tdm_if_pcm_tx_process(unsigned long arg)
 		}
 	}
 
+	spin_lock_irqsave(&tdm_if_lock, flags);
+
 	/* Clear txBuff for next iteration */
 	txBuff = NULL;
+
+#ifdef CONFIG_MV_TDM_SUPPORT
+	if ((pcm_stop_flag == 1) && !rxBuff) {
+		TRC_REC("Stopping TDM from Tx tasklet\n");
+		tdm_if_pcm_stop();
+		pcm_stop_flag = 0;
+		tasklet_hi_schedule(&tdm_if_stop_tasklet);
+	}
+#endif
+	spin_unlock_irqrestore(&tdm_if_lock, flags);
 
 	TRC_REC("<-%s\n",__FUNCTION__);
 	return;
@@ -525,9 +644,38 @@ void tdm_if_stats_get(tdm_if_stats_t* tdm_if_stats)
 	tdm_if_stats->tx_miss = tx_miss;
 	tdm_if_stats->rx_over = rx_over;
 	tdm_if_stats->tx_under = tx_under;
-	
+#ifdef CONFIG_MV_TDM_EXT_STATS
+	mvTdmExtStatsGet(&tdm_if_stats->tdm_ext_stats);
+#endif
 	return;
 }
+
+#ifdef CONFIG_MV_TDM_SUPPORT
+static void tdm_if_stop_channels(unsigned long arg)
+{
+	u32 max_poll = 0;
+	unsigned long flags;
+
+	TRC_REC("->%s\n",__FUNCTION__);
+
+	/* Wait for all channels to stop  */
+	while (((MV_REG_READ(CH_ENABLE_REG(0)) & 0x101) || (MV_REG_READ(CH_ENABLE_REG(1)) & 0x101)) && (max_poll < 30)) {
+		mdelay(1);
+		max_poll++;
+	}
+
+	TRC_REC("Finished polling on channels disable\n");
+	if (max_poll >= 30)
+		printk("\n\npolling on channels disabling exceeded 30ms\n\n");
+
+	spin_lock_irqsave(&tdm_if_lock, flags);
+	tdm_if_pcm_start();
+	spin_unlock_irqrestore(&tdm_if_lock, flags);
+
+	TRC_REC("<-%s\n",__FUNCTION__);
+	return;
+}
+#endif
 
 static int __init tdm_if_module_init(void)
 {

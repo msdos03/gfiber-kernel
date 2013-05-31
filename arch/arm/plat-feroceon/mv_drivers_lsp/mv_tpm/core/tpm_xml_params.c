@@ -634,6 +634,56 @@ int get_igmp_snoop_params_enable(uint32_t *enable)
 }
 
 /*******************************************************************************
+* get_ds_mac_based_trunking_enable()
+*
+* DESCRIPTION:      Get DS load balance parameters from XML configuration file
+*
+* INPUTS:
+*
+* OUTPUTS:  enable - whether DS load balance is enabled
+*
+* RETURNS:  US_RC_OK, US_RC_FAIL or US_RC_NOT_FOUND
+*
+*******************************************************************************/
+int get_ds_mac_based_trunking_enable(uint32_t *enable)
+{
+	ezxml_t xmlHead;
+	ezxml_t xmlElement;
+	int rc = US_RC_OK;
+
+	if (enable == NULL) {
+#ifdef US_DEBUG_PRINT
+		printk(KERN_ERR "%s: NULL pointer\n", __func__);
+#endif
+		return US_RC_FAIL;
+	}
+
+	*enable = 0;
+
+	xmlHead = get_xml_head_ptr(g_pstr_xml_cfg_file);
+
+	if (xmlHead == NULL)
+		return US_RC_FAIL;
+
+	xmlElement = ezxml_child(xmlHead, US_XML_TPM_E);
+	if (xmlElement == NULL) {
+#ifdef US_DEBUG_PRINT
+		printk(KERN_ERR "Failed to find %s in XML config. file %s\n", US_XML_TPM_E, g_pstr_xml_cfg_file);
+#endif
+		rc = US_RC_NOT_FOUND;
+	} else {
+		rc = get_int_param(xmlElement, US_XML_DS_MAC_BASED_TRUNKING_E, enable);
+
+#ifdef US_DEBUG_PRINT
+		printk("ds_mac_based_trunking enable %d \n", *enable);
+#endif
+	}
+
+	/*ezxml_free(xmlHead); */
+	return rc;
+}
+
+/*******************************************************************************
 * get_igmp_snoop_params_cpu_queue()
 *
 * DESCRIPTION:      Get IGMP snooping parameters from XML configuration file
@@ -1191,7 +1241,7 @@ int get_eth_port_conf_params(tpm_init_eth_port_conf_t *eth_port_bufs, int max_et
 			rc = US_RC_FAIL;
 			break;
 		}
-		
+
 		/* mandatory field */
 		xmlStr = ezxml_attr(xmlPort, US_XML_ETH_PORT_SRC_ATTR);
 		if (xmlStr == NULL) {
@@ -1213,7 +1263,7 @@ int get_eth_port_conf_params(tpm_init_eth_port_conf_t *eth_port_bufs, int max_et
 		if (eth_port_bufs[port_nr].valid) {
 			printk("%d)  src_port %d  switch_port %d\n",
 			       port_nr,
-			       eth_port_bufs[port_nr].port_src, 
+			       eth_port_bufs[port_nr].port_src,
 			       eth_port_bufs[port_nr].switch_port);
 		}
 	}
@@ -1224,7 +1274,7 @@ int get_eth_port_conf_params(tpm_init_eth_port_conf_t *eth_port_bufs, int max_et
 }
 
 /*******************************************************************************
-* get_backup_wan_params()
+* get_active_wan_params()
 *
 * DESCRIPTION:      Get GMAC connection parameters from XML configuration file
 *
@@ -1237,20 +1287,20 @@ int get_eth_port_conf_params(tpm_init_eth_port_conf_t *eth_port_bufs, int max_et
 * RETURNS:  US_RC_OK, US_RC_FAIL or US_RC_NOT_FOUND
 *
 *******************************************************************************/
-int get_backup_wan_params(uint32_t *backup_wan)
+int get_active_wan_params(uint32_t *active_wan)
 {
 	ezxml_t xmlHead;
 	ezxml_t xmlElement;
 	int rc = US_RC_OK;
 
-	if (backup_wan == NULL) {
+	if (active_wan == NULL) {
 #ifdef US_DEBUG_PRINT
 		printk(KERN_ERR "%s: NULL pointer\n", __func__);
 #endif
 		return US_RC_FAIL;
 	}
 
-	*backup_wan = 0;
+	*active_wan = 0;
 
 	xmlHead = get_xml_head_ptr(g_pstr_xml_cfg_file);
 
@@ -1264,12 +1314,12 @@ int get_backup_wan_params(uint32_t *backup_wan)
 #endif
 		rc = US_RC_NOT_FOUND;
 	} else {
-		rc = get_int_param(xmlElement, US_XML_BACKUP_WAN_E, backup_wan);
+		rc = get_int_param(xmlElement, US_XML_ACTIVE_WAN_E, active_wan);
 #ifdef US_DEBUG_PRINT
 		printk("======================================\n");
 		printk("            ETH COMPLEX               \n");
 		printk("======================================\n");
-		printk("backup_wan %d \n", *backup_wan);
+		printk("active_wan %d \n", *active_wan);
 #endif
 	}
 

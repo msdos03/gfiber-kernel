@@ -599,16 +599,20 @@ void mvEthPortCounters(int port, int mib)
 	mvEthMibPrint(port, mib, ETH_MIB_BAD_CRC_EVENT, "BAD_CRC_EVENT");
 	mvEthRegPrint0(ETH_RX_DISCARD_PKTS_CNTR_REG(port), "RX_DISCARD_PKTS_CNTR_REG");
 	mvEthRegPrint0(ETH_RX_OVERRUN_PKTS_CNTR_REG(port), "RX_OVERRUN_PKTS_CNTR_REG");
+
 	mvOsPrintf("\n[Tx]\n");
 	mvEthMibPrint(port, mib, ETH_MIB_GOOD_FRAMES_SENT, "GOOD_FRAMES_SENT");
 	mvEthMibPrint(port, mib, ETH_MIB_BROADCAST_FRAMES_SENT, "BROADCAST_FRAMES_SENT");
 	mvEthMibPrint(port, mib, ETH_MIB_MULTICAST_FRAMES_SENT, "MULTICAST_FRAMES_SENT");
 	mvEthMibPrint(port, mib, ETH_MIB_GOOD_OCTETS_SENT_LOW, "GOOD_OCTETS_SENT");
+
 	mvOsPrintf("\n[Tx Errors]\n");
 	mvEthMibPrint(port, mib, ETH_MIB_INTERNAL_MAC_TRANSMIT_ERR, "INTERNAL_MAC_TRANSMIT_ERR");
 	mvEthMibPrint(port, mib, ETH_MIB_EXCESSIVE_COLLISION, "EXCESSIVE_COLLISION");
 	mvEthMibPrint(port, mib, ETH_MIB_COLLISION, "COLLISION");
 	mvEthMibPrint(port, mib, ETH_MIB_LATE_COLLISION, "LATE_COLLISION");
+	mvEthRegPrint0(NETA_TX_BAD_FCS_CNTR_REG(port, mib), "NETA_TX_BAD_FCS_CNTR_REG");
+	mvEthRegPrint0(NETA_TX_DROP_CNTR_REG(port, mib), "NETA_TX_DROP_CNTR_REG");
 
 	mvOsPrintf("\n[FC control]\n");
 	mvEthMibPrint(port, mib, ETH_MIB_UNREC_MAC_CONTROL_RECEIVED, "UNREC_MAC_CONTROL_RECEIVED");

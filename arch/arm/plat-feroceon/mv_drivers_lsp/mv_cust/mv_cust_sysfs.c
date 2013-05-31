@@ -52,34 +52,31 @@ static uint8_t  eoam_mac[6] = {0};
 static ssize_t mv_cust_spec_proc_help(char *buf)
 {
     int off = 0;
-    off += sprintf(buf+off, "cat help                               - show this help\n");
-    off += sprintf(buf+off, "cat omci                               - show OMCI configuration\n");
-    off += sprintf(buf+off, "cat eoam                               - show eoam configuration\n");
-    off += sprintf(buf+off, "cat loopdet                            - show loop detect configuration\n");
-    off += sprintf(buf+off, "cat udp_ports                          - show special udp source and dest. port configuration\n");
-#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
-    off += sprintf(buf+off, "cat flow_map                           - show flow mapping configuration\n");        
-    off += sprintf(buf+off, "cat flow_map_show                      - show flow mapping rules \n");    
-    off += sprintf(buf+off, "cat flow_map_clear                     - clear all flow mapping rules\n");
-    off += sprintf(buf+off, "cat dscp_map_del                       - delete DSCP to P-bits mapping rules\n");    
+    off += sprintf(buf+off, "cat  help                              - show this help\n");
+#ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE    
+    off += sprintf(buf+off, "cat  udp_ports                         - show special udp source and dest. port configuration\n");
 #endif
-    off += sprintf(buf+off, "cat igmp                               - show igmp configuration\n");
+#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
+    off += sprintf(buf+off, "cat  flow_map                          - show flow mapping configuration\n");        
+    off += sprintf(buf+off, "cat  flow_map_show                     - show flow mapping rules \n");    
+    off += sprintf(buf+off, "cat  flow_map_clear                    - clear all flow mapping rules\n");
+    off += sprintf(buf+off, "cat  dscp_map_del                      - delete DSCP to P-bits mapping rules\n");    
+#endif
+    off += sprintf(buf+off, "cat  tcont_show                        - Show all T-CONT state\n");
+    off += sprintf(buf+off, "echo tcont state        > tcont_set    - Set T-CONT tatus, tcont(0~7), state(1:enable, 0:disable) \n");
     off += sprintf(buf+off, "echo hex                > debug        - Set Customized module debug information \n");
-    off += sprintf(buf+off, "echo hex                > omci_type    - Set OMCI ethertype\n");
+    off += sprintf(buf+off, "echo app_type           > app_show     - Show application configuration. 0:igmp, 1:mld, 2:lpbk, 3:eoam, 4:omci\n");
+    off += sprintf(buf+off, "echo app_type enable    > app_flag_set - Enable/disable application. 0:igmp, 1:mld, 2:lpbk, 3:eoam, 4:omci, 1:enable, 0:disable\n");
+    off += sprintf(buf+off, "echo app_type hex       > app_etype_set- Set application Eth type. 0:igmp, 1:mld, 2:lpbk, 3:eoam, 4:omci\n");
     off += sprintf(buf+off, "echo tc txq gem keep_mh > omci_set     - set udp source port special Tx behavior\n");
-    off += sprintf(buf+off, "echo hex                > omci_ena     - Disable/Enable OMCI packet detection\n");
-    //off += sprintf(buf+off, "echo txp txq > omci_txq      - set T-CONT and TX queue for outgoing OMCI packet\n");
-    //off += sprintf(buf+off, "echo hex     > omci_cmd      - 4B of tx desc offset 0xc\n");
-    //off += sprintf(buf+off, "echo hex     > omci_gemp     - gemportid to detect OMCI packets\n");
-    off += sprintf(buf+off, "echo hex                > eoam_type    - Set EPON EOAM ethertype\n");
+    off += sprintf(buf+off, "echo keep_mh            > eoam_gh_keep - Keep or not keep GH for eOAM packets, 1:keep, 0:do not keep\n");    
     off += sprintf(buf+off, "echo txq                > eoam_txq     - set TX queue into sw_buffer for EOAM llid command\n");
     off += sprintf(buf+off, "echo mac[0]-mac[5]      > eoam_mac     - set LLID mac into sw_buffer for EOAM llid command\n");
     off += sprintf(buf+off, "echo llid               > eoam_write   - Write EOAM txq and mac address from sw_buffer into LLID\n");
-    off += sprintf(buf+off, "echo hex                > eoam_enable  - Disable/Enable eOAM packet detection\n");
-    //off += sprintf(buf+off, "echo hex                > igmp_type    - Set IGMP ethertype\n");
-    off += sprintf(buf+off, "echo hex                > loopdet_type - Set Port Loopback Detect ethertype\n");
+#ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE    
     off += sprintf(buf+off, "echo p udp_src(dec) txp txq flags hw_cmd  > udp_src - set udp source port special Tx behavior\n");
     off += sprintf(buf+off, "echo p udp_dst(dec) txp txq flags hw_cmd  > udp_dst - set udp dest.  port special Tx behavior\n");
+#endif    
 #ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
     off += sprintf(buf+off, "echo hex                                  > flow_map_debug  - Set flow mapping debug flag, 1:enable, 0:disable \n");    
     off += sprintf(buf+off, "echo vid pbits mod_vid mod_pbits trg_port trg_queue trg_hwf_queue gem_port  > flow_map_us_set - set U/S flow mapping rule\n");
@@ -97,8 +94,10 @@ static ssize_t mv_cust_spec_proc_help(char *buf)
 static ssize_t mv_cust_spec_proc_show(struct device *dev,
                                       struct device_attribute *attr, char *buf)
 {
-    int off = 0;
-    const char*     name = attr->attr.name;
+    int off   = 0;
+    int index = 0;
+    bool state;
+    const char* name = attr->attr.name;
 
     if (!capable(CAP_NET_ADMIN))
         return -EPERM;
@@ -106,30 +105,11 @@ static ssize_t mv_cust_spec_proc_show(struct device *dev,
     if (!strcmp(name, "help") ) {
         off = mv_cust_spec_proc_help(buf);
     }
-    else if (!strcmp(name, "omci")) {
-        mv_cust_omci_print();
-    }
-    else if (!strcmp(name, "eoam")) {
-        mv_cust_eoam_print();
-    }
-    else if (!strcmp(name, "igmp")) {
-#ifdef CONFIG_MV_CUST_IGMP_HANDLE
-        mv_cust_igmp_print();
-#else
-        printk("mv_cust module was not compiled with IGMP Support\n");
-#endif
-
-    }
-    else if (!strcmp(name, "loopdet")) {
-        mv_cust_loopdet_print();
-    }
+#ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE       
     else if (!strcmp(name, "udp_ports")) {
-#ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE
         mv_cust_udp_spec_print_all();
-#else
-        printk("mv_cust module was not compiled with UDP SAMPLE Config Support\n");
-#endif
     }
+#endif    
 #ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE       
     else if (!strcmp(name, "flow_map")) { 
         mv_cust_flow_map_print();
@@ -143,13 +123,22 @@ static ssize_t mv_cust_spec_proc_show(struct device *dev,
     else if (!strcmp(name, "dscp_map_del")) {
         mv_cust_dscp_map_del();
     }     
-#endif    
+#endif
+    else if (!strcmp(name, "tcont_show")) {
+        printk(KERN_INFO "MV_CUST T-CONT state table\n");
+        printk(KERN_INFO "Default invalid Txq:%d \n", CPH_INVALID_TRGT_QUEUE);
+        printk(KERN_INFO "--------------------------\n");
+        for (index = 0; index < CPH_MAX_TCONT_NUM; index++)
+        {
+            state = mv_cust_get_tcont_state(index);
+            printk(KERN_INFO "T-CONT%1.1d: %s\n", index, (state==true)?"enabled":"disabled");
+        }
+    } 
     else
         off = mv_cust_spec_proc_help(buf);
 
     return off;
 }
-
 
 
 static ssize_t mv_cust_spec_proc_1_store(struct device *dev,
@@ -167,50 +156,23 @@ static ssize_t mv_cust_spec_proc_1_store(struct device *dev,
     v = 0;
 
     sscanf(buf, "%x", &v);
-
+    
     raw_local_irq_save(flags);
 
     if (!strcmp(name, "debug")) {
         mv_cust_debug_info_set(v);
     }
-    else if (!strcmp(name, "omci_type")) {
-        mv_cust_omci_type_set(v);
+    else if (!strcmp(name, "app_show")) {
+        mv_cust_print(v);
     }
-    else if (!strcmp(name, "eoam_type")) {
-        mv_cust_epon_oam_type_set(v);
-    }
+    else if (!strcmp(name, "eoam_gh_keep")) {
+        mv_cust_oam_rx_gh_set(v);
+    }   
     else if (!strcmp(name, "eoam_txq")) {
         eoam_txq = v;
     }
     else if (!strcmp(name, "eoam_write")) {
         mv_cust_eoam_llid_set((int)v, &eoam_mac[0], eoam_txq);
-    }
-    /*
-    else if (!strcmp(name, "omci_cmd")) {
-        mv_cust_omci_hw_cmd_set(v);
-    }
-    */
-    /*
-    else if (!strcmp(name, "omci_gemp")) {
-        mv_cust_omci_gemport_set(v);
-    }
-    */
-    /*
-    else if (!strcmp(name, "omci_gh_keep")) {
-        mv_cust_xpon_oam_rx_gh_set(v);
-    }
-    */
-    else if (!strcmp(name, "eoam_gh_keep")) {
-        mv_cust_xpon_oam_rx_gh_set(v);
-    }
-    else if (!strcmp(name, "loopdet_type")) {
-        mv_cust_loopdet_type_set(v);
-    }
-    else if (!strcmp(name, "omci_enable")) {
-        mv_cust_omci_enable(v);
-    }
-    else if (!strcmp(name, "eoam_enable")) {
-        mv_cust_eoam_enable(v);
     }
     else
         printk("%s: illegal operation <%s>\n", __FUNCTION__, attr->attr.name);
@@ -220,7 +182,7 @@ static ssize_t mv_cust_spec_proc_1_store(struct device *dev,
     return len;
 }
 
-#if 0
+
 static ssize_t mv_cust_spec_proc_2_store(struct device *dev,
                                          struct device_attribute *attr,
                                          const char *buf, size_t len)
@@ -233,20 +195,24 @@ static ssize_t mv_cust_spec_proc_2_store(struct device *dev,
         return -EPERM;
 
     /* Read input */
+    p = 0;
     v = 0;
     sscanf(buf, "%d %x", &p, &v);
 
     raw_local_irq_save(flags);
-    /*
-    if (!strcmp(name, "omci_txq")) {
-        mv_cust_omci_tx_set(p, v);
+
+    if (!strcmp(name, "app_flag_set")) {
+        mv_cust_app_flag_set(p, v);
     }
-    */
-    /*
-    else if (!strcmp(name, "eoam_txq")) {
-        mv_cust_eoam_tx_set(p, v);
+    else if (!strcmp(name, "app_etype_set")) {
+        mv_cust_app_etype_set(p, v);
     }
-    */
+    else if (!strcmp(name, "tcont_set")) {
+        if (v)
+            mv_cust_set_tcont_state(p, true);
+        else
+            mv_cust_set_tcont_state(p, false);
+    }    
     else
         printk("%s: illegal operation <%s>\n", __FUNCTION__, attr->attr.name);
 
@@ -254,7 +220,6 @@ static ssize_t mv_cust_spec_proc_2_store(struct device *dev,
 
     return len;
 }
-#endif
 
 
 static ssize_t mv_cust_spec_proc_6_store(struct device *dev,
@@ -447,61 +412,53 @@ static ssize_t mv_cust_spec_proc_64_store(struct device *dev,
     return len;
 }
 
+static DEVICE_ATTR(help,           S_IRUSR, mv_cust_spec_proc_show, NULL);
 static DEVICE_ATTR(debug,          S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
-//static DEVICE_ATTR(omci_cmd,       S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
-//static DEVICE_ATTR(omci_gemp,      S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
-static DEVICE_ATTR(omci_type,      S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
-//static DEVICE_ATTR(omci_gh_keep,   S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
-static DEVICE_ATTR(loopdet_type,   S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
-static DEVICE_ATTR(omci_ena,       S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
+
 static DEVICE_ATTR(omci_set,       S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_6_store);
-static DEVICE_ATTR(eoam_enable,    S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
-static DEVICE_ATTR(eoam_type,      S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
 static DEVICE_ATTR(eoam_gh_keep,   S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
-//static DEVICE_ATTR(omci_txq,       S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_2_store);
 static DEVICE_ATTR(eoam_txq,       S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
-static DEVICE_ATTR(eoam_write,     S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
 static DEVICE_ATTR(eoam_mac,       S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_6h_store);
+static DEVICE_ATTR(eoam_write,     S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
+
+static DEVICE_ATTR(tcont_show,     S_IRUSR, mv_cust_spec_proc_show, NULL);
+static DEVICE_ATTR(tcont_set,      S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_2_store);
+
+static DEVICE_ATTR(app_show,       S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_1_store);
+static DEVICE_ATTR(app_flag_set,   S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_2_store);
+static DEVICE_ATTR(app_etype_set,  S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_2_store);
+
+static DEVICE_ATTR(udp_ports,      S_IRUSR, mv_cust_spec_proc_show, NULL);
 static DEVICE_ATTR(udp_src,        S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_6_store);
 static DEVICE_ATTR(udp_dst,        S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_6_store);
-static DEVICE_ATTR(flow_map_debug, S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
-static DEVICE_ATTR(flow_map_us_set,S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
-static DEVICE_ATTR(flow_map_ds_set,S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
 
-static DEVICE_ATTR(dscp_map_set,   S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_64_store);
-static DEVICE_ATTR(flow_map_del,   S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
-static DEVICE_ATTR(tag_flow_get,   S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
-static DEVICE_ATTR(untag_flow_get, S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
-static DEVICE_ATTR(omci,           S_IRUSR, mv_cust_spec_proc_show, NULL);
-static DEVICE_ATTR(eoam,           S_IRUSR, mv_cust_spec_proc_show, NULL);
-static DEVICE_ATTR(igmp,           S_IRUSR, mv_cust_spec_proc_show, NULL);
-static DEVICE_ATTR(loopdet,        S_IRUSR, mv_cust_spec_proc_show, NULL);
-static DEVICE_ATTR(udp_ports,      S_IRUSR, mv_cust_spec_proc_show, NULL);
 static DEVICE_ATTR(flow_map,       S_IRUSR, mv_cust_spec_proc_show, NULL);
 static DEVICE_ATTR(flow_map_show,  S_IRUSR, mv_cust_spec_proc_show, NULL);
 static DEVICE_ATTR(flow_map_clear, S_IRUSR, mv_cust_spec_proc_show, NULL);
 static DEVICE_ATTR(dscp_map_del,   S_IRUSR, mv_cust_spec_proc_show, NULL);
+static DEVICE_ATTR(flow_map_debug, S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
+static DEVICE_ATTR(flow_map_us_set,S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
+static DEVICE_ATTR(flow_map_ds_set,S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
+static DEVICE_ATTR(flow_map_del,   S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
+static DEVICE_ATTR(tag_flow_get,   S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
+static DEVICE_ATTR(untag_flow_get, S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_flow_store);
+static DEVICE_ATTR(dscp_map_set,   S_IWUSR, mv_cust_spec_proc_show, mv_cust_spec_proc_64_store);
 
-
-
-static DEVICE_ATTR(help,         S_IRUSR, mv_cust_spec_proc_show, NULL);
 
 static struct attribute *mv_cust_spec_proc_attrs[] = {
+    &dev_attr_help.attr,    
     &dev_attr_debug.attr,
-    //&dev_attr_omci_cmd.attr,
-    //&dev_attr_omci_gemp.attr,
-    &dev_attr_omci_type.attr,
-    //&dev_attr_omci_gh_keep.attr,
-    //&dev_attr_omci_txq.attr,
-    &dev_attr_omci_ena.attr,
     &dev_attr_omci_set.attr,
-    &dev_attr_eoam_type.attr,
     &dev_attr_eoam_gh_keep.attr,
-    &dev_attr_eoam_enable.attr,
     &dev_attr_eoam_txq.attr,
-    &dev_attr_eoam_write.attr,
     &dev_attr_eoam_mac.attr,
-    &dev_attr_loopdet_type.attr,
+    &dev_attr_eoam_write.attr,
+    &dev_attr_tcont_show.attr,
+    &dev_attr_tcont_set.attr,    
+    &dev_attr_app_show.attr,
+    &dev_attr_app_flag_set.attr,
+    &dev_attr_app_etype_set.attr,   
+    &dev_attr_udp_ports.attr,    
     &dev_attr_udp_src.attr,
     &dev_attr_udp_dst.attr,
     &dev_attr_flow_map_debug.attr,
@@ -510,17 +467,12 @@ static struct attribute *mv_cust_spec_proc_attrs[] = {
     &dev_attr_dscp_map_set.attr,
     &dev_attr_flow_map_del.attr,
     &dev_attr_tag_flow_get.attr,
-    &dev_attr_untag_flow_get.attr,    
-    &dev_attr_omci.attr,
-    &dev_attr_eoam.attr,
-    &dev_attr_igmp.attr,
-    &dev_attr_loopdet.attr,
-    &dev_attr_udp_ports.attr,
+    &dev_attr_untag_flow_get.attr,
     &dev_attr_flow_map.attr,    
     &dev_attr_flow_map_show.attr,     
     &dev_attr_flow_map_clear.attr,   
     &dev_attr_dscp_map_del.attr,       
-    &dev_attr_help.attr,
+
     NULL
 };
 
@@ -571,4 +523,3 @@ void mvcust_sysfs_delete(void)
 
     printk(KERN_INFO "= CUST Module SYS FS Remove ended successfully =\n");
 }
-

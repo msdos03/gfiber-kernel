@@ -237,6 +237,9 @@ int mv_mac_learn_op_enable_set(bool mac_learn_enable)
 	const uint32_t tpm_owner_id = TPM_MOD_OWNER_TPM;
 	tpm_db_pnc_range_conf_t range_conf;
 	tpm_init_pnc_mac_learn_enable_t pnc_mac_learn_enable;
+	tpm_gmacs_enum_t lpk_gmac;
+	uint32_t data_queue, mac_larn_queue;
+	uint32_t lpk_gmac_mh_en;
 
 	/*check original value and new value, if equal, return OK*/
 	if (mac_learn_enable == mc_mac_learn.mac_learn_enable)
@@ -264,6 +267,45 @@ int mv_mac_learn_op_enable_set(bool mac_learn_enable)
 		else
 			mc_mac_learn.mac_learn_max_count = (range_conf.api_end - range_conf.api_start + 1) / 2;
 		MVMACLEARN_DEBUG_PRINT("non-static entry max count: %d\n",mc_mac_learn.mac_learn_max_count);
+
+		/* set PMT entry for MH modification on GMAC1 */
+		/*check data queue and mac learn queue, if equal, return error*/
+		if (TPM_DB_OK != tpm_db_gmac_lpk_queue_get(&lpk_gmac,
+							   &data_queue,
+							   TPM_GMAC1_QUEUE_DATA_TRAFFIC)) {
+			MVMACLEARN_ERR_PRINT("loopback gmac data queue get failed \n");
+			return MAC_LEARN_FAIL;
+		}
+		if (TPM_DB_OK != tpm_db_gmac_lpk_queue_get(&lpk_gmac,
+							   &mac_larn_queue,
+							   TPM_GMAC1_QUEUE_MAC_LEARN_TRAFFIC)) {
+			MVMACLEARN_ERR_PRINT("loopback gmac mac learn queue get failed \n");
+			return MAC_LEARN_FAIL;
+		}
+		if (data_queue == mac_larn_queue) {
+			MVMACLEARN_ERR_PRINT("loopback gmac Tx queue %d for data traffix and MAC learn equal\n",
+					     data_queue);
+			return MAC_LEARN_FAIL;
+		}
+		MVMACLEARN_DEBUG_PRINT("lpk gmac %d Tx queue for mac learn: %d\n", lpk_gmac, mac_larn_queue);
+
+		/* limit band width on Tx mac learn queue of lpk gmac */
+		if (mvNetaTxqBurstSet((int)lpk_gmac, 0, mac_larn_queue, MAC_LEARN_BUCKET_SIZE) ||
+		    mvNetaTxqRateSet((int)lpk_gmac, 0, mac_larn_queue, MAC_LEARN_RATE_LIMIT)) {
+			MVMACLEARN_ERR_PRINT("MAC learning CPU rate limit on queue %d failed\n", mac_larn_queue);
+			return MAC_LEARN_FAIL;
+		}
+
+		/* Check MH on lpk gmac */
+		if (tpm_db_gmac_mh_en_conf_get(lpk_gmac, &lpk_gmac_mh_en)) {
+			MVMACLEARN_ERR_PRINT("Marvell Header enable info get failed on GMAC%d\n", lpk_gmac);
+			return MAC_LEARN_FAIL;
+		}
+		if (!lpk_gmac_mh_en) {
+			MVMACLEARN_ERR_PRINT("Marvell Header is not enabled on GMAC%d\n", lpk_gmac);
+			return MAC_LEARN_FAIL;
+		}
+
 		/* Trap packet to CPU */
 		if (tpm_mac_learn_default_rule_act_set(tpm_owner_id, TPM_UNK_MAC_TRAP)) {
 			MVMACLEARN_ERR_PRINT("TPM default rule action set failed\n");
@@ -392,7 +434,7 @@ int mv_mac_learn_op_max_count_set(uint32_t mac_learn_max_count)
 	tpm_db_pnc_range_conf_t range_conf;
 
 	if (true == mc_mac_learn.mac_learn_enable) {
-		MVMACLEARN_DEBUG_PRINT("Old max count: %d, New max count: %d\n", mc_mac_learn.mac_learn_enable, mac_learn_max_count);
+		MVMACLEARN_DEBUG_PRINT("Old max count: %d, New max count: %d\n", mc_mac_learn.mac_learn_max_count, mac_learn_max_count);
 		if (mac_learn_max_count < mc_mac_learn.mac_learn_max_count) {
 			if (!mac_learn_db_nonstatic_count_get(&non_static_count)) {
 				MVMACLEARN_DEBUG_PRINT("Current non-static num: %d\n", non_static_count);

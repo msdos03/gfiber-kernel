@@ -107,6 +107,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MV_TPM_IOCTL_FLUSH_ATU_SECTION     _IOWR(MV_TPM_IOCTL_MAGIC, 28, unsigned int)
 #define MV_TPM_IOCTL_FLUSH_VTU_SECTION     _IOWR(MV_TPM_IOCTL_MAGIC, 29, unsigned int)
 #define MV_TPM_IOCTL_SET_IPV6_CM_PARSE_WIN_SECTION     _IOWR(MV_TPM_IOCTL_MAGIC, 30, unsigned int)
+#define MV_TPM_IOCTL_SET_ACTIVE_WAN_SECTION            _IOWR(MV_TPM_IOCTL_MAGIC, 31, unsigned int)
+#define MV_TPM_IOCTL_HOT_SWAP_PROFILE_SECTION          _IOWR(MV_TPM_IOCTL_MAGIC, 32, unsigned int)
+#define MV_TPM_IOCTL_SET_GMAC_LPBK_SECTION             _IOWR(MV_TPM_IOCTL_MAGIC, 33, unsigned int)
+#define MV_TPM_IOCTL_SET_PORT_HWF_ADMIN_SECTION        _IOWR(MV_TPM_IOCTL_MAGIC, 34, unsigned int)
 
 
 #define MV_APM_IOCTL_MAGIC  ('A')
@@ -218,6 +222,7 @@ typedef enum tpm_ioctl_cmd_type
     MV_TPM_IOCTL_ALARM_GET_ETH_PORT,
     MV_TPM_IOCTL_SW_PHY_CONVERT_PORT_INDEX,
     MV_TPM_IOCTL_ADD_LOOP_DETECT_CHNL,
+    MV_TPM_IOCTL_DEL_LOOP_DETECT_CHNL,
     MV_TPM_IOCTL_ADD_OAM_LOOPBACK_CHNL,
     MV_TPM_IOCTL_DEL_OAM_LOOPBACK_CHNL,
     MV_TPM_IOCTL_SW_PHY_SET_PORT_DUPLEX_MODE,
@@ -225,6 +230,7 @@ typedef enum tpm_ioctl_cmd_type
     MV_TPM_IOCTL_SW_GET_MAC_AGE_TIME,
     MV_TPM_IOCTL_SW_SET_MAC_LEARN,
     MV_TPM_IOCTL_SW_GET_PORT_FLOOD,
+    MV_TPM_IOCTL_UNI_2_SW_PORT,
 
     MV_TPM_IOCTL_RESERVED_3,
     MV_TPM_IOCTL_RESERVED_4,
@@ -237,6 +243,8 @@ typedef enum tpm_ioctl_cmd_type
     MV_TPM_IOCTL_SW_SET_MIRROR,
     MV_TPM_IOCTL_SW_GET_MIRROR,
     MV_TPM_IOCTL_SW_GET_MAC_LEARN,
+    MV_TPM_IOCTL_SW_SET_TRUNK_PORT,
+    MV_TPM_IOCTL_SW_SET_TRUNK_MASK,
     MV_TPM_IOCTL_SW_PHY_GET_PORT_DUPLEX_MODE,
     MV_TPM_IOCTL_SET_MTU_SIZE,
     MV_TPM_IOCTL_GET_MTU_SIZE,
@@ -286,9 +294,9 @@ typedef enum tpm_ioctl_cmd_type
 
     MV_TPM_IOCTL_SET_IGMP_PROXY_SA_MAC,
     MV_TPM_IOCTL_GET_IGMP_PROXY_SA_MAC,
-	MV_TPM_IOCTL_ADD_IPv6_MC_STREAM,
-	MV_TPM_IOCTL_MOD_IPv6_MC_STREAM,
-	MV_TPM_IOCTL_DEL_IPv6_MC_STREAM,
+    MV_TPM_IOCTL_ADD_IPv6_MC_STREAM,
+    MV_TPM_IOCTL_MOD_IPv6_MC_STREAM,
+    MV_TPM_IOCTL_DEL_IPv6_MC_STREAM,
 
     MV_TPM_IOCTL_ADD_IPV6_GEN_5T_RULE,
     MV_TPM_IOCTL_DEL_IPV6_GEN_5T_RULE,
@@ -306,6 +314,11 @@ typedef enum tpm_ioctl_cmd_type
     MV_TPM_IOCTL_SET_MAC_LEARN_DEFAULT_ACTION,
     MV_TPM_IOCTL_TM_SET_GMAC0_INGR_RATE_LIMIT,
     MV_TPM_IOCTL_GET_MAC_LEARN_ENTRY_NUM,
+    MV_TPM_IOCTL_ADD_DS_LOAD_BALANCE_RULE,
+    MV_TPM_IOCTL_DEL_DS_LOAD_BALANCE_RULE,
+    MV_TPM_IOCTL_ADD_IPv4_MC_STREAM_SET_QUEUE,
+    MV_TPM_IOCTL_ADD_IPv6_MC_STREAM_SET_QUEUE,
+    MV_TPM_IOCTL_SW_PORT_ADD_VID_SET_EGRESS_MODE,
 
 } tpm_ioctl_cmd_type_t;
 
@@ -526,6 +539,14 @@ typedef struct
     tpm_pkt_action_t   pkt_act;
 } ctc_cm_acl_rule_t;
 
+/* DS load balance */
+typedef struct
+{
+    tpm_l2_acl_key_t   l2_key;
+    tpm_parse_flags_t  parse_flags_bm;
+    tpm_ds_load_balance_tgrt_t tgrt;
+} ds_load_balance_acl_rule_t;
+
 /* Pkt modification */
 typedef struct
 {
@@ -559,6 +580,7 @@ typedef struct
       ipv6_l4_ports_5t_rule_t  ipv6_l4_ports_5t_rule;
       ctc_cm_acl_rule_t        ctc_cm_acl_rule;
       pkt_mod_rule_t           mod_rule;
+      ds_load_balance_acl_rule_t ds_load_balance_acl_rule;
     };
 } tpm_ioctl_add_acl_rule_t;
 
@@ -668,6 +690,7 @@ typedef struct
     tpm_mc_igmp_mode_t   igmp_mode;
     uint8_t              mc_stream_pppoe;
     uint16_t             vid;
+    uint16_t             dest_queue;
     tpm_trg_port_type_t  dest_port_bm;
 
     union
@@ -712,6 +735,7 @@ typedef struct
     uint32_t              mng_cmd;
     tpm_ioctl_omci_ch_t   tpm_ioctl_omci_ch;
     tpm_ioctl_oam_ch_t    tpm_ioctl_oam_ch;
+    uint32_t              loopback_detect_ety;
 } tpm_ioctl_mng_ch_t;
 
 /* Switch Section
@@ -751,6 +775,7 @@ typedef struct
     tpm_mru_type_t        mtu_type;
     uint32_t              mtu_size;
     uint32_t              port_vector;
+    tpm_sw_trunk_t        trunk;
 } tpm_ioctl_sw_mac_security_t;
 
 /* Switch Vlan filtering */
@@ -864,6 +889,37 @@ typedef struct
     tpm_reset_level_enum_t reset_level;
 } tpm_ioctl_mib_reset_t;
 
+/* set active wan port */
+typedef struct
+{
+    uint32_t               owner_id;
+    tpm_gmacs_enum_t       active_wan;
+} tpm_ioctl_set_active_wan_t;
+
+/* set gmac loopback */
+typedef struct
+{
+    uint32_t               owner_id;
+    tpm_gmacs_enum_t       gmac;
+    uint8_t                enable;
+} tpm_ioctl_set_gmac_loopback_t;
+
+/* hot swap profile */
+typedef struct
+{
+    uint32_t               owner_id;
+    tpm_eth_complex_profile_t       profile_id;
+} tpm_ioctl_hot_swap_profile_t;
+
+/* set port hwf admin */
+typedef struct
+{
+    uint32_t               owner_id;
+    tpm_gmacs_enum_t       port;
+    uint8_t                txp;
+    uint8_t                enable;
+} tpm_ioctl_set_port_hwf_admin_t;
+
 /* ALARM Section */
 typedef struct
 {
@@ -889,7 +945,7 @@ typedef struct
 {
   tpm_src_port_type_t  port;
   uint32_t             owner_id;
-  tpm_swport_pm_3_t    tpm_swport_pm_3;
+  tpm_swport_pm_3_all_t tpm_swport_pm_3;
 
 } tpm_ioctl_swport_pm_3_t;
 
@@ -1017,6 +1073,9 @@ typedef union  tpm_cmd_data
     tpm_ioctl_flush_vtu_t       tpm_ioctl_flush_vtu;
     tpm_ioctl_flush_atu_t       tpm_ioctl_flush_atu;
     tpm_ioctl_ipv6_parse_window_t   tpm_ipv6_parse_window;
+    tpm_ioctl_set_active_wan_t      tpm_set_active_wan_param;
+    tpm_ioctl_hot_swap_profile_t    tpm_hot_swap_profile_param;
+    tpm_ioctl_set_port_hwf_admin_t  tpm_set_port_hwf_admin_param;
 } tpm_cmd_data_t;
 
 /* this structure is used for passing sysfs request from kernel to userspace

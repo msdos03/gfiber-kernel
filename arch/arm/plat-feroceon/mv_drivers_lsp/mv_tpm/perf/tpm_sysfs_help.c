@@ -116,6 +116,7 @@ int sfs_tpm_cfg_index(char* buf)
     off += sprintf(buf+off, "cat help_l3_rule_add                          - show add L3 rule help\n");
     off += sprintf(buf+off, "cat help_mc_ipvx_stream_add                   - show add multicast IPV4 stream help\n");
     off += sprintf(buf+off, "cat help_mib_reset                            - show MIB reset help\n");
+    off += sprintf(buf+off, "cat help_set_active_wan                       - show set active wan help\n");
     off += sprintf(buf+off, "cat help_mod_rule_cfg                         - show mod rule help\n");
     off += sprintf(buf+off, "cat help_no_mc_stream_add                     - show delete multicast stream help\n");
     off += sprintf(buf+off, "cat help_no_oam_omci_channel                  - show delete OAM/OMCI channel help\n");
@@ -161,7 +162,7 @@ int sfs_help_frwd_rule_cfg(char* buf)
 	off += sprintf(buf+off, "\t\tTPM_TRG_UNI_5              %#.5X     TPM_TRG_UNI_6        %#.5X\n",TPM_TRG_UNI_5, TPM_TRG_UNI_6);
 	off += sprintf(buf+off, "\t\tTPM_TRG_UNI_7              %#.5X     TPM_TRG_UNI_VIRT     %#.5X\n",TPM_TRG_UNI_7, TPM_TRG_UNI_VIRT);
 	off += sprintf(buf+off, "\t\tTPM_TRG_PORT_CPU           %#.5X     TPM_TRG_PORT_UNI_ANY %#.5X\n",TPM_TRG_PORT_CPU, TPM_TRG_PORT_UNI_ANY);
-	off += sprintf(buf+off, "\t\tTPM_TRG_PORT_UNI_CPU_LOOP  %#.5X\n", TPM_TRG_PORT_UNI_CPU_LOOP);
+	off += sprintf(buf+off, "\t\tTPM_TRG_PORT_UNI_CPU_LOOP  %#.5X     TPM_TRG_LOAD_BAL     %#.5X\n",TPM_TRG_PORT_UNI_CPU_LOOP, TPM_TRG_LOAD_BAL);
 	off += sprintf(buf+off, "\tqueue               (dec)Queue number\n");
 	off += sprintf(buf+off, "\tgem_port            (dec)GEM port\n");
 
@@ -459,6 +460,44 @@ int sfs_help_key_rule_delete(char* buf)
 
 /*******************************************************************************
 **
+**  sfs_help_ds_load_balance_rule - see header of sfs_tpm_cfg_index
+**
+*******************************************************************************/
+int sfs_help_ds_load_balance_rule(char* buf)
+{
+    int off = 0;
+
+    off += sprintf(buf+off, "echo [owner_id] [rule_num] [parse_rule_bm] [parse_flags_bm] [key_name] [target] > add_ds_load_balance\n");
+    off += sprintf(buf+off, "Creates a new ds load balance ACL\n");
+
+    off += sprintf(buf+off, "\towner_id        (dec)Application owner ID\n");
+    off += sprintf(buf+off, "\trule_num        (dec)Entry number to be added to the current ACL\n");
+    off += sprintf(buf+off, "\tparse_rule_bm   (hex)Bitmap containing the significant flags for parsing fields of the packet:\n");
+    off += sprintf(buf+off, "\t\tTPM_L2_PARSE_MAC_DA		 %#.4X\n", TPM_L2_PARSE_MAC_DA);
+    off += sprintf(buf+off, "\t\tTPM_L2_PARSE_MAC_SA		 %#.4X\n", TPM_L2_PARSE_MAC_SA);
+    off += sprintf(buf+off, "\t\tTPM_L2_PARSE_ONE_VLAN_TAG	 %#.4X\n", TPM_L2_PARSE_ONE_VLAN_TAG);
+    off += sprintf(buf+off, "\t\tTPM_L2_PARSE_TWO_VLAN_TAG	 %#.4X\n", TPM_L2_PARSE_TWO_VLAN_TAG);
+    off += sprintf(buf+off, "\t\tTPM_L2_PARSE_ETYPE		 %#.4X\n", TPM_L2_PARSE_ETYPE);
+    off += sprintf(buf+off, "\t\tTPM_L2_PARSE_PPPOE_SES 	 %#.4X\n", TPM_L2_PARSE_PPPOE_SES);
+    off += sprintf(buf+off, "\t\tTPM_L2_PARSE_PPP_PROT		 %#.4X\n", TPM_L2_PARSE_PPP_PROT);
+    off += sprintf(buf+off, "\t\tTPM_L2_PARSE_GEMPORT		 %#.4X\n", TPM_L2_PARSE_GEMPORT);
+    off += sprintf(buf+off, "\tparse_flags_bm   (hex)Bitmap containing the significant flags result of the primary ACL filtering\n");
+    off += sprintf(buf+off, "\t\tTPM_PARSE_FLAG_TAG1_TRUE        %#.4X\n", TPM_PARSE_FLAG_TAG1_TRUE);
+    off += sprintf(buf+off, "\t\tTPM_PARSE_FLAG_TAG1_FALSE       %#.4X\n", TPM_PARSE_FLAG_TAG1_FALSE);
+    off += sprintf(buf+off, "\t\tTPM_PARSE_FLAG_TAG2_TRUE        %#.4X\n", TPM_PARSE_FLAG_TAG2_TRUE);
+    off += sprintf(buf+off, "\t\tTPM_PARSE_FLAG_TAG2_FALSE       %#.4X\n", TPM_PARSE_FLAG_TAG2_FALSE);
+    off += sprintf(buf+off, "\tkey_name        (str)Name of L2 key data which has been defined by user [or l2_key_empty]\n");
+    off += sprintf(buf+off, "\ttarget          (dec)0 for GMAC0, 1 for GMAC1, 2 for CPU\n");
+
+    off += sprintf(buf+off, "\n\necho [owner_id] [rule_idx] > del_ds_load_balance       - delete a DS load balance ACL\n");
+    off += sprintf(buf+off, "\towner_id	    (dec)Application owner ID\n");
+    off += sprintf(buf+off, "\trule_idx	    (dec)Rule Id returned from the create call\n");
+
+	return(off);
+}
+
+/*******************************************************************************
+**
 **  sfs_help_l2_rule_add - see header of sfs_tpm_cfg_index
 **
 *******************************************************************************/
@@ -499,7 +538,7 @@ int sfs_help_l2_rule_add(char* buf)
     off += sprintf(buf+off, "\t\tTPM_ACTION_MTM                  %#.4X\n", TPM_ACTION_MTM);
     off += sprintf(buf+off, "\t\tTPM_ACTION_CUST_CPU_PKT_PARSE   %#.4X\n", TPM_ACTION_CUST_CPU_PKT_PARSE);
     off += sprintf(buf+off, "\t\tTPM_ACTION_SPEC_MC_VID          %#.4X\n", TPM_ACTION_SPEC_MC_VID);
-    off += sprintf(buf+off, "\tnext_phase      (str)Parse stage (l2/l3/ipv4/ipv6_gen/ipv6_dip/ipv6_nh/ipv6_l4/done)\n");
+    off += sprintf(buf+off, "\tnext_phase      (str)Parse stage (l3/done)\n");
     off += sprintf(buf+off, "\tkey_name        (str)Name of L2 key data which has been defined by user [or l2_key_empty]\n");
     off += sprintf(buf+off, "\tfrwd_name       (str)Name of pkt forwarding data which has been defined by user [or frwd_empty]\n");
     off += sprintf(buf+off, "\tmod_name        (str)Name of pkt modification data which has been defined by user [or mod_empty]\n");
@@ -560,7 +599,7 @@ int sfs_help_l3_rule_add(char* buf)
     off += sprintf(buf+off, "\t\tTPM_ACTION_SET_PKT_MOD          %#.2X\n", TPM_ACTION_SET_PKT_MOD);
     off += sprintf(buf+off, "\t\tTPM_ACTION_TO_CPU               %#.2X\n", TPM_ACTION_TO_CPU);
     off += sprintf(buf+off, "\t\tTPM_ACTION_CUST_CPU_PKT_PARSE   %#.2X\n", TPM_ACTION_CUST_CPU_PKT_PARSE);
-    off += sprintf(buf+off, "\tnext_phase       (str)Parse stage (l2/l3/ipv4/ipv6_gen/ipv6_dip/ipv6_nh/ipv6_l4/ctc_cm/done)\n");
+    off += sprintf(buf+off, "\tnext_phase       (str)Parse stage (ipv4/ipv6_gen/ipv6_nh/ctc_cm/done)\n");
     off += sprintf(buf+off, "\tfrwd_name        (str)Name of pkt forwarding data which has been defined by user [or frwd_empty]\n");
     off += sprintf(buf+off, "\tkey_name         (str)Name of L3 key data which has been defined by user [or l3_key_empty]\n");
 
@@ -604,7 +643,7 @@ int sfs_help_ipv4_rule_add(char* buf)
     off += sprintf(buf+off, "\t\tTPM_ACTION_TO_CPU               %#.4X\n", TPM_ACTION_TO_CPU);
     off += sprintf(buf+off, "\t\tTPM_ACTION_CUST_CPU_PKT_PARSE   %#.4X\n", TPM_ACTION_CUST_CPU_PKT_PARSE);
     off += sprintf(buf+off, "\t\tTPM_ACTION_UDP_CHKSUM_CALC      %#.4X\n", TPM_ACTION_UDP_CHKSUM_CALC);
-    off += sprintf(buf+off, "\tnext_phase       (str)Parse stage (l2/l3/ipv4/ipv6_gen/ipv6_dip/ipv6_nh/ipv6_l4/ctc_cm/done)\n");
+    off += sprintf(buf+off, "\tnext_phase       (str)Parse stage (ctc_cm/done)\n");
     off += sprintf(buf+off, "\tmod_bm           (hex)Packet fields modification command bitmap:\n");
     off += sprintf(buf+off, "\t\tTPM_VLAN_MOD                    %#.4X\n", TPM_VLAN_MOD);
     off += sprintf(buf+off, "\t\tThis is the only packet modification supported in this version. \n");
@@ -652,7 +691,7 @@ int sfs_help_ipv6_gen_rule_add(char* buf)
     off += sprintf(buf+off, "\t\tTPM_ACTION_TO_CPU               %#.2X\n", TPM_ACTION_TO_CPU);
     off += sprintf(buf+off, "\t\tTPM_ACTION_CUST_CPU_PKT_PARSE   %#.2X\n", TPM_ACTION_CUST_CPU_PKT_PARSE);
 
-    off += sprintf(buf+off, "\tnext_phase       (str)Parse stage (l2/l3/ipv4/ipv6_gen/ipv6_dip/ipv6_nh/ipv6_l4/done)\n");
+    off += sprintf(buf+off, "\tnext_phase       (str)Parse stage (ipv6_dip/done)\n");
 
     off += sprintf(buf+off, "\tmod_bm           (hex)Packet fields modification command bitmap:\n");
     off += sprintf(buf+off, "\t\tTPM_VLAN_MOD                    %#.4X\n", TPM_VLAN_MOD);
@@ -726,23 +765,6 @@ int sfs_help_mc_ipvx_stream_add(char* buf)
 	off += sprintf(buf+off, "\tdst_ip           Destination IP address\n");
 	off += sprintf(buf+off, "\tignore           (str)true/false. When true, the source IP address is not part of the key\n");
 	off += sprintf(buf+off, "\ttarget_ports     (hex)Bitmap of port targets \n");
-	off += sprintf(buf+off, "\t\tTPM_TRG_PORT_WAN            %#.4X\n", TPM_TRG_PORT_WAN);
-	off += sprintf(buf+off, "\t\tTPM_TRG_TCONT_0             %#.4X\n", TPM_TRG_TCONT_0);
-	off += sprintf(buf+off, "\t\tTPM_TRG_TCONT_1             %#.4X\n", TPM_TRG_TCONT_1);
-	off += sprintf(buf+off, "\t\tTPM_TRG_TCONT_2             %#.4X\n", TPM_TRG_TCONT_2);
-	off += sprintf(buf+off, "\t\tTPM_TRG_TCONT_3             %#.4X\n", TPM_TRG_TCONT_3);
-	off += sprintf(buf+off, "\t\tTPM_TRG_TCONT_4             %#.4X\n", TPM_TRG_TCONT_4);
-	off += sprintf(buf+off, "\t\tTPM_TRG_TCONT_5             %#.4X\n", TPM_TRG_TCONT_5);
-	off += sprintf(buf+off, "\t\tTPM_TRG_TCONT_6             %#.4X\n", TPM_TRG_TCONT_6);
-	off += sprintf(buf+off, "\t\tTPM_TRG_TCONT_7             %#.4X\n", TPM_TRG_TCONT_7);
-	off += sprintf(buf+off, "\t\tTPM_TRG_LLID_0              %#.4X\n", TPM_TRG_LLID_0);
-	off += sprintf(buf+off, "\t\tTPM_TRG_LLID_1              %#.4X\n", TPM_TRG_LLID_1);
-	off += sprintf(buf+off, "\t\tTPM_TRG_LLID_2              %#.4X\n", TPM_TRG_LLID_2);
-	off += sprintf(buf+off, "\t\tTPM_TRG_LLID_3              %#.4X\n", TPM_TRG_LLID_3);
-	off += sprintf(buf+off, "\t\tTPM_TRG_LLID_4              %#.4X\n", TPM_TRG_LLID_4);
-	off += sprintf(buf+off, "\t\tTPM_TRG_LLID_5              %#.4X\n", TPM_TRG_LLID_5);
-	off += sprintf(buf+off, "\t\tTPM_TRG_LLID_6              %#.4X\n", TPM_TRG_LLID_6);
-	off += sprintf(buf+off, "\t\tTPM_TRG_LLID_7              %#.4X\n", TPM_TRG_LLID_7);
 	off += sprintf(buf+off, "\t\tTPM_TRG_UNI_0               %#.5X\n", TPM_TRG_UNI_0);
 	off += sprintf(buf+off, "\t\tTPM_TRG_UNI_1               %#.5X\n", TPM_TRG_UNI_1);
 	off += sprintf(buf+off, "\t\tTPM_TRG_UNI_2               %#.5X\n", TPM_TRG_UNI_2);
@@ -754,7 +776,6 @@ int sfs_help_mc_ipvx_stream_add(char* buf)
 	off += sprintf(buf+off, "\t\tTPM_TRG_UNI_VIRT            %#.5X\n", TPM_TRG_UNI_VIRT);
 	off += sprintf(buf+off, "\t\tTPM_TRG_PORT_CPU            %#.5X\n", TPM_TRG_PORT_CPU);
 	off += sprintf(buf+off, "\t\tTPM_TRG_PORT_UNI_ANY        %#.5X\n", TPM_TRG_PORT_UNI_ANY);
-	off += sprintf(buf+off, "\t\tTPM_TRG_PORT_UNI_CPU_LOOP   %#.5X\n", TPM_TRG_PORT_UNI_CPU_LOOP);
 
 	off += sprintf(buf+off, "\n\tIPV4 address: dst_ip 224.x.y.z  - 239.x.y.z.  Source address w.x.y.z. Each part is decimal value in range 0..255.\n");
 	off += sprintf(buf+off, "\n\n");
@@ -763,9 +784,20 @@ int sfs_help_mc_ipvx_stream_add(char* buf)
 	off += sprintf(buf+off, "\tstream           (dec)Stream number\n");
 	off += sprintf(buf+off, "\ttarget_ports     (hex)Bitmap of port targets - SEE ABOVE\n");
 
+	off += sprintf(buf+off, "\n\n");
+	off += sprintf(buf+off, "echo [owner_id] [stream] [igmp_mode] [mc_stream_pppoe] [vid] [src_ip] [dst_ip] [ignore] [target_queue] [target_ports] > mc_ipv4_stream_set_queue_add\n");
+	off += sprintf(buf+off, "\tdest_queue       (dec)destination queue number\n");
+	off += sprintf(buf+off, "Creates a new multicast stream with specified dest queue number\n");
+
 	off += sprintf(buf+off, "\nIPV6: echo [owner_id] [stream] [igmp_mode] [mc_stream_pppoe] [vid] [src_ip] [dst_ip] [ignore] [target_ports] > mc_ipv6_stream_add\n");
 	off += sprintf(buf+off, "Creates a new multicast stream, params refer to IPv4 MC stream add interface, except dst_ip.\n");
 	off += sprintf(buf+off, "\tIPV6 address: ff00:aabb:bbcc:ccdd:ddee:eeff:1111:2222. Each part is Hex value in range 0..ffff.\n");
+
+	off += sprintf(buf+off, "\n\n");
+	off += sprintf(buf+off, "echo [owner_id] [stream] [igmp_mode] [mc_stream_pppoe] [vid] [src_ip] [dst_ip] [ignore] [target_queue] [target_ports] > mc_ipv6_stream_set_queue_add\n");
+	off += sprintf(buf+off, "\tdest_queue       (dec)destination queue number\n");
+	off += sprintf(buf+off, "Creates a new multicast stream with specified dest queue number\n");
+
 	off += sprintf(buf+off, "\n\n");
 	off += sprintf(buf+off, "echo [owner_id] [stream] [target_ports] > mc_ipv6_stream_update\n");
 	off += sprintf(buf+off, "\towner_id         (dec)Application owner ID\n");
@@ -948,6 +980,56 @@ int sfs_help_mib_reset(char* buf)
     off += sprintf(buf+off, "echo [owner_id] [reset_level] > mib_reset   - MIB reset\n");
     off += sprintf(buf+off, "\towner_id         (dec)Application owner ID\n");
     off += sprintf(buf+off, "\t[reset_level]    (dec)Reset level 0 or 1\n");
+
+    return(off);
+}
+/*******************************************************************************
+**
+**  sfs_help_set_active_wan - see header of sfs_tpm_cfg_index
+**
+*******************************************************************************/
+int sfs_help_set_active_wan(char* buf)
+{
+    int off = 0;
+
+    off += sprintf(buf+off, "echo [owner_id] [active_wan] > set_active_wan\n");
+    off += sprintf(buf+off, "\t[owner_id]      (dec)Application owner ID\n");
+    off += sprintf(buf+off, "\t[active_wan]    (dec)GMAC0: 0; GMAC1: 1; PON: 2\n");
+
+    return(off);
+}
+/*******************************************************************************
+**
+**  sfs_help_hot_swap_profile - see header of sfs_tpm_cfg_index
+**
+*******************************************************************************/
+int sfs_help_hot_swap_profile(char* buf)
+{
+    int off = 0;
+
+    off += sprintf(buf+off, "echo [owner_id] [profile_id] > hot_swap_profile\n");
+    off += sprintf(buf+off, "before hot swap profile, eth0, eth1 and pon0 must be taken down by ifconfig command; and be bring up after\n");
+    off += sprintf(buf+off, "\t[owner_id]      (dec)Application owner ID\n");
+    off += sprintf(buf+off, "\t[profile_id]    (dec)TPM_G0_WAN_G1_INT_SWITCH: %d; TPM_G1_WAN_G0_INT_SWITCH: %d\n",
+			TPM_G0_WAN_G1_INT_SWITCH, TPM_G1_WAN_G0_INT_SWITCH);
+
+    return(off);
+}
+/*******************************************************************************
+**
+**  sfs_help_set_port_hwf_admin - see header of sfs_tpm_cfg_index
+**
+*******************************************************************************/
+int sfs_help_set_port_hwf_admin(char* buf)
+{
+    int off = 0;
+
+    off += sprintf(buf+off, "echo [owner_id] [port] [txp] [enable] > set_port_hwf_admin\n");
+    off += sprintf(buf+off, "disable/enable HWF to port\n");
+    off += sprintf(buf+off, "\t[owner_id]      (dec)Application owner ID\n");
+    off += sprintf(buf+off, "\t[port]          (dec)GMAC0: 0; GMAC1: 1; PON: 2\n");
+    off += sprintf(buf+off, "\t[txp]           (dec)T-CONT or LLID, for GMAC0/1 it should be 0\n");
+    off += sprintf(buf+off, "\t[enable]        (dec)disable: 0; enable: 1\n");
 
     return(off);
 }
@@ -1268,7 +1350,7 @@ int sys_help_ipv6_dip_acl_rule_add(char* buf)
     off += sprintf(buf+off, "\t\tTPM_ACTION_TO_CPU               %#.2X\n", TPM_ACTION_TO_CPU);
     off += sprintf(buf+off, "\t\tTPM_ACTION_CUST_CPU_PKT_PARSE   %#.2X\n", TPM_ACTION_CUST_CPU_PKT_PARSE);
 
-    off += sprintf(buf+off, "\tnext_phase       (str)Parse stage (l2/l3/ipv4/ipv6_gen/ipv6_dip/ipv6_nh/ipv6_l4/done)\n");
+    off += sprintf(buf+off, "\tnext_phase       (str)Parse stage (done)\n");
 
     off += sprintf(buf+off, "\tmod_bm           (hex)Packet fields modification command bitmap:\n");
     off += sprintf(buf+off, "\t\tTPM_VLAN_MOD                    %#.4X\n", TPM_VLAN_MOD);
@@ -1360,7 +1442,7 @@ int sfs_help_ipv6_l4_ports_rule_add     (char *buf)
     off += sprintf(buf+off, "\t\tTPM_ACTION_SET_PKT_MOD          %#.2X\n", TPM_ACTION_SET_PKT_MOD);
     off += sprintf(buf+off, "\t\tTPM_ACTION_TO_CPU               %#.2X\n", TPM_ACTION_TO_CPU);
     off += sprintf(buf+off, "\t\tTPM_ACTION_CUST_CPU_PKT_PARSE   %#.2X\n", TPM_ACTION_CUST_CPU_PKT_PARSE);
-    off += sprintf(buf+off, "\tnext_phase       (str)Parse stage (ipv6_gen/ipv6_dip/ctc_cm/done)\n");
+    off += sprintf(buf+off, "\tnext_phase       (str)Parse stage (ipv6_gen/ctc_cm/done)\n");
     off += sprintf(buf+off, "\tl4_src_port      (dec)L4 source port\n");
     off += sprintf(buf+off, "\tl4_dst_port      (dec)L4 destination port\n");
 

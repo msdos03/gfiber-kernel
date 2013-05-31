@@ -259,10 +259,10 @@ tpm_common_mempool_t *tpm_common_mempool_get(void *ptr)
 		return NULL;
 
 	hdr = (tpm_common_mpool_hdr_t *) ((uint8_t *) ptr - sizeof(tpm_common_mpool_hdr_t));
-	
+
 	if (!hdr)
 		return NULL;
-		
+
 	ftr = (tpm_common_mpool_ftr_t *) ((uint8_t *) ptr + hdr->pool->data_size);
 
 	if (hdr->magic != TPM_COMMON_MPOOL_HDR_MAGIC) {

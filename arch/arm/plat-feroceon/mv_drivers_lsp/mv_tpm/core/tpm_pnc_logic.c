@@ -439,6 +439,7 @@ int32_t tpm_pncl_mh_parse(uint32_t offset,
 	int32_t ret_code;
 	uint16_t mh = 0;
 	tpm_db_pon_type_t pon_type;
+	uint32_t switch_init;
 
 	/* Parse MH, depending on field parse request */
 
@@ -483,8 +484,20 @@ int32_t tpm_pncl_mh_parse(uint32_t offset,
 		TPM_OS_DEBUG(TPM_PNCL_MOD, "MH from GemPort\n");
 	} else {
 		if (tcam_in->pkt_key.src_port == TPM_SRC_PORT_WAN) {
-			/* DS, from WAN, no MH need to be parsed */
-			mh = 0;
+			/* it is for multicast per uni vlan feature
+			   in the first loop, pkt goes to G1 from G0 through Switch.
+			 */
+			ret_code = tpm_db_switch_init_get(&switch_init);
+			IF_ERROR(ret_code);
+			if (switch_init) {
+				mh = tpm_db_eth_port_switch_port_get(TPM_SRC_PORT_WAN);
+				if (TPM_DB_ERR_PORT_NUM == mh) {
+					TPM_OS_ERROR(TPM_PNCL_MOD, "tpm_db_eth_port_switch_port_get returned %d\n", mh);
+					return(TPM_FAIL);
+				}
+			} else
+				mh = 0;
+
 			/* Update TCAM Data and Mask */
 			*(uint16_t *) (&(pkt_data->pkt_byte[offset])) = htons(mh);
 			*(uint16_t *) (&(pkt_mask->pkt_byte[offset])) = htons(MH_UNI_PORT_MASK);
@@ -3425,6 +3438,7 @@ int32_t tpm_pncl_init_mac_learn_range(void)
 	uint32_t free_entry = 0, entry_id;
 	uint32_t queue_id;
 	tpm_gmacs_enum_t lpk_gmac;
+	int32_t cpu_rx_queue;
 
 	/* Set Structs to zero */
 	memset(&range_data, 0, sizeof(tpm_db_pnc_range_t));
@@ -3439,14 +3453,15 @@ int32_t tpm_pncl_init_mac_learn_range(void)
 	IF_ERROR(ret_code);
 
 	free_entry = range_data.pnc_range_oper.free_entries;
-	entry_id = range_data.pnc_range_conf.range_end;
 	/* check the free size in the range for default rule*/
-	if (free_entry == 0) {
-		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "No free entries\n");
+	if (free_entry < 2) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "No enough entries(%d) for MAC learn default rules\n",
+			     free_entry);
 		return(TPM_FAIL);
 	}
 
-	/* construct default rule */
+	/* construct default rule on GMAC0 forward packet to GMAC1*/
+	entry_id = range_data.pnc_range_conf.range_end;
 	/* Set Lookup Id */
 	pnc_entry.tcam_entry.lu_id = range_data.pnc_range_conf.base_lu_id;
 	/* Set port_id */
@@ -3460,13 +3475,54 @@ int32_t tpm_pncl_init_mac_learn_range(void)
 	pnc_entry.sram_entry.flowid_updt_mask = TPM_TXP_FL_UPDT_MASK;
 
 	/*forward packet to GMAC1 as default*/
-	if (TPM_DB_OK != tpm_db_gmac_lpk_queue_get(&lpk_gmac, &queue_id)) {
+	if (TPM_DB_OK != tpm_db_gmac_lpk_queue_get(&lpk_gmac,
+						   &queue_id,
+						   TPM_GMAC1_QUEUE_DATA_TRAFFIC)) {
 		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "loopback gmac queue get failed \n");
 		return TPM_FAIL;
 	}
-	/* Set target GMAC1 */
+	/* Set target GMAC1, queue id changed to cpu_rate_limit queue*/
 	pnc_entry.sram_entry.flowid_val = (TPM_PNC_TRG_GMAC1 << TPM_TXP_FL_SHIFT);
 	pnc_entry.sram_entry.pnc_queue = queue_id;
+
+	/* Write to PNC */
+	tpm_pnc_set(entry_id, 0, &pnc_entry);
+
+	ret_code = tpm_db_pnc_rng_api_end_dec(TPM_PNC_MAC_LEARN);
+	IF_ERROR(ret_code);
+
+	/* Write to Shadow */
+	ret_code = tpm_db_pnc_shdw_ent_set(entry_id, &pnc_entry);
+	IF_ERROR(ret_code);
+
+	/*CPU rate limit*/
+	memset(&pnc_entry, 0, sizeof(tpm_pnc_all_t));
+	entry_id = range_data.pnc_range_conf.range_end - 1;
+	/* Set Lookup Id */
+	pnc_entry.tcam_entry.lu_id = range_data.pnc_range_conf.base_lu_id;
+	/* Set port_id */
+	pnc_entry.tcam_entry.port_ids = TPM_BM_GMAC_1;
+	/* check MH, 0xAACC indicates MAC learning packets */
+	pnc_entry.tcam_entry.pkt_data.pkt_byte[0] = TPM_MOD2_MAC_LEARN_MH >> 8;
+	pnc_entry.tcam_entry.pkt_data.pkt_byte[1] = TPM_MOD2_MAC_LEARN_MH & 0xFF;
+	pnc_entry.tcam_entry.pkt_mask.pkt_byte[0] = 0xFF;
+	pnc_entry.tcam_entry.pkt_mask.pkt_byte[1] = 0xFF;
+	/* Set LU Done */
+	pnc_entry.sram_entry.lookup_done = TPM_TRUE;
+
+	pnc_entry.sram_entry.pnc_queue = TPM_PNCL_NO_QUEUE_UPDATE;
+	pnc_entry.sram_entry.shift_updt_reg = TPM_PNC_NOSHIFT_UPDATE_REG;
+
+	pnc_entry.sram_entry.flowid_updt_mask = TPM_TXP_FL_UPDT_MASK;
+
+	/* Get default CPU queue */
+	tpm_db_get_cpu_rx_queue(&cpu_rx_queue);
+	/* Trap to CPU */
+	pnc_entry.sram_entry.flowid_val = (TPM_PNC_TRG_CPU << TPM_TXP_FL_SHIFT);
+	pnc_entry.sram_entry.pnc_queue = cpu_rx_queue;
+	/* Set result info */
+	pnc_entry.sram_entry.res_info_15_0_data |= (1 << TPM_PNC_RI_MAC_LEARN_BIT);
+	pnc_entry.sram_entry.res_info_15_0_mask |= (1 << TPM_PNC_RI_MAC_LEARN_BIT);
 
 	/* Write to PNC */
 	tpm_pnc_set(entry_id, 0, &pnc_entry);

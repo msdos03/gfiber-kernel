@@ -56,6 +56,9 @@ typedef struct {
 	unsigned int tx_miss;
 	unsigned int rx_over;
 	unsigned int tx_under;
+#ifdef MV_TDM_EXT_STATS
+	MV_TDM_EXTENDED_STATS tdm_ext_stats;
+#endif
 } tal_stats_t;
 
 typedef struct {

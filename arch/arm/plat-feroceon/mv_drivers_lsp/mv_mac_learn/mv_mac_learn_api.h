@@ -37,6 +37,10 @@
 #define MAC_LEARN_OK 0
 #define MAC_LEARN_FAIL 1
 
+/* CPU rate limit related*/
+#define MAC_LEARN_RATE_LIMIT 128
+#define MAC_LEARN_BUCKET_SIZE 2000
+
 /* Function protype
 ------------------------------------------------------------------------------*/
 

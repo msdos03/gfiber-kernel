@@ -284,7 +284,7 @@ int32_t tpm_init_mc_get_para(void)
 		tpm_setup.mc_setting.mc_hwf_queue = MV_TPM_UN_INITIALIZED_INIT_PARAM;
 		tpm_setup.mc_setting.mc_cpu_queue = MV_TPM_UN_INITIALIZED_INIT_PARAM;
 	}
-	
+
 	app_rc = get_ipv4_mc_support(&tpm_setup.mc_setting.ipv4_mc_support);
 	if (app_rc == TPM_FAIL)
 		rc = TPM_FAIL;
@@ -365,16 +365,29 @@ int32_t tpm_init_gmac_port_conf_get_para(void)
 	return rc;
 }
 
-int32_t tpm_init_backup_wan_get_para(void)
+int32_t tpm_init_active_wan_get_para(void)
 {
 	int32_t	rc = TPM_OK;
 	int 	app_rc;
 
-	app_rc = get_backup_wan_params(&(tpm_setup.backup_wan));
+	app_rc = get_active_wan_params(&(tpm_setup.active_wan));
 	if (app_rc == TPM_FAIL)
 		rc = TPM_FAIL;
 	else if (app_rc == TPM_NOT_FOUND)
-		tpm_setup.backup_wan = MV_TPM_UN_INITIALIZED_INIT_PARAM;
+		tpm_setup.active_wan = MV_TPM_UN_INITIALIZED_INIT_PARAM;
+
+	return rc;
+}
+int32_t tpm_init_ds_mac_based_trunking_get_para(void)
+{
+	int32_t	rc = TPM_OK;
+	int 	app_rc;
+
+	app_rc = get_ds_mac_based_trunking_enable(&(tpm_setup.ds_mac_based_trunk_enable));
+	if (app_rc == TPM_FAIL)
+		rc = TPM_FAIL;
+	else if (app_rc == TPM_NOT_FOUND)
+		tpm_setup.ds_mac_based_trunk_enable = MV_TPM_UN_INITIALIZED_INIT_PARAM;
 
 	return rc;
 }
@@ -808,7 +821,7 @@ int32_t module_tpmSetup(tpm_setup_t *tpm_initp)
 	tpm_init_eth_cmplx_profile_get_para();
 	tpm_init_eth_port_conf_get_para();
 	tpm_init_gmac_port_conf_get_para();
-	tpm_init_backup_wan_get_para();
+	tpm_init_active_wan_get_para();
 	tpm_init_gmac_conn_get_para();
 	tpm_init_gmac_rx_get_para();
 	tpm_init_gmac_tx_get_para();
@@ -824,6 +837,7 @@ int32_t module_tpmSetup(tpm_setup_t *tpm_initp)
 	tpm_init_ctc_cm_ipv6_parse_window_get_para();
 	tpm_init_pnc_mac_learn_enable_get_para();
 	tpm_init_switch_init_get_para();
+	tpm_init_ds_mac_based_trunking_get_para();
 
 	free_xml_head_ptr();
 

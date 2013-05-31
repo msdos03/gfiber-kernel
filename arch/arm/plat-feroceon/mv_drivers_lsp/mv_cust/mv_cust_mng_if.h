@@ -47,10 +47,7 @@
 #define MV_CUST_IOCTL_MAP_RULE_CLEAR          _IOW(MV_CUST_IOCTL_MAGIC,  9,  unsigned int)
 #define MV_CUST_IOCTL_TAG_MAP_RULE_GET        _IOR(MV_CUST_IOCTL_MAGIC,  10, unsigned int)
 #define MV_CUST_IOCTL_UNTAG_MAP_RULE_GET      _IOR(MV_CUST_IOCTL_MAGIC,  11, unsigned int)
-
-
-
-
+#define MV_CUST_IOCTL_APP_ETH_TYPE_SET        _IOW(MV_CUST_IOCTL_MAGIC,  12, unsigned int)
 
 /* Enums
 ------------------------------------------------------------------------------*/
@@ -77,6 +74,12 @@ typedef struct
     mv_cust_dscp_pbits_t dscp_map;
 } mv_cust_ioctl_dscp_map_t;
 
+typedef struct
+{
+    mv_cust_app_type_e app_type;
+    uint16_t           eth_type;
+} mv_cust_ioctl_app_etype_t;
+
 /* MV_CUST Char Device Structure */
 /* ========================= */
 typedef struct
@@ -85,6 +88,7 @@ typedef struct
   mv_cust_ioctl_llid_set_t      mv_cust_ioctl_llid_set;
   mv_cust_ioctl_flow_map_t      mv_cust_ioctl_flow_map;
   mv_cust_ioctl_dscp_map_t      mv_cust_ioctl_dscp_map;
+  mv_cust_ioctl_app_etype_t     mv_cust_ioctl_app_etype;
 
   struct cdev  cdev;
 } mv_cust_cdev_t;
@@ -105,23 +109,3 @@ typedef struct
 ------------------------------------------------------------------------------*/
 
 #endif /* _MV_CUST_MNG_IF_H_ */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

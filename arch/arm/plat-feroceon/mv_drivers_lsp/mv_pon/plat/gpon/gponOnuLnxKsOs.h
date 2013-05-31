@@ -89,6 +89,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* Typedefs
 ------------------------------------------------------------------------------*/
 
+/* Global variables
+------------------------------------------------------------------------------*/
+extern S_onuPonWork      gponTcontCleanWork[8];
+extern S_onuPonWork      gponTcontCleanAllWork;
+extern S_onuPonWork      gponTcontActiveWork[8];
+extern S_onuPonWorkQueue gponTcontFlushWq;
+
 /* Global functions
 ------------------------------------------------------------------------------*/
 /* Init API */
@@ -97,8 +104,11 @@ extern MV_STATUS onuGponRtosResourceInit(void);
 extern MV_STATUS onuGponRtosResourceRelease(void);
 
 /* Interrupt API */
-extern MV_STATUS onuGponIrqRegister(S_onuPonIrq *irqId); 
+extern MV_STATUS onuGponIrqRegister(S_onuPonIrq *irqId);
 extern MV_STATUS onuGponIrqTaskletInit(S_onuPonIrq *irqId);
+
+/* Work queue API */
+extern void onuGponWqTcontInit(void);
 
 
 /* Macros

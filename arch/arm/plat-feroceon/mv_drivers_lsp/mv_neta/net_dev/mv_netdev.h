@@ -653,6 +653,7 @@ int         mv_eth_change_mtu_internals(struct net_device *netdev, int mtu);
 
 int         mv_eth_rx_reset(int port);
 int         mv_eth_txp_reset(int port, int txp);
+int			mv_eth_txq_clean(int port, int txp, int txq);
 
 MV_STATUS   mv_eth_rx_ptks_coal_set(int port, int rxq, MV_U32 value);
 MV_STATUS   mv_eth_rx_time_coal_set(int port, int rxq, MV_U32 value);
@@ -677,6 +678,7 @@ void        mv_eth_netdev_print(struct net_device *netdev);
 void        mv_eth_status_print(void);
 void        mv_eth_port_status_print(unsigned int port);
 void        mv_eth_port_stats_print(unsigned int port);
+void		mv_eth_pool_status_print(int pool);
 
 void        mv_eth_set_noqueue(struct net_device *dev, int enable);
 

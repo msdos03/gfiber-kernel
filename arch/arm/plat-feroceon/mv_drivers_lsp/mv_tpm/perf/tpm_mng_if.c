@@ -117,6 +117,7 @@ typedef struct
   tpm_ioctl_tm_tm_t           tpm_ioctl_tm_tm;
   tpm_ioctl_igmp_t            tpm_ioctl_igmp;
   tpm_ioctl_mib_reset_t       tpm_ioctl_mib_reset;
+  tpm_ioctl_set_active_wan_t  tpm_ioctl_set_active_wan;
   tpm_ioctl_swport_pm_3_t     apm_ioctl_pm_ethernet_3;
   tpm_ioctl_rx_igmp_t         tpm_ioctl_rx_igmp;
   tpm_ioctl_tx_igmp_t         tpm_ioctl_tx_igmp;
@@ -654,7 +655,7 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
                   ret = 0;
                   break;
-		  
+
 	      /* ====== MV_TPM_IOCTL_ADD_CTC_CM_ACL_RULE ========= */
 	      case MV_TPM_IOCTL_ADD_CTC_CM_ACL_RULE:
 	      	  rcode = tpm_add_ctc_cm_acl_rule(tpm_add_acl_rule->owner_id,
@@ -686,6 +687,24 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 				    &tpm_add_acl_rule->ctc_cm_acl_rule.pkt_frwd,
 				    tpm_add_acl_rule->ctc_cm_acl_rule.pkt_act,
 				    tpm_add_acl_rule->ctc_cm_acl_rule.p_bits);
+	           if (rcode != TPM_OK)
+		         goto ioctlErr;
+
+                   if (copy_to_user((tpm_ioctl_add_acl_rule_t*)arg, tpm_add_acl_rule, sizeof(tpm_ioctl_add_acl_rule_t))) {
+		           printk(KERN_ERR "ERROR: (%s:%d) copy_to_user failed\n", __FUNCTION__, __LINE__);
+		           goto ioctlErr;
+	           }
+	           ret = 0;
+	           break;
+              /* ====== MV_TPM_IOCTL_ADD_DS_LOAD_BALANCE_RULE ========= */
+	      case MV_TPM_IOCTL_ADD_DS_LOAD_BALANCE_RULE:
+	          rcode = tpm_add_ds_load_balance_rule(tpm_add_acl_rule->owner_id,
+				    tpm_add_acl_rule->rule_num,
+				    &tpm_add_acl_rule->rule_idx,
+				    tpm_add_acl_rule->parse_rule_bm,
+				    tpm_add_acl_rule->ds_load_balance_acl_rule.parse_flags_bm,
+				    &tpm_add_acl_rule->ds_load_balance_acl_rule.l2_key,
+				    tpm_add_acl_rule->ds_load_balance_acl_rule.tgrt);
 	           if (rcode != TPM_OK)
 		         goto ioctlErr;
 
@@ -748,6 +767,24 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
               case MV_TPM_IOCTL_DEL_L2_ACL_RULE:
 
                   rcode = tpm_del_l2_rule(  tpm_del_acl_rule->owner_id,
+                                            tpm_del_acl_rule->rule_idx);
+
+                  if(rcode != TPM_OK)
+                    goto ioctlErr;
+
+                  if(copy_to_user((tpm_ioctl_del_acl_rule_t*)arg, tpm_del_acl_rule, sizeof(tpm_ioctl_del_acl_rule_t)))
+                  {
+                    printk(KERN_ERR "ERROR: (%s:%d) copy_to_user failed\n", __FUNCTION__, __LINE__);
+                    goto ioctlErr;
+                  }
+
+                  ret = 0;
+                  break;
+
+              /* ====== MV_TPM_IOCTL_DEL_DS_LOAD_BALANCE_RULE ========= */
+              case MV_TPM_IOCTL_DEL_DS_LOAD_BALANCE_RULE:
+
+                  rcode = tpm_del_ds_load_balance_rule(  tpm_del_acl_rule->owner_id,
                                             tpm_del_acl_rule->rule_idx);
 
                   if(rcode != TPM_OK)
@@ -936,19 +973,19 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
                   break;
 	       /* ====== MV_TPM_IOCTL_DEL_CTC_CM_ACL_RULE ========= */
 	       case MV_TPM_IOCTL_DEL_CTC_CM_ACL_RULE:
-		  
+
 		   rcode = tpm_del_ctc_cm_acl_rule(tpm_del_acl_rule->owner_id,
 						tpm_del_acl_rule->src_port,
 						tpm_del_acl_rule->precedence);
-		  
+
 		   if (rcode != TPM_OK)
 		   	goto ioctlErr;
-		  
+
 		   if (copy_to_user((tpm_ioctl_del_acl_rule_t*)arg, tpm_del_acl_rule, sizeof(tpm_ioctl_del_acl_rule_t))) {
 			printk(KERN_ERR "ERROR: (%s:%d) copy_to_user failed\n", __FUNCTION__, __LINE__);
 			goto ioctlErr;
 		   }
-		  
+
 		   ret = 0;
 		   break;
 
@@ -1142,6 +1179,25 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
                   ret = 0;
                   break;
+              /* ====== MV_TPM_IOCTL_ADD_IPv4_MC_STREAM_SET_QUEUE ========= */
+              case MV_TPM_IOCTL_ADD_IPv4_MC_STREAM_SET_QUEUE:
+
+
+                  rcode = tpm_add_ipv4_mc_stream_set_queue(  tpm_mc_rule->owner_id,
+                                                   tpm_mc_rule->stream_num,
+                                                   tpm_mc_rule->igmp_mode,
+                                                   tpm_mc_rule->mc_stream_pppoe,
+                                                   tpm_mc_rule->vid,
+                                                 &(tpm_mc_rule->ipv4_mc.ipv4_src_add[0]),
+                                                 &(tpm_mc_rule->ipv4_mc.ipv4_dst_add[0]),
+                                                   tpm_mc_rule->ipv4_mc.ignore_ipv4_src,
+                                                   tpm_mc_rule->dest_queue,
+                                                   tpm_mc_rule->dest_port_bm);
+                  if(rcode != TPM_OK)
+                    goto ioctlErr;
+
+                  ret = 0;
+                  break;
 
               /* ====== MV_TPM_IOCTL_MOD_IPv4_MC_STREAM ========= */
               case MV_TPM_IOCTL_MOD_IPv4_MC_STREAM:
@@ -1166,46 +1222,65 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
                   ret = 0;
                   break;
 
-			  /* ====== MV_TPM_IOCTL_ADD_IPv6_MC_STREAM ========= */
-			  case MV_TPM_IOCTL_ADD_IPv6_MC_STREAM:
+	      /* ====== MV_TPM_IOCTL_ADD_IPv6_MC_STREAM ========= */
+	      case MV_TPM_IOCTL_ADD_IPv6_MC_STREAM:
 
-				  rcode = tpm_add_ipv6_mc_stream(  tpm_mc_rule->owner_id,
-								   tpm_mc_rule->stream_num,
-								   tpm_mc_rule->igmp_mode,
-								   tpm_mc_rule->mc_stream_pppoe,
-								   tpm_mc_rule->vid,
-								   &(tpm_mc_rule->ipv6_mc.ipv6_src_add[0]),
-								   &(tpm_mc_rule->ipv6_mc.ipv6_dst_add[0]),
-								   tpm_mc_rule->ipv6_mc.ignore_ipv6_src,
-								   tpm_mc_rule->dest_port_bm);
-				  if(rcode != TPM_OK)
-					goto ioctlErr;
+		      rcode = tpm_add_ipv6_mc_stream(  tpm_mc_rule->owner_id,
+						       tpm_mc_rule->stream_num,
+						       tpm_mc_rule->igmp_mode,
+						       tpm_mc_rule->mc_stream_pppoe,
+						       tpm_mc_rule->vid,
+						       &(tpm_mc_rule->ipv6_mc.ipv6_src_add[0]),
+						       &(tpm_mc_rule->ipv6_mc.ipv6_dst_add[0]),
+						       tpm_mc_rule->ipv6_mc.ignore_ipv6_src,
+						       tpm_mc_rule->dest_port_bm);
+		      if(rcode != TPM_OK)
+			    goto ioctlErr;
 
-				  ret = 0;
-				  break;
+		      ret = 0;
+		      break;
 
-			  /* ====== MV_TPM_IOCTL_MOD_IPv6_MC_STREAM ========= */
-			  case MV_TPM_IOCTL_MOD_IPv6_MC_STREAM:
+	      /* ====== MV_TPM_IOCTL_ADD_IPv6_MC_STREAM_SET_QUEUE ========= */
+	      case MV_TPM_IOCTL_ADD_IPv6_MC_STREAM_SET_QUEUE:
 
-				  rcode = tpm_updt_ipv6_mc_stream(tpm_mc_rule->owner_id,
-												  tpm_mc_rule->stream_num,
-												  tpm_mc_rule->dest_port_bm);
-				  if(rcode != TPM_OK)
-					goto ioctlErr;
+		      rcode = tpm_add_ipv6_mc_stream_set_queue(tpm_mc_rule->owner_id,
+						       tpm_mc_rule->stream_num,
+						       tpm_mc_rule->igmp_mode,
+						       tpm_mc_rule->mc_stream_pppoe,
+						       tpm_mc_rule->vid,
+						       &(tpm_mc_rule->ipv6_mc.ipv6_src_add[0]),
+						       &(tpm_mc_rule->ipv6_mc.ipv6_dst_add[0]),
+						       tpm_mc_rule->ipv6_mc.ignore_ipv6_src,
+						       tpm_mc_rule->dest_queue,
+						       tpm_mc_rule->dest_port_bm);
+		      if(rcode != TPM_OK)
+			    goto ioctlErr;
 
-				  ret = 0;
-				  break;
+		      ret = 0;
+		      break;
 
-			  /* ====== MV_TPM_IOCTL_DEL_IPv6_MC_STREAM ========= */
-			  case MV_TPM_IOCTL_DEL_IPv6_MC_STREAM:
+	      /* ====== MV_TPM_IOCTL_MOD_IPv6_MC_STREAM ========= */
+	      case MV_TPM_IOCTL_MOD_IPv6_MC_STREAM:
 
-				  rcode = tpm_del_ipv6_mc_stream(tpm_mc_rule->owner_id,
-												 tpm_mc_rule->stream_num);
-				  if(rcode != TPM_OK)
-					goto ioctlErr;
+		      rcode = tpm_updt_ipv6_mc_stream(tpm_mc_rule->owner_id,
+										      tpm_mc_rule->stream_num,
+										      tpm_mc_rule->dest_port_bm);
+		      if(rcode != TPM_OK)
+			    goto ioctlErr;
 
-				  ret = 0;
-				  break;
+		      ret = 0;
+		      break;
+
+	      /* ====== MV_TPM_IOCTL_DEL_IPv6_MC_STREAM ========= */
+	      case MV_TPM_IOCTL_DEL_IPv6_MC_STREAM:
+
+		      rcode = tpm_del_ipv6_mc_stream(tpm_mc_rule->owner_id,
+										     tpm_mc_rule->stream_num);
+		      if(rcode != TPM_OK)
+			    goto ioctlErr;
+
+		      ret = 0;
+		      break;
 
               default:
                 ret = -EINVAL;
@@ -1294,7 +1369,18 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
               /* ====== MV_TPM_IOCTL_ADD_LOOP_DETECT_CHNL ========= */
               case MV_TPM_IOCTL_ADD_LOOP_DETECT_CHNL:
 
-                  rcode = tpm_loop_detect_add_channel(tpm_mng_ch->tpm_ioctl_oam_ch.owner_id);
+                  rcode = tpm_loop_detect_add_channel(tpm_mng_ch->tpm_ioctl_oam_ch.owner_id,
+		  				      tpm_mng_ch->loopback_detect_ety);
+                  if(rcode != TPM_OK)
+                    goto ioctlErr;
+
+                  ret = 0;
+                  break;
+
+              /* ====== MV_TPM_IOCTL_ADD_LOOP_DETECT_CHNL ========= */
+              case MV_TPM_IOCTL_DEL_LOOP_DETECT_CHNL:
+
+                  rcode = tpm_loop_detect_del_channel(tpm_mng_ch->tpm_ioctl_oam_ch.owner_id);
                   if(rcode != TPM_OK)
                     goto ioctlErr;
 
@@ -1540,6 +1626,26 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
                     goto ioctlErr;
                   ret = 0;
                   break;
+              /* ====== MV_TPM_IOCTL_SW_SET_TRUNK_PORT ========= */
+              case MV_TPM_IOCTL_SW_SET_TRUNK_PORT:
+                  rcode = tpm_sw_set_trunk_ports(tpm_sw_mac_security->owner_id,
+						 tpm_sw_mac_security->trunk.trunk_id,
+						 tpm_sw_mac_security->trunk.trunk_mask);
+
+		   if(rcode != TPM_OK)
+		       goto ioctlErr;
+		   ret = 0;
+		   break;
+              /* ====== MV_TPM_IOCTL_SW_SET_TRUNK_MASK ========= */
+              case MV_TPM_IOCTL_SW_SET_TRUNK_MASK:
+              rcode = tpm_sw_set_trunk_mask(tpm_sw_mac_security->owner_id,
+                                            tpm_sw_mac_security->trunk.mask_num,
+                                            tpm_sw_mac_security->trunk.trunk_mask);
+
+              if(rcode != TPM_OK)
+                  goto ioctlErr;
+              ret = 0;
+              break;
 
               /* ====== MV_TPM_IOCTL_SW_GET_MIRROR ========= */
               case MV_TPM_IOCTL_SW_GET_MIRROR:
@@ -1770,6 +1876,18 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
             }
             ret = 0;
             break;
+
+          /* ====== MV_TPM_IOCTL_SW_PORT_ADD_VID_SET_EGRESS_MODE ========= */
+          case MV_TPM_IOCTL_SW_PORT_ADD_VID_SET_EGRESS_MODE:
+            rcode = tpm_sw_port_add_vid_set_egrs_mode(tpm_sw_vlan_filter->owner_id,
+                                                      tpm_sw_vlan_filter->port,
+                                                      tpm_sw_vlan_filter->vid,
+                                                      tpm_sw_vlan_filter->egress_mode);
+            if(rcode != TPM_OK)
+              goto ioctlErr;
+            ret = 0;
+            break;
+
           default:
             ret = -EINVAL;
           }
@@ -2106,6 +2224,18 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
                   ret = 0;
                   break;
+
+              /* ====== MV_TPM_IOCTL_UNI_2_SW_PORT ========= */
+              case MV_TPM_IOCTL_UNI_2_SW_PORT:
+                  rcode = tpm_xlate_uni_2_switch_port(  tpm_sw_phy->owner_id,
+                                                        tpm_sw_phy->extern_port_id,
+                                                        &(tpm_sw_phy->switch_port_id));
+                  if(rcode != TPM_OK)
+                    goto ioctlErr;
+
+                  ret = 0;
+                  break;
+
              default:
                ret = -EINVAL;
           }
@@ -2120,7 +2250,8 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
                            tpm_sw_phy->sw_phy_cmd == MV_TPM_IOCTL_SW_PHY_GET_SPEED_MODE    ||
                            tpm_sw_phy->sw_phy_cmd == MV_TPM_IOCTL_SW_PHY_GET_PORT_STATE||
                            tpm_sw_phy->sw_phy_cmd == MV_TPM_IOCTL_SW_PHY_GET_PORT_FC_STATE ||
-                           tpm_sw_phy->sw_phy_cmd == MV_TPM_IOCTL_SW_PHY_CONVERT_PORT_INDEX))
+                           tpm_sw_phy->sw_phy_cmd == MV_TPM_IOCTL_SW_PHY_CONVERT_PORT_INDEX ||
+                           tpm_sw_phy->sw_phy_cmd == MV_TPM_IOCTL_UNI_2_SW_PORT))
           {
               if(copy_to_user((tpm_ioctl_sw_phy_t*)arg, tpm_sw_phy, sizeof(tpm_ioctl_sw_phy_t)))
               {
@@ -2556,6 +2687,79 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
           break;
 
       /* ================================ */
+      /* ====== SET active wan Section == */
+      /* ================================ */
+      case MV_TPM_IOCTL_SET_ACTIVE_WAN_SECTION:
+      {
+          tpm_ioctl_set_active_wan_t   set_active_wan;
+          if(copy_from_user(&set_active_wan, (tpm_ioctl_set_active_wan_t*)arg, sizeof(tpm_ioctl_set_active_wan_t)))
+          {
+            printk(KERN_ERR "ERROR: (%s:%d) copy_from_user failed\n", __FUNCTION__, __LINE__);
+            goto ioctlErr;
+          }
+          rcode = tpm_set_active_wan(set_active_wan.owner_id, set_active_wan.active_wan);
+          if(rcode != TPM_OK)
+            goto ioctlErr;
+
+          ret=0;
+          break;
+      }
+      /* ================================ */
+      /* ====== SET GMAC LPBK Section                    == */
+      /* ================================ */
+      case MV_TPM_IOCTL_SET_GMAC_LPBK_SECTION:
+      {
+          tpm_ioctl_set_gmac_loopback_t   set_gmac_lpbk;
+          if(copy_from_user(&set_gmac_lpbk, (tpm_ioctl_set_gmac_loopback_t*)arg, sizeof(tpm_ioctl_set_gmac_loopback_t)))
+          {
+            printk(KERN_ERR "ERROR: (%s:%d) copy_from_user failed\n", __FUNCTION__, __LINE__);
+            goto ioctlErr;
+          }
+          rcode = tpm_set_gmac_loopback(set_gmac_lpbk.owner_id, set_gmac_lpbk.gmac, set_gmac_lpbk.enable);
+          if(rcode != TPM_OK)
+            goto ioctlErr;
+
+          ret=0;
+          break;
+      }
+      /* ================================ */
+      /* ====== hot swap profile Section == */
+      /* ================================ */
+      case MV_TPM_IOCTL_HOT_SWAP_PROFILE_SECTION:
+      {
+          tpm_ioctl_hot_swap_profile_t  swap_profile;
+          if(copy_from_user(&swap_profile, (tpm_ioctl_hot_swap_profile_t*)arg, sizeof(tpm_ioctl_hot_swap_profile_t)))
+          {
+            printk(KERN_ERR "ERROR: (%s:%d) copy_from_user failed\n", __FUNCTION__, __LINE__);
+            goto ioctlErr;
+          }
+          rcode = tpm_hot_swap_profile(swap_profile.owner_id, swap_profile.profile_id);
+          if(rcode != TPM_OK)
+            goto ioctlErr;
+
+          ret=0;
+          break;
+      }
+      /* ================================ */
+      /* ====== set hwf admin Section == */
+      /* ================================ */
+      case MV_TPM_IOCTL_SET_PORT_HWF_ADMIN_SECTION:
+      {
+          tpm_ioctl_set_port_hwf_admin_t  set_port_hwf_admin;
+          if(copy_from_user(&set_port_hwf_admin, (tpm_ioctl_set_port_hwf_admin_t*)arg, sizeof(tpm_ioctl_set_port_hwf_admin_t)))
+          {
+            printk(KERN_ERR "ERROR: (%s:%d) copy_from_user failed\n", __FUNCTION__, __LINE__);
+            goto ioctlErr;
+          }
+
+          rcode = tpm_proc_hwf_admin_set(set_port_hwf_admin.port, set_port_hwf_admin.txp, set_port_hwf_admin.enable);
+          if(rcode != TPM_OK)
+            goto ioctlErr;
+
+          ret=0;
+          break;
+      }
+      /* ================================ */
       /* ====== ALARM  Section ======= */
       /* ================================ */
       case MV_TPM_IOCTL_ALARM_SECTION:
@@ -2847,7 +3051,7 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
                 (tpm_ioctl_pnc_hit_cnt_t *) tpm_common_mempool_alloc(tpm_ioctl_mpools.mpool_h);
             if (tpm_ioctl_pnc_hit_cnt == NULL)
             {
-                printk(KERN_ERR "ERROR: (%s:%d) tpm_common_mempool_alloc(%p) failed\n", 
+                printk(KERN_ERR "ERROR: (%s:%d) tpm_common_mempool_alloc(%p) failed\n",
                         __FUNCTION__, __LINE__, tpm_ioctl_mpools.mpool_h);
                 ret = -ENOMEM;
                 goto ioctlErr;
@@ -2882,7 +3086,7 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
           } /* MV_TPM_IOCTL_GET_ALL_HIT_COUNTERS */
           else
           {
-            tpm_ioctl_age_count_t *tpm_ioctl_age_count = 
+            tpm_ioctl_age_count_t *tpm_ioctl_age_count =
                 (tpm_ioctl_age_count_t *) tpm_common_mempool_alloc(tpm_ioctl_mpools.mpool_m);
             if (tpm_ioctl_age_count == NULL)
             {

@@ -165,7 +165,7 @@ void onuEponIsrRoutine(MV_U32 event, MV_U32 status)
 	MV_U32  rxGenFecEn      = 0;
 	MV_U32  interruptEvent  = 0;
 	MV_U32  interruptStatus = 0;
-
+	LINKSTATUSFUNC linkStatusCallback;
 
 #ifdef MV_EPON_HW_INTERRUPT
 	onuEponIsrLowRoutine(&interruptEvent, &interruptStatus);
@@ -178,12 +178,19 @@ void onuEponIsrRoutine(MV_U32 event, MV_U32 status)
 	/* ================= */
 
 	if (interruptEvent & ONU_EPON_XVR_SD_MASK) {
-
-		state = (interruptStatus & ONU_EPON_XVR_SD_MASK) ? MV_FALSE : MV_TRUE;
+        state = ponXvrFunc(interruptStatus, ONU_EPON_XVR_SD_MASK);
 		if (state == MV_FALSE)
+		{
 			onuEponDbOnuSignalDetectSet(1); /* alarm is OFF */
+			mvPonPrint(PON_PRINT_DEBUG, PON_ISR_INT_MODULE,
+				   "DEBUG: (%s:%d) Signal Detect ON\n", __FILE_DESC__, __LINE__);
+		}
 		else if (state == MV_TRUE)
+		{
 			onuEponDbOnuSignalDetectSet(0);/* alarm is ON */
+			mvPonPrint(PON_PRINT_DEBUG, PON_ISR_INT_MODULE,
+				   "DEBUG: (%s:%d) Signal Detect OFF\n", __FILE_DESC__, __LINE__);
+		}
 
 		onuEponPonMngIntrAlarmHandler(ONU_EPON_XVR_SD_MASK, state);
 
@@ -203,10 +210,31 @@ void onuEponIsrRoutine(MV_U32 event, MV_U32 status)
 				   "DEBUG: (%s:%d) ResetRandomStateMachine %s\n", __FILE_DESC__, __LINE__);
 			onuEponIsrResetRandomStateMachine();
 
-		} else if (state == MV_TRUE) { /* alarm is ON */
-
-			/* set EPON mode */
-			onuEponDbModeSet(E_EPON_IOCTL_STD_MODE);
+			/* Call link status callback function */
+			if (onuEponDbModeGet() == E_EPON_IOCTL_P2P_MODE)
+			{
+				linkStatusCallback = onuEponDbLinkStatusCallbackGet();
+				if (linkStatusCallback != NULL)
+				{
+					linkStatusCallback(MV_TRUE);
+					mvPonPrint(PON_PRINT_DEBUG, PON_ISR_INT_MODULE,
+						   "DEBUG: (%s:%d) Notify link is UP\n", __FILE_DESC__, __LINE__);
+				}
+			}
+		}
+		else if (state == MV_TRUE) /* alarm is ON */
+		{
+			if (onuEponDbP2PForceModeGet())
+			{
+				/* set P2P mode */
+				onuEponDbModeSet(E_EPON_IOCTL_P2P_MODE);
+			}
+			else
+			{
+				/* set EPON mode */
+				onuEponDbModeSet(E_EPON_IOCTL_STD_MODE);
+			}
+            
 			/* config PCS synchronization configuration  - FEC disabled */
 			mvOnuEponMacPcsDelaySet(0x1C58);
 			/* clear Rx Ctrl message FIFO */
@@ -912,8 +940,22 @@ MV_STATUS mvP2PStart(void)
     MV_U32    gpioGroup, gpioMask;
 	MV_U32    interruptMask;
 	MV_U32    polarity;
-
+	MV_U32    interruptStatus;
+    MV_U32    state;
     LINKSTATUSFUNC linkStatusCallback;
+    /* Check for XVR SD interrupt status */
+    mvOnuEponMacPonInterruptGet(&interruptStatus);
+    interruptStatus &= 0xFFFF;
+
+    state = ponXvrFunc(interruptStatus, ONU_EPON_XVR_SD_MASK);
+    if (state == MV_FALSE)
+    {
+        onuEponDbOnuSignalDetectSet(1); /* alarm is OFF */
+    }
+    else if (state == MV_TRUE)
+    {
+        onuEponDbOnuSignalDetectSet(0);/* alarm is ON */
+    }
 
 	if (onuEponDbOnuSwRprtTimerTypeGet() == ONU_EPON_SW_DBA_RPRT_TIMER)
 	{
@@ -1108,7 +1150,7 @@ MV_STATUS mvP2PStart(void)
 		return(MV_ERROR);
 	  }
 
-	  polarity = onuEponDbXvrPolarityGet();
+      polarity = onuP2PDbXvrBurstEnablePolarityGet();
 
 	  /* XVR polarity */
 	  /* XVR polarity == 0, Active High, transmit 1 to the line  */
@@ -1123,7 +1165,7 @@ MV_STATUS mvP2PStart(void)
 	  /* XVR polarity == 1, Active Low, write 0 for Force Value */
 
 	  /* PHY control register - force enable value - according to polarity */
-	  status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_VAL, ~polarity, 0);
+	  status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_VAL, polarity, 0);
 	  if (status != MV_OK)
 	  {
 		mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
@@ -1156,7 +1198,9 @@ MV_STATUS mvP2PStart(void)
     linkStatusCallback = onuEponDbLinkStatusCallbackGet();
     if (linkStatusCallback != NULL)
     {
-      linkStatusCallback(MV_TRUE);
+        linkStatusCallback(MV_TRUE);
+        mvPonPrint(PON_PRINT_DEBUG, PON_ISR_INT_MODULE,
+                   "DEBUG: (%s:%d) Notify link is UP\n", __FILE_DESC__, __LINE__);
     }
 #endif
 
@@ -1338,8 +1382,16 @@ MV_STATUS mvP2PStop(void)
 	  }
 	}
 
-    onuEponDbModeSet(E_EPON_IOCTL_STD_MODE);
-
+		if (onuEponDbP2PForceModeGet())
+		{
+		  /* set P2P mode */
+          onuEponDbModeSet(E_EPON_IOCTL_P2P_MODE);
+		}
+		else
+		{
+		  /* set EPON mode */
+          onuEponDbModeSet(E_EPON_IOCTL_STD_MODE);
+		}
 
 	if (onuEponDbOnuSwRprtTimerTypeGet() == ONU_EPON_SW_DBA_RPRT_TIMER)
 	{

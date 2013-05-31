@@ -406,12 +406,12 @@ GT_STATUS phySetAutoMode
 	IN GT_PHY_AUTO_MODE mode
 )
 {
-    GT_U16 		u16Data;
+	GT_U16 		u16Data;
 	GT_STATUS	status;
-	GT_BOOL			autoOn;
-	GT_U16			pageReg;
+	GT_BOOL		autoOn;
+	GT_U16		pageReg;
 
-    DBG_INFO(("phySetAutoMode Called.\n"));
+	DBG_INFO(("phySetAutoMode Called.\n"));
 
 	if (!(phyInfo->flag & GT_PHY_GIGABIT))
 	{
@@ -420,10 +420,13 @@ GT_STATUS phySetAutoMode
    		    return status;
 		}
 
-		u16Data = QD_PHY_SPEED | QD_PHY_DUPLEX | QD_PHY_AUTONEGO;
+		if (hwReadPhyReg(dev, hwPort, QD_PHY_CONTROL_REG, &u16Data) != GT_OK)
+			return GT_FAIL;
 
-    	DBG_INFO(("Write to phy(%d) register: regAddr 0x%x, data %#x",
-        	      hwPort,QD_PHY_CONTROL_REG,u16Data));
+		u16Data = (u16Data & (QD_PHY_SPEED | QD_PHY_DUPLEX)) | QD_PHY_AUTONEGO;
+
+		DBG_INFO(("Write to phy(%d) register: regAddr 0x%x, data %#x",
+			 hwPort,QD_PHY_CONTROL_REG,u16Data));
 
 		/* soft reset */
 		return hwPhyReset(dev,hwPort,u16Data);
@@ -434,6 +437,10 @@ GT_STATUS phySetAutoMode
 		return GT_FAIL;
 	}
 
+	/* Read to Phy Control Register.  */
+	if(hwReadPagedPhyReg(dev, hwPort, 0, QD_PHY_CONTROL_REG, phyInfo->anyPage, &u16Data) != GT_OK)
+		return GT_FAIL;
+
 	if(phyInfo->flag & GT_PHY_COPPER)
 	{
 		if((status=gigCopperSetAutoMode(dev,hwPort,phyInfo,mode)) != GT_OK)
@@ -441,14 +448,14 @@ GT_STATUS phySetAutoMode
    		    return status;
 		}
 
-		u16Data = QD_PHY_AUTONEGO;
+		u16Data = (u16Data & (QD_PHY_SPEED_MSB | QD_PHY_SPEED | QD_PHY_DUPLEX)) | QD_PHY_AUTONEGO;
 
-    	DBG_INFO(("Write to phy(%d) register: regAddr 0x%x, data %#x",
-        	      hwPort,QD_PHY_CONTROL_REG,u16Data));
+		DBG_INFO(("Write to phy(%d) register: regAddr 0x%x, data %#x",
+			 hwPort,QD_PHY_CONTROL_REG,u16Data));
 
-	    /* Write to Phy Control Register.  */
-	    if(hwWritePagedPhyReg(dev,hwPort,0,QD_PHY_CONTROL_REG,phyInfo->anyPage,u16Data) != GT_OK)
-    		return GT_FAIL;
+		/* Write to Phy Control Register.  */
+		if(hwWritePagedPhyReg(dev,hwPort,0,QD_PHY_CONTROL_REG,phyInfo->anyPage,u16Data) != GT_OK)
+			return GT_FAIL;
 	}
 	else if(phyInfo->flag & GT_PHY_FIBER)
 	{
@@ -456,14 +463,14 @@ GT_STATUS phySetAutoMode
 		{
    		    return status;
 		}
-		u16Data = QD_PHY_AUTONEGO;
+		u16Data = (u16Data & (QD_PHY_SPEED_MSB | QD_PHY_SPEED | QD_PHY_DUPLEX)) | QD_PHY_AUTONEGO;
 
-    	DBG_INFO(("Write to phy(%d) register: regAddr 0x%x, data %#x",
-        	      hwPort,QD_PHY_CONTROL_REG,u16Data));
+		DBG_INFO(("Write to phy(%d) register: regAddr 0x%x, data %#x",
+			 hwPort,QD_PHY_CONTROL_REG,u16Data));
 
-	    /* Write to Phy Control Register.  */
-	    if(hwWritePagedPhyReg(dev,hwPort,1,QD_PHY_CONTROL_REG,phyInfo->anyPage,u16Data) != GT_OK)
-    		return GT_FAIL;
+		/* Write to Phy Control Register.  */
+		if(hwWritePagedPhyReg(dev,hwPort,1,QD_PHY_CONTROL_REG,phyInfo->anyPage,u16Data) != GT_OK)
+			return GT_FAIL;
 	}
 
 	if(driverPagedAccessStop(dev,hwPort,phyInfo->pageType,autoOn,pageReg) != GT_OK)
@@ -1037,15 +1044,15 @@ IN GT_LPORT  port,
 IN GT_PHY_SPEED speed
 )
 {
-    GT_U8           hwPort;         /* the physical port number     */
-    GT_U16 			u16Data;
-	GT_PHY_INFO		phyInfo;
-	GT_STATUS		retVal;
+	GT_U8           hwPort;         /* the physical port number     */
+	GT_U16 		u16Data;
+	GT_PHY_INFO	phyInfo;
+	GT_STATUS	retVal;
 
-    DBG_INFO(("gprtSetPortSpeed Called.\n"));
-    
-    /* translate LPORT to hardware port */
-    hwPort = GT_LPORT_2_PHY(port);
+	DBG_INFO(("gprtSetPortSpeed Called.\n"));
+
+	/* translate LPORT to hardware port */
+	hwPort = GT_LPORT_2_PHY(port);
 
 	gtSemTake(dev,dev->phyRegsSem,OS_WAIT_FOREVER);
 
@@ -1063,11 +1070,11 @@ IN GT_PHY_SPEED speed
 		return GT_FAIL;
 	}
 
-    if(hwReadPhyReg(dev,hwPort,QD_PHY_CONTROL_REG,&u16Data) != GT_OK)
+	if(hwReadPhyReg(dev,hwPort,QD_PHY_CONTROL_REG,&u16Data) != GT_OK)
 	{
-        DBG_INFO(("Not able to read Phy Reg(port:%d,offset:%d).\n",hwPort,QD_PHY_CONTROL_REG));
+		DBG_INFO(("Not able to read Phy Reg(port:%d,offset:%d).\n",hwPort,QD_PHY_CONTROL_REG));
 		gtSemGive(dev,dev->phyRegsSem);
-        return GT_FAIL;
+        	return GT_FAIL;
 	}
 
 	switch(speed)
@@ -1078,10 +1085,10 @@ IN GT_PHY_SPEED speed
 				gtSemGive(dev,dev->phyRegsSem);
 				return GT_BAD_PARAM;
 			}
-			u16Data = u16Data & (QD_PHY_LOOPBACK | QD_PHY_AUTONEGO | QD_PHY_DUPLEX);
+			u16Data = u16Data & (QD_PHY_LOOPBACK | QD_PHY_DUPLEX);
 			break;
 		case PHY_SPEED_100_MBPS:
-			u16Data = (u16Data & (QD_PHY_LOOPBACK | QD_PHY_AUTONEGO | QD_PHY_DUPLEX)) | QD_PHY_SPEED;
+			u16Data = (u16Data & (QD_PHY_LOOPBACK | QD_PHY_DUPLEX)) | QD_PHY_SPEED;
 			break;
 		case PHY_SPEED_1000_MBPS:
 			if (!(phyInfo.flag & GT_PHY_GIGABIT))
@@ -1089,15 +1096,15 @@ IN GT_PHY_SPEED speed
 				gtSemGive(dev,dev->phyRegsSem);
 				return GT_BAD_PARAM;
 			}
-			u16Data = (u16Data & (QD_PHY_LOOPBACK | QD_PHY_AUTONEGO | QD_PHY_DUPLEX)) | QD_PHY_SPEED_MSB;
+			u16Data = (u16Data & (QD_PHY_LOOPBACK | QD_PHY_DUPLEX)) | QD_PHY_SPEED_MSB;
 			break;
 		default:
 			gtSemGive(dev,dev->phyRegsSem);
 			return GT_FAIL;
 	}
 
-    DBG_INFO(("Write to phy(%d) register: regAddr 0x%x, data %#x",
-              hwPort,QD_PHY_CONTROL_REG,u16Data));
+	DBG_INFO(("Write to phy(%d) register: regAddr 0x%x, data %#x",
+		 hwPort,QD_PHY_CONTROL_REG,u16Data));
 
 	retVal = hwPhyReset(dev,hwPort,u16Data);
   	gtSemGive(dev,dev->phyRegsSem);
@@ -1258,11 +1265,11 @@ GT_STATUS gprtPortAutoNegEnable
 
 	if(state)
 	{
-		u16Data = (u16Data & (QD_PHY_SPEED | QD_PHY_DUPLEX)) | QD_PHY_AUTONEGO;
+		u16Data = (u16Data & (QD_PHY_SPEED_MSB | QD_PHY_SPEED | QD_PHY_DUPLEX)) | QD_PHY_AUTONEGO;
 	}
 	else
 	{
-		u16Data = u16Data & (QD_PHY_SPEED | QD_PHY_DUPLEX);
+		u16Data = u16Data & (QD_PHY_SPEED_MSB |QD_PHY_SPEED | QD_PHY_DUPLEX | QD_PHY_LOOPBACK);
 	}
 
 
@@ -1519,7 +1526,7 @@ IN GT_LPORT  port
         return GT_FAIL;
 	}
 
-	u16Data &= (QD_PHY_DUPLEX | QD_PHY_SPEED);
+	u16Data &= (QD_PHY_DUPLEX | QD_PHY_SPEED | QD_PHY_SPEED_MSB);
 	u16Data |= (QD_PHY_RESTART_AUTONEGO | QD_PHY_AUTONEGO);
 
     DBG_INFO(("Write to phy(%d) register: regAddr 0x%x, data %#x",
@@ -1675,6 +1682,116 @@ OUT GT_BOOL*   dMode
     
     gtSemGive(dev,dev->phyRegsSem);
     return GT_OK;
+}
+
+/*******************************************************************************
+* gprtSetPortSpeedDuplexMode
+*
+* DESCRIPTION:
+* 		Sets speed and duplex mode for a specific logical port. This function
+*		will keep the loopback mode to the previous value, but disable others,
+*		such as Autonegotiation.
+*
+* INPUTS:
+*		port -	The logical port number, unless SERDES device is accessed
+*				The physical address, if SERDES device is accessed
+*		speed - port speed.
+*				PHY_SPEED_10_MBPS for 10Mbps
+*				PHY_SPEED_100_MBPS for 100Mbps
+*				PHY_SPEED_1000_MBPS for 1000Mbps
+*		dMode - Duplex mode
+*
+* OUTPUTS:
+* None.
+*
+* RETURNS:
+* GT_OK - on success
+* GT_FAIL - on error
+*
+* COMMENTS:
+* data sheet register 0.13 - Speed Selection (LSB)
+* data sheet register 0.6  - Speed Selection (MSB)
+* data sheet register 0.8  - Duplex mode
+*******************************************************************************/
+GT_STATUS gprtSetPortSpeedDuplexMode
+(
+IN GT_QD_DEV *dev,
+IN GT_LPORT  port,
+IN GT_PHY_SPEED speed,
+IN GT_BOOL dMode
+)
+{
+	GT_U8           hwPort;         /* the physical port number     */
+	GT_U16 		u16Data;
+	GT_PHY_INFO	phyInfo;
+	GT_STATUS	retVal;
+
+	DBG_INFO(("gprtSetPortSpeed Called.\n"));
+
+	/* translate LPORT to hardware port */
+	hwPort = GT_LPORT_2_PHY(port);
+
+	gtSemTake(dev,dev->phyRegsSem,OS_WAIT_FOREVER);
+
+	/* check if the port is configurable */
+	if((phyInfo.phyId=GT_GET_PHY_ID(dev,hwPort)) == GT_INVALID_PHY)
+	{
+		gtSemGive(dev,dev->phyRegsSem);
+		return GT_NOT_SUPPORTED;
+	}
+
+	if(driverFindPhyInformation(dev,hwPort,&phyInfo) != GT_OK)
+	{
+	    DBG_INFO(("Unknown PHY device.\n"));
+		gtSemGive(dev,dev->phyRegsSem);
+		return GT_FAIL;
+	}
+
+	if(hwReadPhyReg(dev,hwPort,QD_PHY_CONTROL_REG,&u16Data) != GT_OK)
+	{
+		DBG_INFO(("Not able to read Phy Reg(port:%d,offset:%d).\n",hwPort,QD_PHY_CONTROL_REG));
+		gtSemGive(dev,dev->phyRegsSem);
+		return GT_FAIL;
+	}
+
+	/* Set Duplex mode */
+	if (dMode)
+		u16Data = u16Data | QD_PHY_DUPLEX;
+	else
+		u16Data = u16Data & (~QD_PHY_DUPLEX);
+
+	switch(speed)
+	{
+		case PHY_SPEED_10_MBPS:
+			if ((phyInfo.flag & GT_PHY_GIGABIT) && !(phyInfo.flag & GT_PHY_COPPER))
+			{
+				gtSemGive(dev,dev->phyRegsSem);
+				return GT_BAD_PARAM;
+			}
+			u16Data = u16Data & (QD_PHY_LOOPBACK | QD_PHY_DUPLEX);
+			break;
+		case PHY_SPEED_100_MBPS:
+			u16Data = (u16Data & (QD_PHY_LOOPBACK | QD_PHY_DUPLEX)) | QD_PHY_SPEED;
+			break;
+		case PHY_SPEED_1000_MBPS:
+			if (!(phyInfo.flag & GT_PHY_GIGABIT))
+			{
+				gtSemGive(dev,dev->phyRegsSem);
+				return GT_BAD_PARAM;
+			}
+			u16Data = (u16Data & (QD_PHY_LOOPBACK | QD_PHY_DUPLEX)) | QD_PHY_SPEED_MSB;
+			break;
+		default:
+			gtSemGive(dev,dev->phyRegsSem);
+			return GT_FAIL;
+	}
+
+	DBG_INFO(("Write to phy(%d) register: regAddr 0x%x, data %#x",
+		 hwPort,QD_PHY_CONTROL_REG,u16Data));
+
+	retVal = hwPhyReset(dev,hwPort,u16Data);
+	gtSemGive(dev,dev->phyRegsSem);
+	return retVal;
 }
 
 /*******************************************************************************

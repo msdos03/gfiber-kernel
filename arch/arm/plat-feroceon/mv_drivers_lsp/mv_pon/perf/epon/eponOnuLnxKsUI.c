@@ -894,6 +894,7 @@ int onuEponUiCfgHelpShow(char* buf)
 											"limits\n");
 		off += mvOsSPrintf(buf+off, " echo [threshold]     > rxDataFifoThresh - Configure RX Parser Data FIFO "
 											"threshold\n");
+        off += mvOsSPrintf(buf+off, " echo [pkt2kSupported] > pkt2kEn - Configure 2K packet supported\r\n");
 		off += mvOsSPrintf(buf+off, " echo [txMask][txP][serdesP][xvrP][burstEn] > ddmTxPolarity - Configure "
 											" DDM Polarity settings\n");
 	}
@@ -906,6 +907,7 @@ int onuEponUiCfgHelpShow(char* buf)
 		off += mvOsSPrintf(buf+off, " cat pcsFrameLimits                     - dump PCS Frame Size Limits\n");
 		off += mvOsSPrintf(buf+off, " cat rxDataFifoThresh                   - dump RX Parser Data FIFO "
 											"threshold\n");
+        off += mvOsSPrintf(buf+off, " cat pkt2kEn                            - dump 2K packet supported registers\r\n");
 	}
 	off += mvOsSPrintf(buf+off, "============================================================================\n");
 
@@ -1408,6 +1410,7 @@ void onuEponUiCfgSetPatternBurst(MV_U32 enable, MV_U32 pattern, MV_U32 burst, MV
   }
   else
   {
+    onuPonTxPowerOn(MV_TRUE);
     onuPonPatternBurstOn(pattern, (MV_BOOL)burst, period, duration);
   }
 }
@@ -1511,6 +1514,68 @@ int onuEponUiCfgShowRxDataFifoThresh(char* buf)
 	else {
 		off += mvOsSPrintf(buf+off, "\n");
 		off += mvOsSPrintf(buf+off, "RX Parser Data FIFO Threshold = %#x\n", threshold);
+	}
+
+	return(off);
+}
+
+/*******************************************************************************
+**
+**  onuEponUiCfgSetPkt2kEnable
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function configures 2K packet supported
+**
+**  PARAMETERS:  MV_U32 enable - 2K packet supported enable or disable
+**
+**  OUTPUTS:     none
+**
+**  RETURNS:     void
+**
+*******************************************************************************/
+void onuEponUiCfgSetPkt2kEnable(MV_U32 enable)
+{
+    /* Before setting register, needs to disable Rx */
+    mvOnuEponMacPcsRxEnableSet(EPON_PCS_CONFIG_RX_DISABLE); 
+    
+    mvEponApi2kSupportedSet(enable);
+
+    /* After setting register, enable Rx */
+    mvOnuEponMacPcsRxEnableSet(EPON_PCS_CONFIG_RX_ENABLE);
+}
+
+/*******************************************************************************
+**
+**  onuEponUiCfgShowPkt2kEnable
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function shows 2K packet supported
+**
+**  PARAMETERS:  char *buf
+**
+**  OUTPUTS:     char *buf
+**
+**  RETURNS:     offset of buf
+**
+*******************************************************************************/
+int onuEponUiCfgShowPkt2kEnable(char* buf)
+{
+    int off = 0;
+	MV_STATUS status;
+	MV_U32 frameSizeLimitSize;
+    MV_U32 frameSizeLimitLatency;
+    MV_U32 dataFifoThreshold;
+
+    status = mvOnuEponMacPcsFrameSizeLimitsGet(&frameSizeLimitSize, &frameSizeLimitLatency);
+	status |= mvOnuEponMacRxpDataFifoThresholdGet(&dataFifoThreshold);
+
+	if (status != MV_OK)
+		off += mvOsSPrintf(buf+off, "Failed to obtain 2K packet support related register value!\r\n");
+	else {
+		off += mvOsSPrintf(buf+off, "\r\n");
+		off += mvOsSPrintf(buf+off, "PcsFrameSizeLimitSize    = %#d\r\n", frameSizeLimitSize);
+        off += mvOsSPrintf(buf+off, "PcsFrameSizeLimitLatency = %#d\r\n", frameSizeLimitLatency);
+        off += mvOsSPrintf(buf+off, "DataFifoThreshold        = %#d\r\n", dataFifoThreshold);
 	}
 
 	return(off);
@@ -1790,6 +1855,11 @@ static ssize_t cfg_show(struct device *dev,
 			return(onuEponUiCfgShowPcsFrameLimits(buf));
 		else if (!strcmp(name, "rxDataFifoThresh"))
 			return(onuEponUiCfgShowRxDataFifoThresh(buf));
+        else if (!strcmp(name, "pkt2kEn"))
+        {
+            return onuEponUiCfgShowPkt2kEnable(buf);
+        }
+            
 	}
 
 	return 0;
@@ -1857,6 +1927,10 @@ static ssize_t cfg_store(struct device *dev,
 			onuEponUiCfgSetPcsFrameLimits((MV_U32)param1, (MV_U32)param2);
 		else if (!strcmp(name, "rxDataFifoThresh"))
 			onuEponUiCfgSetRxDataFifoThresh((MV_U32)param1);
+        else if (!strcmp(name, "pkt2kEn"))
+        {
+            onuEponUiCfgSetPkt2kEnable((MV_U32)param1);
+        }
 		else if (!strcmp(name, "ddmTxPolarity")) /* txEnable, txPol, serdesPol, xvrPol, burstEn */
 			onuEponUiCfgSetDdmTxPolarity((MV_U32)param1,(MV_U32)param2,(MV_U32)param3,
 						     (MV_U32)param4,(MV_U32)param5);
@@ -1895,8 +1969,9 @@ static DEVICE_ATTR(printMask,               S_IRUSR | S_IWUSR, cfg_show, cfg_sto
 static DEVICE_ATTR(pcsFrameLimits,          S_IWUSR | S_IRUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(rxDataFifoThresh,        S_IWUSR | S_IRUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(ddmTxPolarity,           S_IWUSR, cfg_show, cfg_store);
+static DEVICE_ATTR(pkt2kEn,                 S_IWUSR | S_IRUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(helpCfg,                 S_IRUSR, cfg_show, cfg_store);
-
+ 
 static struct attribute *cfg_attrs[] = {
 	&dev_attr_rxEn.attr,
 	&dev_attr_txEn.attr,
@@ -1918,8 +1993,9 @@ static struct attribute *cfg_attrs[] = {
 	&dev_attr_pattern.attr,
 	&dev_attr_printMask.attr,
 	&dev_attr_pcsFrameLimits.attr,
-	&dev_attr_rxDataFifoThresh.attr,
+	&dev_attr_rxDataFifoThresh.attr, 
 	&dev_attr_ddmTxPolarity.attr,
+	&dev_attr_pkt2kEn.attr, 
 	&dev_attr_helpCfg.attr,
 	NULL
 };

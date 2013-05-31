@@ -88,6 +88,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Global Variables
 ------------------------------------------------------------------------------*/
+S_onuPonWork      gponTcontCleanWork[8];
+S_onuPonWork      gponTcontCleanAllWork;
+S_onuPonWork      gponTcontActiveWork[8];
+S_onuPonWorkQueue gponTcontFlushWq;
 
 /* Global functions
 ------------------------------------------------------------------------------*/
@@ -113,6 +117,50 @@ irqreturn_t onuGponIrqRoutine(int irq, void *arg);
 irqreturn_t onuGponDgIrqRoutine(int irq, void *arg);
 #endif /* PON_FPGA */
 
+
+/*******************************************************************************
+**
+**  onuPonWqInit
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function allocates GPON work queue and init two work
+**  		 structures for TCONT clean and activate
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuPonWqInit(void)
+{
+  MV_U32 tcontIndex;
+
+  gponTcontFlushWq.ponWq = create_workqueue("gponTcontFlushWQ");
+  if (gponTcontFlushWq.ponWq)
+  {
+    for (tcontIndex = 0; tcontIndex < 8; tcontIndex++)
+    {
+	    INIT_WORK((struct work_struct *) &gponTcontCleanWork[tcontIndex], onuGponWqTcontFunc);
+	    gponTcontCleanWork[tcontIndex].action = TCONT_CLEAN_EVENT;
+	    gponTcontCleanWork[tcontIndex].param  = tcontIndex;
+
+	    INIT_WORK((struct work_struct *) &gponTcontActiveWork[tcontIndex], onuGponWqTcontFunc);
+	    gponTcontActiveWork[tcontIndex].action = TCONT_ACTIVE_EVENT;
+	    gponTcontActiveWork[tcontIndex].param  = tcontIndex;
+    }
+
+    INIT_WORK((struct work_struct *) &gponTcontCleanAllWork, onuGponWqTcontFunc);
+    gponTcontCleanAllWork.action = TCONT_CLEAN_ALL_EVENT;
+
+    printk("STARTING PON WORK QUEUE!!!!!\n");
+
+    return(MV_OK);
+  }
+
+  return(MV_ERROR);
+}
 
 /*******************************************************************************
 **
@@ -235,6 +283,29 @@ MV_STATUS onuGponRtosResourceInit(void)
     return(MV_ERROR);
   }
 
+  /* onu pon TX Power timer */
+  retcode = onuPonTimerCreate(&(onuPonResourceTbl_s.onuPonTxPwrTimerId),   /* timer Id */
+                               "pon_txPwr",                                /* timer description */
+                               (PTIMER_FUNCPTR)onuGponTimerTxPwrHndl,      /* timer function */
+                               ONU_PON_TIMER_NOT_ACTIVE,                   /* timer active (run) state */
+                               ONU_PON_TIMER_TX_PWR_INTERVAL,              /* init value */
+                               0);                                         /* periodic value */
+  if (retcode != MV_OK)
+  {
+    mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
+               "ERROR: (%s:%d) pon Tx Power timer create\n", __FILE_DESC__, __LINE__);
+    return(MV_ERROR);
+  }
+
+  /* Work Queue */
+  /* ========== */
+  retcode = onuPonWqInit();
+  if (retcode != MV_OK)
+  {
+     mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
+                "ERROR: (%s:%d) pon work queue create\n", __FILE_DESC__, __LINE__);
+     return(MV_ERROR);
+  }
 
   /* Interrupt */
   /* ========= */

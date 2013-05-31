@@ -131,6 +131,8 @@ void      onuEponPonMngTimerSilenceHndl(unsigned long data);
 void      onuEponPonMngTimerHwRprtTxModHndl(unsigned long data);
 MV_STATUS onuEponPonMngTimerHwRprtCfg(MV_U32 t0_val, MV_U32 t0_time, MV_U32 t1_val, MV_U32 t1_time);
 
+void 	  onuEponTimerTxPwrHndl(unsigned long data);
+
 /* Macros
 ------------------------------------------------------------------------------*/
 

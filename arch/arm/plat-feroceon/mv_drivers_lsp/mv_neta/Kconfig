@@ -1024,4 +1024,10 @@ config MV_ETH_BE_WA
 	---help---
 	If set swap of RX and TX descriptors in BE mode will be done by driver
 
+config MV_ETH_6601_LB_WA
+	bool "WA for 6601 (KW MC) w/ loopback traffic to CPU"
+	default n
+	---help---
+	If set, RX traffic to CPU from GMAC1 is switched to GMAC0 netdev (eth1)
+
 endmenu

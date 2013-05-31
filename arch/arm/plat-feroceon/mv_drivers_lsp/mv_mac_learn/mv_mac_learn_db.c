@@ -121,10 +121,11 @@ int32_t mac_learn_db_nonstatic_clear()
 	uint32_t i;
 
 	for (i = 0; i < MAC_LEARN_FDB_MAX_COUNT; i++) {
-		/*Get spin lock*/
-		spin_lock(&mac_learn_fdb.mac_learn_db_entry_lock[i]);
 		if (MAC_LEARN_FDB_VALID == mac_learn_fdb.mac_learn_db_entry[i].valid &&
 		    MAC_LEARN_FDB_NON_STATIC == mac_learn_fdb.mac_learn_db_entry[i].state) {
+			/*Get spin lock*/
+			spin_lock(&mac_learn_fdb.mac_learn_db_entry_lock[i]);
+
 			memset(&del_mac_key, 0, sizeof(tpm_l2_acl_key_t));
 			memset(del_mac_key.mac.mac_sa_mask, 0xff, sizeof(u8)*MV_MAC_ADDR_SIZE);
 			memcpy(del_mac_key.mac.mac_sa, mac_learn_fdb.mac_learn_db_entry[i].src_mac_addr, sizeof(char) * MV_MAC_ADDR_SIZE);
@@ -142,12 +143,15 @@ int32_t mac_learn_db_nonstatic_clear()
 
 				return MAC_LEARN_FDB_FAIL;
 			}
-		}
-		/* Release spin lock */
-		spin_unlock(&mac_learn_fdb.mac_learn_db_entry_lock[i]);
-		if (mac_learn_db_pncidx_update(0, pnc_idx)) {
-			MVMACLEARN_ERR_PRINT("TPM PNC index update failed(%d)\n", i);
-			return MAC_LEARN_FDB_FAIL;
+
+			/* Release spin lock */
+			spin_unlock(&mac_learn_fdb.mac_learn_db_entry_lock[i]);
+
+			/* Update PnC index */
+			if (mac_learn_db_pncidx_update(0, pnc_idx)) {
+				MVMACLEARN_ERR_PRINT("TPM PNC index update failed(%d)\n", i);
+				return MAC_LEARN_FDB_FAIL;
+			}
 		}
 	}
 
@@ -285,8 +289,10 @@ int32_t mac_learn_db_find_mac_addr(tpm_l2_acl_key_t *src_mac_key, int32_t *addr_
 			if (!memcmp(src_mac_key->mac.mac_sa, mac_learn_fdb.mac_learn_db_entry[i].src_mac_addr, sizeof(char) * MV_MAC_ADDR_SIZE)) {
 				if (addr_exist)
 					*addr_exist = 1;
-				if (mac_learn_db_entry)
+				if (mac_learn_db_entry) {
 					memcpy(mac_learn_db_entry, &mac_learn_fdb.mac_learn_db_entry[i], sizeof(mac_learn_db_entry_t));
+					mac_learn_db_entry->fdb_idx = i;
+				}
 				/* Release spin lock */
 				spin_unlock(&mac_learn_fdb.mac_learn_db_entry_lock[i]);
 				break;
@@ -543,6 +549,39 @@ void mac_learn_db_valid_print(void)
 		}
 	}
 	printk("+--------------+---------------------+--------------+\n");
+}
+
+/************************************************************************************
+* mac_learn_db_entry_state_update
+* Update entry state of an existing entry
+* input:
+*	fdb_idx: FDB entry index
+*	entry_state: FDB entry state
+*return:
+*	success--MAC_LEARN_FDB_OK
+*	failed --MAC_LEARN_FDB_FAIL
+************************************************************************************/
+int32_t mac_learn_db_entry_state_update(uint32_t fdb_idx, uint8_t entry_state)
+{
+	/* Para check */
+	if (fdb_idx >= MAC_LEARN_FDB_MAX_COUNT) {
+		MVMACLEARN_ERR_PRINT("MAC learn FDB entry index(%d) invalid\n", fdb_idx);
+		return MAC_LEARN_FDB_FAIL;
+	}
+
+	if ((MAC_LEARN_FDB_STATIC != entry_state) && (MAC_LEARN_FDB_NON_STATIC != entry_state)) {
+		MVMACLEARN_ERR_PRINT("MAC learn FDB entry state(%d) invalid\n", entry_state);
+		return MAC_LEARN_FDB_FAIL;
+	}
+
+	/* Get spin lock */
+	spin_lock(&mac_learn_fdb.mac_learn_db_entry_lock[fdb_idx]);
+	/* Update to expected state */
+	mac_learn_fdb.mac_learn_db_entry[fdb_idx].state = entry_state;
+	/* Release spin lock */
+	spin_unlock(&mac_learn_fdb.mac_learn_db_entry_lock[fdb_idx]);
+
+	return MAC_LEARN_FDB_OK;
 }
 
 /***************************************************************************************************************

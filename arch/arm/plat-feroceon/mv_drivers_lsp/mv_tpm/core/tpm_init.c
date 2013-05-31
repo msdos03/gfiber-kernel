@@ -140,7 +140,8 @@ char *prof_str_tlb[] = { "", "PON_WAN_DUAL_MAC_INT_SWITCH", 	"PON_WAN_G0_INT_SWI
 			"PON_G0_WAN_G1_INT_SWITCH",		"PON_WAN_DUAL_MAC_EXT_SWITCH",
 		    	"PON_WAN_G1_MNG_EXT_SWITCH",		"PON_WAN_G0_SINGLE_PORT",
 			"PON_WAN_G1_SINGLE_PORT",		"PON_G1_WAN_G0_SINGLE_PORT",
-			"PON_G0_WAN_G1_SINGLE_PORT",		"PON_WAN_G0_G1_LPBK"};
+			"PON_G0_WAN_G1_SINGLE_PORT",		"PON_WAN_G0_G1_LPBK",
+			"TPM_PON_WAN_G0_G1_DUAL_LAN"};
 
 static tpm_pnc_range_lookup_map_t pnc_range_lookup_tbl[TPM_MAX_NUM_RANGES] = {
 /*  Range_num             lu_id  last_range  valid */
@@ -148,6 +149,7 @@ static tpm_pnc_range_lookup_map_t pnc_range_lookup_tbl[TPM_MAX_NUM_RANGES] = {
 	{TPM_PNC_MAC_LEARN, 0, 1, 1},
 	{TPM_PNC_CPU_WAN_LPBK_US, 0, 0, 1},
 	{TPM_PNC_NUM_VLAN_TAGS, 0, 0, 1},
+	{TPM_PNC_DS_LOAD_BALANCE, 0, 0, 1},
 	{TPM_PNC_MULTI_LPBK, 0, 0, 1},
 	{TPM_PNC_VIRT_UNI, 0, 0, 1},
 	{TPM_PNC_LOOP_DET_US, 0, 0, 1},
@@ -156,13 +158,14 @@ static tpm_pnc_range_lookup_map_t pnc_range_lookup_tbl[TPM_MAX_NUM_RANGES] = {
 	{TPM_PNC_IGMP, 2, 0, 1},
 	{TPM_PNC_IPV4_MC_DS, 2, 0, 1},
 	{TPM_PNC_IPV4_MAIN, 2, 1, 1},
-	{TPM_PNC_TCP_FLAG, 3, 1, 1},
+	{TPM_PNC_IPV4_TCP_FLAG, 3, 1, 1},
 	{TPM_PNC_TTL, 4, 1, 1},
 	{TPM_PNC_IPV4_PROTO, 5, 0, 1},
 	{TPM_PNC_IPV4_FRAG, 5, 0, 1},
 	{TPM_PNC_IPV4_LEN, 5, 1, 1},
 	{TPM_PNC_IPV6_NH, 6, 1, 1},
 	{TPM_PNC_IPV6_L4_MC_DS, 7, 1, 1},
+	{TPM_PNC_IPV6_TCP_FLAG, 7, 1, 1},
 	{TPM_PNC_IPV6_L4, 7, 1, 1},
 	{TPM_PNC_IPV6_HOPL, 8, 1, 1},
 	{TPM_PNC_IPV6_MC_SIP, 8, 1, 1},
@@ -178,6 +181,15 @@ static tpm_pnc_range_lookup_map_t pnc_range_lookup_tbl[TPM_MAX_NUM_RANGES] = {
 	{TPM_PNC_CATCH_ALL, 0, 0, 1},
 
 };
+
+bool tpm_init_check_gmac_init(tpm_gmacs_enum_t gmac_i)
+{
+	/* Check Port Available or not */
+	if (mvNetaPortCheck(gmac_i) || (NULL == mvNetaPortHndlGet(gmac_i))) {
+		return false;
+	}
+	return true;
+}
 
 bool tpm_init_gmac_in_gateway_mode(tpm_gmacs_enum_t gmac_i)
 {
@@ -275,9 +287,10 @@ void tpm_init_config_params_init(tpm_init_t *tpm_init_params)
 	tpm_init.eth_cmplx_profile = tpm_init_params->eth_cmplx_profile;
 	memcpy(&(tpm_init.gmac_port_conf), &(tpm_init_params->gmac_port_conf),
 		sizeof(tpm_init.gmac_port_conf));
-	tpm_init.backup_wan = tpm_init_params->backup_wan;
+	tpm_init.active_wan = tpm_init_params->active_wan;
 	memcpy(&(tpm_init.split_mod_config), &(tpm_init_params->split_mod_config), sizeof(tpm_init_split_mod_params_t));
 	tpm_init.switch_init = tpm_init_params->switch_init;
+	tpm_init.ds_mac_based_trunk_enable = tpm_init_params->ds_mac_based_trunk_enable;
 }
 
 void tpm_init_pon_type_get(void)
@@ -557,11 +570,17 @@ void tpm_init_switch_init_get(void)
 		    || tpm_init.eth_cmplx_profile == TPM_PON_WAN_G1_SINGLE_PORT
 		    || tpm_init.eth_cmplx_profile == TPM_PON_G1_WAN_G0_SINGLE_PORT
 		    || tpm_init.eth_cmplx_profile == TPM_PON_G0_WAN_G1_SINGLE_PORT
-		    || tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_LPBK)
+		    || tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_LPBK
+		    || tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_DUAL_LAN)
 			tpm_init.switch_init = 0;
 		else
 			tpm_init.switch_init = 1;
 	}
+}
+void tpm_init_ds_mac_based_trunk_enable_get(void)
+{
+	if (tpm_init.ds_mac_based_trunk_enable == MV_TPM_UN_INITIALIZED_INIT_PARAM)
+		tpm_init.ds_mac_based_trunk_enable = TPM_DS_MAC_BASED_TRUNK_DISABLED;
 }
 
 void tpm_init_ipv6_5t_enable_get(void)
@@ -577,7 +596,7 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 {
 	uint32_t i,j, off = 0;
 	char buff[1024];
-	uint32_t profile[8]= {0};
+	uint32_t profile[7]= {0};
 
 	off += sprintf(buff+off, "\nSelected Eth Complex Profile: %s", prof_str_tlb[tpm_init.eth_cmplx_profile]);
 	off += sprintf(buff+off, "\nHW enabled options:\n\t");
@@ -596,33 +615,33 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 		break;
 
 	case TPM_PON_WAN_G0_INT_SWITCH:
-		profile[0] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_FE3PHY | ESC_OPT_GEPHY_SW_P0;
+		profile[0] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_SW_P0 | ESC_OPT_FE3PHY;
 		profile[1] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_QSGMII;
 		profile[2] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_QSGMII | ESC_OPT_RGMIIA_SW_P6;
-		profile[3] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_FE3PHY | ESC_OPT_RGMIIA_SW_P6;
+		profile[3] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_RGMIIA_SW_P6 | ESC_OPT_FE3PHY;
 		break;
 
 	case TPM_PON_WAN_G1_LAN_G0_INT_SWITCH:
-		profile[0] = ESC_OPT_RGMIIA_MAC1 | ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_SW_P0 | ESC_OPT_FE3PHY;
-		profile[1] = ESC_OPT_RGMIIA_MAC1 | ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_QSGMII;
+		profile[0] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_RGMIIA_MAC1 | ESC_OPT_FE3PHY;
+		profile[1] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_RGMIIA_MAC1 | ESC_OPT_QSGMII;
 		profile[2] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_FE3PHY;
-		profile[3] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_RGMIIA_SW_P6 | ESC_OPT_FE3PHY;
+		profile[3] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_FE3PHY | ESC_OPT_RGMIIA_SW_P6;
 		profile[4] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_QSGMII;
+		profile[5] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_QSGMII | ESC_OPT_RGMIIA_SW_P6;
 		break;
 
 	case TPM_G0_WAN_G1_INT_SWITCH:
 		profile[0] = ESC_OPT_RGMIIB_MAC0 | ESC_OPT_MAC1_2_SW_P5 | ESC_OPT_GEPHY_SW_P0 | ESC_OPT_FE3PHY;
-		profile[1] = ESC_OPT_RGMIIB_MAC0 | ESC_OPT_MAC1_2_SW_P5 | ESC_OPT_QSGMII;
+		profile[1] = ESC_OPT_RGMIIA_SW_P6 | ESC_OPT_RGMIIB_MAC0 | ESC_OPT_MAC1_2_SW_P5 | ESC_OPT_QSGMII;
 		break;
 
 	case TPM_G1_WAN_G0_INT_SWITCH:
 		profile[0] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_RGMIIA_MAC1 | ESC_OPT_GEPHY_SW_P0 | ESC_OPT_FE3PHY;
-        profile[1] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_RGMIIA_MAC1 | ESC_OPT_FE3PHY;
-		profile[2] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_RGMIIA_MAC1 | ESC_OPT_QSGMII;
-		profile[3] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_FE3PHY;
-		profile[4] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_RGMIIA_SW_P6 | ESC_OPT_FE3PHY;
-		profile[5] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_QSGMII;
-		profile[6] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_QSGMII | ESC_OPT_RGMIIA_SW_P6;
+		profile[1] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_RGMIIA_MAC1 | ESC_OPT_QSGMII;
+		profile[2] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_FE3PHY;
+		profile[3] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_RGMIIA_SW_P6 | ESC_OPT_FE3PHY;
+		profile[4] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_QSGMII;
+		profile[5] = ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_MAC1 | ESC_OPT_QSGMII | ESC_OPT_RGMIIA_SW_P6;
 		break;
 
 	case TPM_PON_G1_WAN_G0_INT_SWITCH:
@@ -657,11 +676,9 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 		break;
 
 	case TPM_PON_G1_WAN_G0_SINGLE_PORT:
-		profile[0] = ESC_OPT_RGMIIB_MAC0 | ESC_OPT_RGMIIA_MAC1;
-		break;
-
 	case TPM_PON_G0_WAN_G1_SINGLE_PORT:
 		profile[0] = ESC_OPT_RGMIIB_MAC0 | ESC_OPT_RGMIIA_MAC1;
+		profile[1] = ESC_OPT_GEPHY_MAC1 | ESC_OPT_RGMIIA_MAC0;
 		break;
 
 	case TPM_PON_WAN_G0_G1_LPBK:
@@ -671,6 +688,9 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 			profile[0] = ESC_OPT_SGMII | ESC_OPT_GEPHY_MAC0 | ESC_OPT_LP_SERDES_FE_GE_PHY;
 		if (RD_88F6601_MC_ID == mvBoardIdGet())
 			profile[0] = ESC_OPT_GEPHY_MAC0;
+		break;
+	case TPM_PON_WAN_G0_G1_DUAL_LAN:
+		profile[0] = ESC_OPT_GEPHY_MAC0 | ESC_OPT_RGMIIA_MAC1;
 		break;
 	}
 
@@ -692,7 +712,6 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 		TPM_OS_ERROR(TPM_INIT_MOD, "%s", buff);
 }
 
-
 static uint32_t tpm_init_eth_cmplx_update_conf(void)
 {
 	uint32_t i;
@@ -701,8 +720,11 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 	if (hwEthCmplx & (ESC_OPT_AUTO | ESC_OPT_ILLEGAL))
 	{
 		TPM_OS_ERROR(TPM_INIT_MOD, "\n Illegal values in mvBoardEthComplexConfigGet 0x%x\n", hwEthCmplx);
-       	return TPM_FAIL;
+		return TPM_FAIL;
 	}
+
+	/* do not check SATA */
+	hwEthCmplx &= (~ESC_OPT_SATA);
 
 	if (tpm_init.eth_cmplx_profile == MV_TPM_UN_INITIALIZED_INIT_PARAM) {
 		if (TPM_VALID_ENABLED == tpm_init.validation_en){
@@ -711,6 +733,9 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 		}
 	}
 
+	if (MV_TPM_UN_INITIALIZED_INIT_PARAM == tpm_init.active_wan)
+		tpm_init.active_wan = TPM_ENUM_PMAC;
+
 	/* set default values for all ports and GMACs */
 	switch (tpm_init.eth_cmplx_profile)
 	{
@@ -718,7 +743,7 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 		if (!VALID_ONLY((ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_MAC1_2_SW_P5 | ESC_OPT_GEPHY_SW_P0 | ESC_OPT_FE3PHY), hwEthCmplx) &&
 		    !VALID_ONLY((ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_MAC1_2_SW_P5 | ESC_OPT_QSGMII), hwEthCmplx) &&
 		    !VALID_ONLY((ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_MAC1_2_SW_P5 | ESC_OPT_QSGMII | ESC_OPT_RGMIIA_SW_P6), hwEthCmplx) &&
-		    !VALID_ONLY((ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_MAC1_2_SW_P5| ESC_OPT_RGMIIA_SW_P6 | ESC_OPT_FE3PHY), hwEthCmplx))
+		    !VALID_ONLY((ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_MAC1_2_SW_P5 | ESC_OPT_RGMIIA_SW_P6 | ESC_OPT_FE3PHY), hwEthCmplx))
 			goto setup_err;
 
 		tpm_init.gmac_port_conf[0].valid = TPM_TRUE;
@@ -890,7 +915,7 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 			goto virt_uni_err;
 
 		if (!VALID_ONLY((ESC_OPT_RGMIIB_MAC0 | ESC_OPT_MAC1_2_SW_P5 | ESC_OPT_GEPHY_SW_P0 | ESC_OPT_FE3PHY), hwEthCmplx) &&
-		    !VALID_ONLY((ESC_OPT_RGMIIB_MAC0 | ESC_OPT_MAC1_2_SW_P5 | ESC_OPT_QSGMII), hwEthCmplx))
+		    !VALID_ONLY((ESC_OPT_RGMIIA_SW_P6 |ESC_OPT_RGMIIB_MAC0 | ESC_OPT_MAC1_2_SW_P5 | ESC_OPT_QSGMII), hwEthCmplx))
 			goto setup_err;
 
 		tpm_init.pon_type = TPM_NONE;
@@ -907,13 +932,13 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 		tpm_init.gmac_port_conf[2].port_src = TPM_SRC_PORT_WAN;
 
 		for (i = 0; i < TPM_MAX_NUM_ETH_PORTS; i++)
-       		if (TPM_TRUE == tpm_init.eth_port_conf[i].valid){
+			if (TPM_TRUE == tpm_init.eth_port_conf[i].valid){
 				tpm_init.eth_port_conf[i].int_connect = TPM_INTCON_SWITCH;
 
 				if (HW_OPT_ON(ESC_OPT_QSGMII, hwEthCmplx) &&
 				    (tpm_init.eth_port_conf[i].switch_port >= 0) &&
 				    (tpm_init.eth_port_conf[i].switch_port <= 3))
-       				tpm_init.eth_port_conf[i].chip_connect = TPM_CONN_QSGMII;
+					tpm_init.eth_port_conf[i].chip_connect = TPM_CONN_QSGMII;
 				else if (HW_OPT_ON(ESC_OPT_GEPHY_SW_P0, hwEthCmplx) &&
 					 (tpm_init.eth_port_conf[i].switch_port == 0))
 					tpm_init.eth_port_conf[i].chip_connect = TPM_CONN_GE_PHY;
@@ -987,7 +1012,6 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 			}
 
 		if (VALID_ONLY((ESC_OPT_RGMIIA_MAC1 | ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_GEPHY_SW_P0 | ESC_OPT_FE3PHY), hwEthCmplx) ||
-               VALID_ONLY((ESC_OPT_RGMIIA_MAC1 | ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_FE3PHY), hwEthCmplx) ||
 		    VALID_ONLY((ESC_OPT_RGMIIA_MAC1 | ESC_OPT_MAC0_2_SW_P4 | ESC_OPT_QSGMII), hwEthCmplx)){
 			for (i = 0; i < TPM_MAX_NUM_ETH_PORTS; i++){
 				if (TPM_FALSE == tpm_init.eth_port_conf[i].valid){
@@ -1019,9 +1043,6 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 		break;
 
 	case TPM_PON_G1_WAN_G0_INT_SWITCH:
-		if (MV_TPM_UN_INITIALIZED_INIT_PARAM == tpm_init.backup_wan)
-			tpm_init.backup_wan = TPM_ENUM_GMAC_1;
-
 		if (1 == tpm_init.virt_uni_info.enabled)
 			goto virt_uni_err;
 
@@ -1091,9 +1112,6 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 		break;
 
 	case TPM_PON_G0_WAN_G1_INT_SWITCH:
-		if (MV_TPM_UN_INITIALIZED_INIT_PARAM == tpm_init.backup_wan)
-			tpm_init.backup_wan = TPM_ENUM_GMAC_1;
-
 		if (1 == tpm_init.virt_uni_info.enabled)
 			goto virt_uni_err;
 
@@ -1114,13 +1132,13 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 
 
 		for (i = 0; i < TPM_MAX_NUM_ETH_PORTS; i++)
-       		if (TPM_TRUE == tpm_init.eth_port_conf[i].valid){
+			if (TPM_TRUE == tpm_init.eth_port_conf[i].valid){
 				tpm_init.eth_port_conf[i].int_connect = TPM_INTCON_SWITCH;
 
 				if (HW_OPT_ON(ESC_OPT_QSGMII, hwEthCmplx) &&
 				    (tpm_init.eth_port_conf[i].switch_port >= 0) &&
 				    (tpm_init.eth_port_conf[i].switch_port <= 3))
-       				tpm_init.eth_port_conf[i].chip_connect = TPM_CONN_QSGMII;
+					tpm_init.eth_port_conf[i].chip_connect = TPM_CONN_QSGMII;
 				else if (HW_OPT_ON(ESC_OPT_GEPHY_SW_P0, hwEthCmplx) &&
 					 (tpm_init.eth_port_conf[i].switch_port == 0))
 					tpm_init.eth_port_conf[i].chip_connect = TPM_CONN_GE_PHY;
@@ -1269,19 +1287,9 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 		if (1 == tpm_init.virt_uni_info.enabled)
 			goto virt_uni_err;
 
-		if ((TPM_ENUM_GMAC_0 != tpm_init.backup_wan) && (TPM_ENUM_GMAC_1 != tpm_init.backup_wan) &&
-		    (TPM_ENUM_PMAC   != tpm_init.backup_wan)) {
-			TPM_OS_ERROR(TPM_INIT_MOD, "\n tpm_init.backup_wan (%x) is not set\n",
-					tpm_init.backup_wan);
-			goto setup_err;
-		}
-
 		if (!VALID_ONLY((ESC_OPT_RGMIIB_MAC0 | ESC_OPT_RGMIIA_MAC1), hwEthCmplx) &&
 		    !VALID_ONLY((ESC_OPT_GEPHY_MAC1 | ESC_OPT_RGMIIA_MAC0), hwEthCmplx))
 			goto setup_err;
-
-		if (MV_TPM_UN_INITIALIZED_INIT_PARAM == tpm_init.backup_wan)
-			tpm_init.backup_wan = TPM_ENUM_GMAC_1;
 
 		tpm_init.gmac_port_conf[0].valid = TPM_TRUE;
 		tpm_init.gmac_port_conf[0].port_src = TPM_SRC_PORT_UNI_0;
@@ -1321,18 +1329,9 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 		if (1 == tpm_init.virt_uni_info.enabled)
 			goto virt_uni_err;
 
-		if ((TPM_ENUM_GMAC_0 != tpm_init.backup_wan) && (TPM_ENUM_GMAC_1 != tpm_init.backup_wan) &&
-		    (TPM_ENUM_PMAC   != tpm_init.backup_wan)) {
-			TPM_OS_ERROR(TPM_INIT_MOD, "\n tpm_init.backup_wan (%x) is not set\n",
-					tpm_init.backup_wan);
-			goto setup_err;
-		}
 		if (!VALID_ONLY((ESC_OPT_RGMIIB_MAC0 | ESC_OPT_RGMIIA_MAC1), hwEthCmplx) &&
 		    !VALID_ONLY((ESC_OPT_GEPHY_MAC1 | ESC_OPT_RGMIIA_MAC0), hwEthCmplx))
 			goto setup_err;
-
-		if (MV_TPM_UN_INITIALIZED_INIT_PARAM == tpm_init.backup_wan)
-			tpm_init.backup_wan = TPM_ENUM_GMAC_0;
 
 		tpm_init.gmac_port_conf[0].valid = TPM_TRUE;
 		tpm_init.gmac_port_conf[0].port_src = TPM_SRC_PORT_WAN;
@@ -1390,8 +1389,41 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 		i = 0;
 		tpm_init.eth_port_conf[i].valid = TPM_TRUE;
 		tpm_init.eth_port_conf[i].port_src = TPM_SRC_PORT_UNI_0;
-		tpm_init.eth_port_conf[i].chip_connect = TPM_CONN_RGMII1;
+		tpm_init.eth_port_conf[i].chip_connect = TPM_CONN_GE_PHY;
 		tpm_init.eth_port_conf[i].int_connect = TPM_INTCON_GMAC0;
+		i++;
+		for (; i < TPM_MAX_NUM_ETH_PORTS; i++)
+			tpm_init.eth_port_conf[i].valid = TPM_FALSE;
+		break;
+	case TPM_PON_WAN_G0_G1_DUAL_LAN:
+		if (1 == tpm_init.virt_uni_info.enabled)
+			goto virt_uni_err;
+
+		/* FIXME - Add correct condition, after answers from lsp team. */
+		/*if (!VALID_ONLY((ESC_OPT_GEPHY_MAC0 | ESC_OPT_RGMIIA_MAC1), hwEthCmplx))
+			goto setup_err;*/
+
+		tpm_init.gmac_port_conf[0].valid = TPM_TRUE;
+		tpm_init.gmac_port_conf[0].port_src = TPM_SRC_PORT_UNI_0;
+		tpm_init.gmac_port_conf[0].conn = TPM_GMAC_CON_GE_PHY;
+
+		tpm_init.gmac_port_conf[1].valid = TPM_TRUE;
+		tpm_init.gmac_port_conf[1].port_src = TPM_SRC_PORT_UNI_1;
+		tpm_init.gmac_port_conf[1].conn = TPM_GMAC_CON_RGMII1;
+
+		tpm_init.gmac_port_conf[2].valid = TPM_TRUE;
+		tpm_init.gmac_port_conf[2].port_src = TPM_SRC_PORT_WAN;
+
+		i = 0;
+		tpm_init.eth_port_conf[i].valid = TPM_TRUE;
+		tpm_init.eth_port_conf[i].port_src = TPM_SRC_PORT_UNI_0;
+		tpm_init.eth_port_conf[i].chip_connect = TPM_CONN_GE_PHY;
+		tpm_init.eth_port_conf[i].int_connect = TPM_INTCON_GMAC0;
+		i++;
+		tpm_init.eth_port_conf[i].valid = TPM_TRUE;
+		tpm_init.eth_port_conf[i].port_src = TPM_SRC_PORT_UNI_1;
+		tpm_init.eth_port_conf[i].chip_connect = TPM_CONN_RGMII1;
+		tpm_init.eth_port_conf[i].int_connect = TPM_INTCON_GMAC1;
 		i++;
 		for (; i < TPM_MAX_NUM_ETH_PORTS; i++)
 			tpm_init.eth_port_conf[i].valid = TPM_FALSE;
@@ -1502,6 +1534,7 @@ int32_t tpm_init_config_params_update(void)
 	tpm_init_ety_dsa_enable_get();
 	tpm_init_split_mod_get();
 	tpm_init_switch_init_get();
+	tpm_init_ds_mac_based_trunk_enable_get();
 
 	return (TPM_OK);
 }
@@ -1519,116 +1552,118 @@ int32_t tpm_init_info_validate(void)
 	uint32_t cpu_owner = 0;
 
 	/********************************************************************/
-	if (tpm_init.validation_en == TPM_VALID_ENABLED) {
-	/******************** EPON/GPON system - check num of LLID / TCONT : legal values: 1..8 *********************/
-		if ((tpm_init.pon_type == TPM_EPON) || (tpm_init.pon_type == TPM_GPON)) {
-			if ((tpm_init.num_tcont_llid <= 0) || (tpm_init.num_tcont_llid > 8)) {
-				TPM_OS_FATAL(TPM_INIT_MOD, "\n TCONT/LLID: illegal value(%d) => legal values <1-8>.\n",
-					tpm_init.num_tcont_llid);
-				return (TPM_FAIL);
-			}
-		}
-	/***** EPON case: validate vs .config value for EPON *****/
-		if (tpm_init.pon_type == TPM_EPON) {
-			min_tcont_llid = min(TPM_GPON_MAX_NUM_OF_T_CONTS, TPM_EPON_MAX_MAC_NUM);
-			if (tpm_init.num_tcont_llid > min_tcont_llid) {
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n LLID: illegal value(%d) => max legal value defined in kernel is %d.\n",
-					tpm_init.num_tcont_llid, TPM_EPON_MAX_MAC_NUM);
-				return (TPM_FAIL);
-			}
-		}
-	/***** GPON case: validate vs .config value for GPON *****/
-		if (tpm_init.pon_type == TPM_GPON) {
-			if (tpm_init.num_tcont_llid > TPM_GPON_MAX_NUM_OF_T_CONTS) {
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n TCONT: illegal value(%d) => max legal value defined in kernel is %d.\n",
-					tpm_init.num_tcont_llid, TPM_GPON_MAX_NUM_OF_T_CONTS);
-				return (TPM_FAIL);
-			}
-		}
-#if 0				/*Keep to be added in future version */
-	/******************** Debug port setting - validation **********************************/
-		if ((tpm_init.deb_port_valid != 0) && (tpm_init.deb_port_valid != 1)) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				"\n Debug port valid is wrong => legal values <0=invalid/1=valid>. \n");
-			return (TPM_FAIL);
-		}
-		if ((tpm_init.deb_port_valid == 1) &&
-		    ((tpm_init.deb_port < TPM_SRC_PORT_UNI_0) || (tpm_init.deb_port > TPM_SRC_PORT_UNI_3))) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				"\n Bad debug port => legal values <TPM_SRC_PORT_UNI_0-TPM_SRC_PORT_UNI_3>. \n");
-			return (TPM_FAIL);
-		}
-#endif
-		/********************* pon type validation *********************************************/
-		/* for FPGA systems - the WAN tech is defined as TPM_NONE */
-		if (tpm_init.pon_type > TPM_NONE) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				"\n pon type: wrong init value(%d) => legal values "
-				"<%d=TPM_EPON/%d=TPM_GPON/%d=TPM_P2P/%d=TPM_NONE>. \n",
-				tpm_init.pon_type, TPM_EPON, TPM_GPON, TPM_P2P, TPM_NONE);
-			return (TPM_FAIL);
-		}
+	if (tpm_init.validation_en != TPM_VALID_ENABLED)
+		return TPM_OK;
 
-		/********************* CFG PNC PARSE validation *******************************************/
-		if ((tpm_init.cfg_pnc_parse < TPM_CFG_PNC_PARSE_DISABLED)
-		    || (tpm_init.cfg_pnc_parse > TPM_CFG_PNC_PARSE_ENABLED)) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				"\n CFG PNC parse: wrong init value(%d) => legal values <0=DISABLED/1=ENABLED. \n",
-				tpm_init.cfg_pnc_parse);
+	/******************** EPON/GPON system - check num of LLID / TCONT : legal values: 1..8 *********************/
+	if ((tpm_init.pon_type == TPM_EPON) || (tpm_init.pon_type == TPM_GPON)) {
+		if ((tpm_init.num_tcont_llid <= 0) || (tpm_init.num_tcont_llid > 8)) {
+			TPM_OS_FATAL(TPM_INIT_MOD, "\n TCONT/LLID: illegal value(%d) => legal values <1-8>.\n",
+				tpm_init.num_tcont_llid);
 			return (TPM_FAIL);
 		}
-		/* get the config_pnc_parser value */
-		config_pnc_parser_val = mv_eth_ctrl_pnc_get();
+	}
+	/***** EPON case: validate vs .config value for EPON *****/
+	if (tpm_init.pon_type == TPM_EPON) {
+		min_tcont_llid = min(TPM_GPON_MAX_NUM_OF_T_CONTS, TPM_EPON_MAX_MAC_NUM);
+		if (tpm_init.num_tcont_llid > min_tcont_llid) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n LLID: illegal value(%d) => max legal value defined in kernel is %d.\n",
+				tpm_init.num_tcont_llid, TPM_EPON_MAX_MAC_NUM);
+			return (TPM_FAIL);
+		}
+	}
+	/***** GPON case: validate vs .config value for GPON *****/
+	if (tpm_init.pon_type == TPM_GPON) {
+		if (tpm_init.num_tcont_llid > TPM_GPON_MAX_NUM_OF_T_CONTS) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n TCONT: illegal value(%d) => max legal value defined in kernel is %d.\n",
+				tpm_init.num_tcont_llid, TPM_GPON_MAX_NUM_OF_T_CONTS);
+			return (TPM_FAIL);
+		}
+	}
+#if 0				/*Keep to be added in future version */
+/******************** Debug port setting - validation **********************************/
+	if ((tpm_init.deb_port_valid != 0) && (tpm_init.deb_port_valid != 1)) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			"\n Debug port valid is wrong => legal values <0=invalid/1=valid>. \n");
+		return (TPM_FAIL);
+	}
+	if ((tpm_init.deb_port_valid == 1) &&
+	    ((tpm_init.deb_port < TPM_SRC_PORT_UNI_0) || (tpm_init.deb_port > TPM_SRC_PORT_UNI_3))) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			"\n Bad debug port => legal values <TPM_SRC_PORT_UNI_0-TPM_SRC_PORT_UNI_3>. \n");
+		return (TPM_FAIL);
+	}
+#endif
+	/********************* pon type validation *********************************************/
+	/* for FPGA systems - the WAN tech is defined as TPM_NONE */
+	if (tpm_init.pon_type > TPM_NONE) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			"\n pon type: wrong init value(%d) => legal values "
+			"<%d=TPM_EPON/%d=TPM_GPON/%d=TPM_P2P/%d=TPM_NONE>. \n",
+			tpm_init.pon_type, TPM_EPON, TPM_GPON, TPM_P2P, TPM_NONE);
+		return (TPM_FAIL);
+	}
+
+	/********************* CFG PNC PARSE validation *******************************************/
+	if ((tpm_init.cfg_pnc_parse < TPM_CFG_PNC_PARSE_DISABLED)
+	    || (tpm_init.cfg_pnc_parse > TPM_CFG_PNC_PARSE_ENABLED)) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			"\n CFG PNC parse: wrong init value(%d) => legal values <0=DISABLED/1=ENABLED. \n",
+			tpm_init.cfg_pnc_parse);
+		return (TPM_FAIL);
+	}
+	/* get the config_pnc_parser value */
+	config_pnc_parser_val = mv_eth_ctrl_pnc_get();
 
         /* logical validation */
 
 #ifdef CONFIG_MV_ETH_PNC
-		if (tpm_init.cfg_pnc_parse == 0) {
-			if (config_pnc_parser_val == 0) {
-				/* the intention is to give the control to mv neta PNC configuration
-				   do not permit moving from 0 to 1 */
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n CFG PNC bad value: PNC in LSP cannot move from 0 to 1 \n");
-				return (TPM_FAIL);
-			} else {
-				/* config_pnc_parser == 1 */
-				/* nothing to do - the control is in LSP config */
-			}
-		}
-		if (tpm_init.cfg_pnc_parse == 1) {
-			if (config_pnc_parser_val == 0) {
-				/* nothing to do - the control is in TPM */
-			} else {	/* config_pnc_parser == 1 */
-				/* set the config_pnc_parser to 0 - control is set to TPM */
-				rc = mv_eth_ctrl_pnc(0);
-				if (rc != 0) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"\n Failed to SET the config PNC parse parameter. \n");
-					return (TPM_FAIL);
-				}
-			}
-		}
-#else
-		/* if compilation flag is turned off - there are no relevant functions for PNC_PARSER
-		   therefore do not permit the flag to be 0 - meaning the LSP is taking the responsibility */
-		if (tpm_init.cfg_pnc_parse == 0) {
-			TPM_OS_FATAL(TPM_INIT_MOD, "\n CFG PNC bad value: PNC in LSP does not support PNC PARSER \n");
+	if (tpm_init.cfg_pnc_parse == 0) {
+		if (config_pnc_parser_val == 0) {
+			/* the intention is to give the control to mv neta PNC configuration
+			   do not permit moving from 0 to 1 */
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n CFG PNC bad value: PNC in LSP cannot move from 0 to 1 \n");
 			return (TPM_FAIL);
 		} else {
-			if (config_pnc_parser_val == 0) {
-				/*do nothing */
-			} else {
-				/* set the config_pnc_parser to 0 - control is set to TPM */
-				rc = mv_eth_ctrl_pnc(0);
-				if (rc != 0) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"\n Failed to SET the config PNC parse parameter. \n");
-					return (TPM_FAIL);
-				}
+			/* config_pnc_parser == 1 */
+			/* nothing to do - the control is in LSP config */
+		}
+	}
+	if (tpm_init.cfg_pnc_parse == 1) {
+		if (config_pnc_parser_val == 0) {
+			/* nothing to do - the control is in TPM */
+		} else {	/* config_pnc_parser == 1 */
+			/* set the config_pnc_parser to 0 - control is set to TPM */
+			rc = mv_eth_ctrl_pnc(0);
+			if (rc != 0) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"\n Failed to SET the config PNC parse parameter. \n");
+				return (TPM_FAIL);
 			}
 		}
+	}
+#else
+	/* if compilation flag is turned off - there are no relevant functions for PNC_PARSER
+	   therefore do not permit the flag to be 0 - meaning the LSP is taking the responsibility */
+	if (tpm_init.cfg_pnc_parse == 0) {
+		TPM_OS_FATAL(TPM_INIT_MOD, "\n CFG PNC bad value: PNC in LSP does not support PNC PARSER \n");
+		return (TPM_FAIL);
+	} else {
+		if (config_pnc_parser_val == 0) {
+			/*do nothing */
+		} else {
+			/* set the config_pnc_parser to 0 - control is set to TPM */
+			rc = mv_eth_ctrl_pnc(0);
+			if (rc != 0) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"\n Failed to SET the config PNC parse parameter. \n");
+				return (TPM_FAIL);
+			}
+		}
+	}
 #endif
 
 	/********************* CPU loopback type validation  ********************************************/
@@ -1639,451 +1674,485 @@ int32_t tpm_init_info_validate(void)
 				tpm_init.cpu_loopback);
 			return (TPM_FAIL);
 		}
+		if (tpm_init.cpu_loopback == TPM_CPU_LOOPBACK_ENABLED) {
+			if (tpm_init.gmac_port_conf[1].valid == TPM_TRUE &&
+			    tpm_init.gmac_port_conf[1].port_src != TPM_SRC_PORT_ILLEGAL) {
+				TPM_OS_FATAL(TPM_INIT_MOD, "\n CPU loopback not supported for GMAC function \n");
+				return (TPM_FAIL);
+			}
+		}
 
 	/********************* TRACE DEBUG INFO validation *******************************************/
-		if (tpm_init.trace_debug_info == 0) {
-			TPM_OS_WARN(TPM_INIT_MOD,
-				"\n TRACE DEBUG info: init value is %d - no ERRORs will be displayed. \n ",
-				tpm_init.trace_debug_info);
-		}
+	if (tpm_init.trace_debug_info == 0) {
+		TPM_OS_WARN(TPM_INIT_MOD,
+			"\n TRACE DEBUG info: init value is %d - no ERRORs will be displayed. \n ",
+			tpm_init.trace_debug_info);
+	}
 
 	/********************* IGMP snooping validation *********************************************/
-		if ((tpm_init.igmp_snoop != 0) && (tpm_init.igmp_snoop != 1)) {
+	if ((tpm_init.igmp_snoop != 0) && (tpm_init.igmp_snoop != 1)) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			     "\n IGMP snooping: wrong init value(%d) => legal values <0=disabled/1=enabled>. \n",
+			     tpm_init.igmp_snoop);
+		return (TPM_FAIL);
+	}
+	if (tpm_init.igmp_snoop == 1) {
+		if (tpm_init.igmp_cpu_queue > 7) {
 			TPM_OS_FATAL(TPM_INIT_MOD,
-				     "\n IGMP snooping: wrong init value(%d) => legal values <0=disabled/1=enabled>. \n",
-				     tpm_init.igmp_snoop);
+				     "\n IGMP snooping: wrong CPU queue(%d) => legal values <0-7>. \n",
+				     tpm_init.igmp_cpu_queue);
 			return (TPM_FAIL);
 		}
-		if (tpm_init.igmp_snoop == 1) {
-			if (tpm_init.igmp_cpu_queue > 7) {
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					     "\n IGMP snooping: wrong CPU queue(%d) => legal values <0-7>. \n",
-					     tpm_init.igmp_cpu_queue);
-				return (TPM_FAIL);
-			}
-		}
+	}
 
 	/********************* Multicast validation *********************************************/
-		if (tpm_init.mc_setting.per_uni_vlan_xlat) {
-			if (tpm_init.mc_setting.filter_mode != TPM_MC_COMBINED_IP_MAC_FILTER) {
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					     "\n multicast per uni vlan translation is not supported in filter_mode (%d). \n",
-					     tpm_init.mc_setting.filter_mode);
-				return (TPM_FAIL);
-			}
+	if (tpm_init.mc_setting.per_uni_vlan_xlat) {
+		if (tpm_init.mc_setting.filter_mode != TPM_MC_COMBINED_IP_MAC_FILTER) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				     "\n multicast per uni vlan translation is not supported in filter_mode (%d). \n",
+				     tpm_init.mc_setting.filter_mode);
+			return (TPM_FAIL);
+		}
 #if 0
-			if (tpm_init.mc_setting.igmp_mode == TPM_MC_IGMP_SNOOPING && tpm_init.mc_setting.mc_pppoe_enable) {
-			   TPM_OS_FATAL(TPM_INIT_MOD, "\n multicast per uni vlan translation is not supported "
-						"in igmp snooping over pppoe. \n");
-			   return(TPM_FAIL);
-			}
+		if (tpm_init.mc_setting.igmp_mode == TPM_MC_IGMP_SNOOPING && tpm_init.mc_setting.mc_pppoe_enable) {
+		   TPM_OS_FATAL(TPM_INIT_MOD, "\n multicast per uni vlan translation is not supported "
+					"in igmp snooping over pppoe. \n");
+		   return(TPM_FAIL);
+		}
 #endif
-		}
+	}
 
-		/* check that igmp_cpu_queue is CPU's reserved queue */
-		/* oct*>>> to do - if per system Q6 is the IGMP CPU - check in all GMACs that Q6 is of CPU ownership */
+	/* check that igmp_cpu_queue is CPU's reserved queue */
+	/* oct*>>> to do - if per system Q6 is the IGMP CPU - check in all GMACs that Q6 is of CPU ownership */
 
-		if (tpm_init.mc_setting.mc_hwf_queue > 7) {
-			TPM_OS_FATAL(TPM_INIT_MOD, "\n MC setting: wrong MC HWF queue(%d) => legal values <0-7>. \n",
-				     tpm_init.mc_setting.mc_hwf_queue);
-			return (TPM_FAIL);
-		}
+	if (tpm_init.mc_setting.mc_hwf_queue > 7) {
+		TPM_OS_FATAL(TPM_INIT_MOD, "\n MC setting: wrong MC HWF queue(%d) => legal values <0-7>. \n",
+			     tpm_init.mc_setting.mc_hwf_queue);
+		return (TPM_FAIL);
+	}
 
-		if (tpm_init.mc_setting.mc_cpu_queue > 7) {
-			TPM_OS_FATAL(TPM_INIT_MOD, "\n MC setting: wrong MC CPU queue(%d) => legal values <0-7>. \n",
-				     tpm_init.mc_setting.mc_cpu_queue);
-			return (TPM_FAIL);
-		}
+	if (tpm_init.mc_setting.mc_cpu_queue > 7) {
+		TPM_OS_FATAL(TPM_INIT_MOD, "\n MC setting: wrong MC CPU queue(%d) => legal values <0-7>. \n",
+			     tpm_init.mc_setting.mc_cpu_queue);
+		return (TPM_FAIL);
+	}
 
 	/********************** GMAC_0 connectivity validation *************************************/
-		if ((tpm_init.gmac_port_conf[0].conn < TPM_GMAC_CON_DISC) || (tpm_init.gmac_port_conf[0].conn > TPM_GMAC_CON_GE_PHY)) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				     "\n GMAC_0 connectivity: wrong init value(%d) => legal values <0-7> \n",
-				     tpm_init.gmac_port_conf[0].conn);
-			return (TPM_FAIL);
-		}
+	if ((tpm_init.gmac_port_conf[0].conn < TPM_GMAC_CON_DISC) || (tpm_init.gmac_port_conf[0].conn > TPM_GMAC_CON_GE_PHY)) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			     "\n GMAC_0 connectivity: wrong init value(%d) => legal values <0-7> \n",
+			     tpm_init.gmac_port_conf[0].conn);
+		return (TPM_FAIL);
+	}
 	/********************** GMAC_1 connectivity validation *************************************/
-		if ((tpm_init.gmac_port_conf[1].conn < TPM_GMAC_CON_DISC) || (tpm_init.gmac_port_conf[1].conn > TPM_GMAC_CON_GE_PHY)) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				     "\n GMAC_1 connectivity: wrong init value(%d) => legal values <0-7> \n",
-				     tpm_init.gmac_port_conf[1].conn);
-			return (TPM_FAIL);
-		}
+	if ((tpm_init.gmac_port_conf[1].conn < TPM_GMAC_CON_DISC) || (tpm_init.gmac_port_conf[1].conn > TPM_GMAC_CON_GE_PHY)) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			     "\n GMAC_1 connectivity: wrong init value(%d) => legal values <0-7> \n",
+			     tpm_init.gmac_port_conf[1].conn);
+		return (TPM_FAIL);
+	}
 	/********************** GMAC_0 MH enable validation   *************************************/
-		if ((tpm_init.gmac0_mh_en != 0) && (tpm_init.gmac0_mh_en != 1)) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				     "\n GMAC_0 MH enable: wrong init value(%d) => legal values <0=disabled,1=enabled> \n",
-				     tpm_init.gmac0_mh_en);
-			return (TPM_FAIL);
-		}
-		rc = tpm_init_check_gmac_mh_gtwy_mode(TPM_ENUM_GMAC_0, tpm_init.gmac0_mh_en);
-		if (rc != TPM_OK) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				     "\n GMAC_0 is in GateWay mode, MH can not be disabled\n");
-			return (TPM_FAIL);
-		}
+	if ((tpm_init.gmac0_mh_en != 0) && (tpm_init.gmac0_mh_en != 1)) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			     "\n GMAC_0 MH enable: wrong init value(%d) => legal values <0=disabled,1=enabled> \n",
+			     tpm_init.gmac0_mh_en);
+		return (TPM_FAIL);
+	}
+	rc = tpm_init_check_gmac_mh_gtwy_mode(TPM_ENUM_GMAC_0, tpm_init.gmac0_mh_en);
+	if (rc != TPM_OK) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			     "\n GMAC_0 is in GateWay mode, MH can not be disabled\n");
+		return (TPM_FAIL);
+	}
 	/********************** GMAC_1 MH enable validation   *************************************/
-		if ((tpm_init.gmac1_mh_en != 0) && (tpm_init.gmac1_mh_en != 1)) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				     "\n GMAC_1 MH enable: wrong init value(%d) => legal values <0=disabled,1=enabled> \n",
-				     tpm_init.gmac1_mh_en);
-			return (TPM_FAIL);
-		}
-		rc = tpm_init_check_gmac_mh_gtwy_mode(TPM_ENUM_GMAC_1, tpm_init.gmac1_mh_en);
-		if (rc != TPM_OK) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				     "\n GMAC_1 is in GateWay mode, MH can not be disabled\n");
-			return (TPM_FAIL);
-		}
+	if ((tpm_init.gmac1_mh_en != 0) && (tpm_init.gmac1_mh_en != 1)) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			     "\n GMAC_1 MH enable: wrong init value(%d) => legal values <0=disabled,1=enabled> \n",
+			     tpm_init.gmac1_mh_en);
+		return (TPM_FAIL);
+	}
+	rc = tpm_init_check_gmac_mh_gtwy_mode(TPM_ENUM_GMAC_1, tpm_init.gmac1_mh_en);
+	if (rc != TPM_OK) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			     "\n GMAC_1 is in GateWay mode, MH can not be disabled\n");
+		return (TPM_FAIL);
+	}
 	/********************** GMAC_ Buffer Mngmt Pool_sizes validation ***********************************/
-		for (i = 0; i < sizeof(tpm_init.gmac_bp_bufs) / sizeof(tpm_init_gmac_bufs_t); i++) {
-			if (tpm_init.gmac_bp_bufs[i].valid) {
-				if (((tpm_init.gmac_bp_bufs[i].large_pkt_buffers != 0) &&
-				     (tpm_init.gmac_bp_bufs[i].large_pkt_buffers < MV_BM_POOL_CAP_MIN)) ||
-				    ((tpm_init.gmac_bp_bufs[i].small_pkt_buffers != 0) &&
-				     (tpm_init.gmac_bp_bufs[i].small_pkt_buffers < MV_BM_POOL_CAP_MIN))) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"\n GMAC%d BM Pool has too small buffer assigment "
-						"large_buf %d, small_buf %d\n",
-						i, tpm_init.gmac_bp_bufs[i].large_pkt_buffers,
-						tpm_init.gmac_bp_bufs[i].small_pkt_buffers);
-					return (TPM_FAIL);
-				}
+	for (i = 0; i < sizeof(tpm_init.gmac_bp_bufs) / sizeof(tpm_init_gmac_bufs_t); i++) {
+		if (tpm_init.gmac_bp_bufs[i].valid) {
+			if (((tpm_init.gmac_bp_bufs[i].large_pkt_buffers != 0) &&
+			     (tpm_init.gmac_bp_bufs[i].large_pkt_buffers < MV_BM_POOL_CAP_MIN)) ||
+			    ((tpm_init.gmac_bp_bufs[i].small_pkt_buffers != 0) &&
+			     (tpm_init.gmac_bp_bufs[i].small_pkt_buffers < MV_BM_POOL_CAP_MIN))) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"\n GMAC%d BM Pool has too small buffer assigment "
+					"large_buf %d, small_buf %d\n",
+					i, tpm_init.gmac_bp_bufs[i].large_pkt_buffers,
+					tpm_init.gmac_bp_bufs[i].small_pkt_buffers);
+				return (TPM_FAIL);
 			}
 		}
+	}
 	/********************** PNC MH enabled allow for DS   *************************************/
-		if ((tpm_init.ds_mh_set_conf != 0) && (tpm_init.ds_mh_set_conf != 1)) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				"\n PNC - DS MH allow: wrong init value(%d) => "
-				"legal values <0=MH not allowed/DS,1=MH allowed/DS> \n",
-				tpm_init.ds_mh_set_conf);
+	if ((tpm_init.ds_mh_set_conf != 0) && (tpm_init.ds_mh_set_conf != 1)) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			"\n PNC - DS MH allow: wrong init value(%d) => "
+			"legal values <0=MH not allowed/DS,1=MH allowed/DS> \n",
+			tpm_init.ds_mh_set_conf);
+		return (TPM_FAIL);
+	}
+
+	if (tpm_init.port_fc_conf.enabled) {
+		MV_U32 device_id = mvCtrlModelGet();
+
+		if (device_id != MV_6601_DEV_ID) {
+			TPM_OS_FATAL(TPM_INIT_MOD, "\n port SW Flow-Control is not supported by this device");
 			return (TPM_FAIL);
 		}
 
-		if (tpm_init.port_fc_conf.enabled) {
-			MV_U32 device_id = mvCtrlModelGet();
-
-			if (device_id != MV_6601_DEV_ID) {
-				TPM_OS_FATAL(TPM_INIT_MOD, "\n port SW Flow-Control is not supported by this device");
-				return (TPM_FAIL);
-			}
-
-			if ((tpm_init.port_fc_conf.port > TPM_MAX_GMAC) 	||
-			    (tpm_init.port_fc_conf.tgt_port > TPM_MAX_GMAC)	||
-			    (tpm_init.port_fc_conf.tx_port > TPM_MAX_GMAC)){
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n port SW Flow-Control invalid port number:"
-					"port=%d tgt_port=%d tx_port=%d\n",
-					tpm_init.port_fc_conf.port,
-					tpm_init.port_fc_conf.tgt_port,
-					tpm_init.port_fc_conf.tx_port);
-				return (TPM_FAIL);
-			}
-
-			if (tpm_init.port_fc_conf.tx_queue >= TPM_MAX_NUM_TX_QUEUE){
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n port SW Flow-Control invalid port number: tx_queue=%d",
-					tpm_init.port_fc_conf.tx_queue);
-				return (TPM_FAIL);
-			}
+		if ((tpm_init.port_fc_conf.port > TPM_MAX_GMAC) 	||
+		    (tpm_init.port_fc_conf.tgt_port > TPM_MAX_GMAC)	||
+		    (tpm_init.port_fc_conf.tx_port > TPM_MAX_GMAC)){
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n port SW Flow-Control invalid port number:"
+				"port=%d tgt_port=%d tx_port=%d\n",
+				tpm_init.port_fc_conf.port,
+				tpm_init.port_fc_conf.tgt_port,
+				tpm_init.port_fc_conf.tx_port);
+			return (TPM_FAIL);
 		}
+
+		if (tpm_init.port_fc_conf.tx_queue >= TPM_MAX_NUM_TX_QUEUE){
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n port SW Flow-Control invalid port number: tx_queue=%d",
+				tpm_init.port_fc_conf.tx_queue);
+			return (TPM_FAIL);
+		}
+	}
 	/********************** ethernet ports validation ******************************************/
-		for (i = 0; i < TPM_MAX_NUM_ETH_PORTS; i++) {
-			if (tpm_init.eth_port_conf[i].valid == TPM_TRUE) {
-				if ((tpm_init.eth_port_conf[i].chip_connect < TPM_CONN_DISC) ||
-						(tpm_init.eth_port_conf[i].chip_connect > TPM_CONN_RGMII2)) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"\n ETH_port[(%d)]: chip_connect - wrong init value(%d)"
-						" => legal values <0-5> \n",
-						i, tpm_init.eth_port_conf[i].chip_connect);
-					return (TPM_FAIL);
-				}
-				if ((tpm_init.eth_port_conf[i].int_connect < TPM_INTCON_GMAC0) ||
-						(tpm_init.eth_port_conf[i].int_connect > TPM_INTCON_SWITCH)) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"\n ETH_port[(%d)]: chip_connect - wrong init "
-						"value(%d) => legal values <0-2> \n",
-						i, tpm_init.eth_port_conf[i].int_connect);
-					return (TPM_FAIL);
-				}
-				if ((tpm_init.eth_port_conf[i].int_connect == TPM_INTCON_SWITCH) &&
-						(tpm_init.eth_port_conf[i].switch_port > 6)) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"\n ETH_port[(%d)]: switch_port - wrong init "
-						"value(%d) => legal values <0-6> \n",
-						i, tpm_init.eth_port_conf[i].switch_port);
-					return (TPM_FAIL);
-				}
+	for (i = 0; i < TPM_MAX_NUM_ETH_PORTS; i++) {
+		if (tpm_init.eth_port_conf[i].valid == TPM_TRUE) {
+			if ((tpm_init.eth_port_conf[i].chip_connect < TPM_CONN_DISC) ||
+					(tpm_init.eth_port_conf[i].chip_connect > TPM_CONN_RGMII2)) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"\n ETH_port[(%d)]: chip_connect - wrong init value(%d)"
+					" => legal values <0-5> \n",
+					i, tpm_init.eth_port_conf[i].chip_connect);
+				return (TPM_FAIL);
+			}
+			if ((tpm_init.eth_port_conf[i].int_connect < TPM_INTCON_GMAC0) ||
+					(tpm_init.eth_port_conf[i].int_connect > TPM_INTCON_SWITCH)) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"\n ETH_port[(%d)]: chip_connect - wrong init "
+					"value(%d) => legal values <0-2> \n",
+					i, tpm_init.eth_port_conf[i].int_connect);
+				return (TPM_FAIL);
+			}
+			if ((tpm_init.eth_port_conf[i].int_connect == TPM_INTCON_SWITCH) &&
+					(tpm_init.eth_port_conf[i].switch_port > 6)) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"\n ETH_port[(%d)]: switch_port - wrong init "
+					"value(%d) => legal values <0-6> \n",
+					i, tpm_init.eth_port_conf[i].switch_port);
+				return (TPM_FAIL);
+			}
 
-				if ((tpm_init.eth_port_conf[i].int_connect == TPM_INTCON_SWITCH) &&
-					 (tpm_init.eth_port_conf[i].switch_port <= 6)) {
-					num_uni_ports++;
-				}
+			if ((tpm_init.eth_port_conf[i].int_connect == TPM_INTCON_SWITCH) &&
+				 (tpm_init.eth_port_conf[i].switch_port <= 6)) {
+				num_uni_ports++;
 			}
 		}
+	}
 	/********************* Virtual UNI validation *************************************/
 
-		if ((tpm_init.virt_uni_info.enabled < TPM_VIRT_UNI_DISABLED) ||
-				(tpm_init.virt_uni_info.enabled > TPM_VIRT_UNI_ENABLED)) {
-			TPM_OS_FATAL(TPM_INIT_MOD,
-				"\n Virtual UNI: wrong init value(%d) => legal "
-				"values <0=TPM_WIFI_VIRT_UNI_DISABLED/1=TPM_VIRT_UNI_ENABLED. \n",
-				tpm_init.virt_uni_info.enabled);
-			return (TPM_FAIL);
-		}
-		if (tpm_init.virt_uni_info.enabled == TPM_VIRT_UNI_ENABLED) {
-		/*oct* - open this validation in next LSP - meantime it works only on RD */
+	if ((tpm_init.virt_uni_info.enabled < TPM_VIRT_UNI_DISABLED) ||
+			(tpm_init.virt_uni_info.enabled > TPM_VIRT_UNI_ENABLED)) {
+		TPM_OS_FATAL(TPM_INIT_MOD,
+			"\n Virtual UNI: wrong init value(%d) => legal "
+			"values <0=TPM_WIFI_VIRT_UNI_DISABLED/1=TPM_VIRT_UNI_ENABLED. \n",
+			tpm_init.virt_uni_info.enabled);
+		return (TPM_FAIL);
+	}
+	if (tpm_init.virt_uni_info.enabled == TPM_VIRT_UNI_ENABLED) {
+	/*oct* - open this validation in next LSP - meantime it works only on RD */
 #if 0
-			/* check that GMAC1 is connected to internal switch port #5 */
-			rc = mvBoardIsInternalSwitchConnected(1);
-			if (rc == 0) {
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n WiFi virtual UNI: feature ENABLED - GMAC1 "
-					"is NOT HW-connected to Switch  port #5. \n");
-				return (TPM_FAIL);
-			}
-#endif
-			/* fail eth complex other than dual MAC */
-			if (TPM_PON_WAN_DUAL_MAC_INT_SWITCH != tpm_init.eth_cmplx_profile)
-			{
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n Virtual UNI suppoerted only by ethernet Complex %x (used %x) \n",
-					TPM_PON_WAN_DUAL_MAC_INT_SWITCH, tpm_init.eth_cmplx_profile);
-				return (TPM_FAIL);
-			}
-
-			/* currently support only UNI_VIRT port for WIFI virtual UNI port */
-			if (tpm_init.virt_uni_info.uni_port != TPM_SRC_PORT_UNI_VIRT) {
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n Virtual UNI: wrong port value(%d) => "
-					"legal values <0-%d> - default value<%d. \n",
-					tpm_init.virt_uni_info.uni_port, TPM_SRC_PORT_UNI_VIRT ,TPM_SRC_PORT_UNI_VIRT);
-				return (TPM_FAIL);
-			}
-
-			num_uni_ports++;
-
-			/* if feature enabled and missing PNC range in the xml - return ERROR */
-			for (i = 0; i < TPM_MAX_NUM_RANGES; i++) {
-				if (tpm_init.pnc_range[i].range_num == TPM_PNC_VIRT_UNI) {
-					if (tpm_init.pnc_range[i].valid != TPM_TRUE) {
-						TPM_OS_FATAL(TPM_INIT_MOD,
-							"\n Virtual UNI: feature ENABLED - missing "
-							"PNC range <TPM_PNC_VIRT_UNI> in XML config file. \n");
-						return (TPM_FAIL);
-					}
-				}
-			}	/* for */
-			/* TODO: check all GMAC1 TX queues are owned by CPU */
-
-		}
-
-		/*if wifi feature enabled - end validation */
-	/********************* PNC validations *****************************************************/
-		found_ipv4_pre = found_cnm_main = TPM_FALSE;
-		ipv4_pre_size = cnm_main_size = 0;
-
-		/* Validate total number of Pnc Entries */
-		for (i = 0; i < TPM_MAX_NUM_RANGES; i++) {
-			if (tpm_init.pnc_range[i].valid == TPM_TRUE) {
-				j += tpm_init.pnc_range[i].range_size;
-				if (tpm_init.pnc_range[i].range_num >= TPM_MAX_NUM_RANGES) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"PNC range[%d]: range_num - wrong init value(%d) => "
-						"legal values <0-%d>\n",
-						i, tpm_init.pnc_range[i].range_num, TPM_MAX_RANGE);
-					return (TPM_FAIL);
-				}
-				if (tpm_init.pnc_range[i].range_type > TPM_RANGE_TYPE_TABLE) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"PNC range[%d]: range_type - wrong init value(%d) => "
-						"legal values <0=TYPE_ACL,1=TYPE_TABLE>\n",
-						i, tpm_init.pnc_range[i].range_type);
-					return (TPM_FAIL);
-				}
-				if ((tpm_init.pnc_range[i].cntr_grp < 0) || (tpm_init.pnc_range[i].cntr_grp > 3)) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						     "PNC range[%d] cntr_grp - wrong init value(%d) => legal values <0-3>\n",
-						     i, tpm_init.pnc_range[i].cntr_grp);
-					return (TPM_FAIL);
-				}
-				if ((tpm_init.pnc_range[i].lu_mask < 0) || (tpm_init.pnc_range[i].lu_mask > 1)) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						     "PNC range[%d] lu_mask - wrong init value(%d) => legal values <0-1>\n",
-						     i, tpm_init.pnc_range[i].lu_mask);
-					return (TPM_FAIL);
-				}
-				if (tpm_init.pnc_range[i].range_num == TPM_PNC_CNM_IPV4_PRE) {
-					found_ipv4_pre = TPM_TRUE;
-					ipv4_pre_size = tpm_init.pnc_range[i].range_size;
-				} else if (tpm_init.pnc_range[i].range_num == TPM_PNC_CNM_MAIN) {
-					found_cnm_main = TPM_TRUE;
-					cnm_main_size = tpm_init.pnc_range[i].range_size;
-				}
-			}
-		}
-		if (j > TPM_PNC_SIZE) {
-			TPM_OS_FATAL(TPM_INIT_MOD, "Sum of Pnc ranges(%d) is bigger than PnC size(%d)\n", j,
-				     TPM_PNC_SIZE);
+		/* check that GMAC1 is connected to internal switch port #5 */
+		rc = mvBoardIsInternalSwitchConnected(1);
+		if (rc == 0) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n WiFi virtual UNI: feature ENABLED - GMAC1 "
+				"is NOT HW-connected to Switch  port #5. \n");
 			return (TPM_FAIL);
 		}
+#endif
+		/* fail eth complex other than dual MAC */
+		if (TPM_PON_WAN_DUAL_MAC_INT_SWITCH != tpm_init.eth_cmplx_profile)
+		{
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n Virtual UNI suppoerted only by ethernet Complex %x (used %x) \n",
+				TPM_PON_WAN_DUAL_MAC_INT_SWITCH, tpm_init.eth_cmplx_profile);
+			return (TPM_FAIL);
+		}
+
+		/* currently support only UNI_VIRT port for WIFI virtual UNI port */
+		if (tpm_init.virt_uni_info.uni_port != TPM_SRC_PORT_UNI_VIRT) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n Virtual UNI: wrong port value(%d) => "
+				"legal values <0-%d> - default value<%d. \n",
+				tpm_init.virt_uni_info.uni_port, TPM_SRC_PORT_UNI_VIRT ,TPM_SRC_PORT_UNI_VIRT);
+			return (TPM_FAIL);
+		}
+
+		num_uni_ports++;
+
+		/* if feature enabled and missing PNC range in the xml - return ERROR */
+		for (i = 0; i < TPM_MAX_NUM_RANGES; i++) {
+			if (tpm_init.pnc_range[i].range_num == TPM_PNC_VIRT_UNI) {
+				if (tpm_init.pnc_range[i].valid != TPM_TRUE) {
+					TPM_OS_FATAL(TPM_INIT_MOD,
+						"\n Virtual UNI: feature ENABLED - missing "
+						"PNC range <TPM_PNC_VIRT_UNI> in XML config file. \n");
+					return (TPM_FAIL);
+				}
+			}
+		}	/* for */
+		/* TODO: check all GMAC1 TX queues are owned by CPU */
+
+	}
+
+	/*if wifi feature enabled - end validation */
+	/********************* PNC validations *****************************************************/
+	found_ipv4_pre = found_cnm_main = TPM_FALSE;
+	ipv4_pre_size = cnm_main_size = 0;
+
+	/* Validate total number of Pnc Entries */
+	for (i = 0; i < TPM_MAX_NUM_RANGES; i++) {
+		if (tpm_init.pnc_range[i].valid == TPM_TRUE) {
+			j += tpm_init.pnc_range[i].range_size;
+			if (tpm_init.pnc_range[i].range_num >= TPM_MAX_NUM_RANGES) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"PNC range[%d]: range_num - wrong init value(%d) => "
+					"legal values <0-%d>\n",
+					i, tpm_init.pnc_range[i].range_num, TPM_MAX_RANGE);
+				return (TPM_FAIL);
+			}
+			if (tpm_init.pnc_range[i].range_type > TPM_RANGE_TYPE_TABLE) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"PNC range[%d]: range_type - wrong init value(%d) => "
+					"legal values <0=TYPE_ACL,1=TYPE_TABLE>\n",
+					i, tpm_init.pnc_range[i].range_type);
+				return (TPM_FAIL);
+			}
+			if ((tpm_init.pnc_range[i].cntr_grp < 0) || (tpm_init.pnc_range[i].cntr_grp > 3)) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					     "PNC range[%d] cntr_grp - wrong init value(%d) => legal values <0-3>\n",
+					     i, tpm_init.pnc_range[i].cntr_grp);
+				return (TPM_FAIL);
+			}
+			if ((tpm_init.pnc_range[i].lu_mask < 0) || (tpm_init.pnc_range[i].lu_mask > 1)) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					     "PNC range[%d] lu_mask - wrong init value(%d) => legal values <0-1>\n",
+					     i, tpm_init.pnc_range[i].lu_mask);
+				return (TPM_FAIL);
+			}
+			if (tpm_init.pnc_range[i].range_num == TPM_PNC_CNM_IPV4_PRE) {
+				found_ipv4_pre = TPM_TRUE;
+				ipv4_pre_size = tpm_init.pnc_range[i].range_size;
+			} else if (tpm_init.pnc_range[i].range_num == TPM_PNC_CNM_MAIN) {
+				found_cnm_main = TPM_TRUE;
+				cnm_main_size = tpm_init.pnc_range[i].range_size;
+			}
+		}
+	}
+	if (j > TPM_PNC_SIZE) {
+		TPM_OS_FATAL(TPM_INIT_MOD, "Sum of Pnc ranges(%d) is bigger than PnC size(%d)\n", j,
+			     TPM_PNC_SIZE);
+		return (TPM_FAIL);
+	}
 
 	/********************* MOD validations *****************************************************/
-		/* Validate TPM reserved modification entries */
+	/* Validate TPM reserved modification entries */
 	/********************* TX module validations *****************************************************/
 
-		for (tx_mod = TPM_TX_MOD_GMAC0; tx_mod < TPM_MAX_NUM_TX_PORTS; (tx_mod)++) {
-			/* validate gmac_tx - according to tpm_init.num_tcont_llid */
-			if (tx_mod >= TPM_TX_MOD_PMAC_0) {
-				if (((tx_mod - TPM_TX_MOD_GMAC1) > tpm_init.num_tcont_llid) &&
-				    (tpm_init.gmac_tx[tx_mod].valid == 1)) {
-					tpm_init.gmac_tx[tx_mod].valid = 0;
-					TPM_OS_WARN(TPM_INIT_MOD,
-						    " Illegal TCONT/LLID %d configuration - max legal value is %d.\n ",
-						    tx_mod, tpm_init.num_tcont_llid);
-				}
-			}
-			for (i = 0; i < TPM_MAX_NUM_TX_QUEUE; i++) {
-				if (tpm_init.gmac_tx[tx_mod].tx_queue[i].valid != 1)
-					continue;
-
-				if ((tpm_init.gmac_tx[tx_mod].tx_queue[i].queue_owner < TPM_Q_OWNER_CPU) ||
-				    (tpm_init.gmac_tx[tx_mod].tx_queue[i].queue_owner >= TPM_Q_OWNER_MAX)) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"TX module queue [%d]: queue_owner - wrong init value(%d)"
-						" => legal values <%d-%d>\n",
-						tx_mod, tpm_init.gmac_tx[tx_mod].tx_queue[i].queue_owner,
-						TPM_Q_OWNER_CPU, TPM_Q_OWNER_PMAC);
-					return (TPM_FAIL);
-				}
-				if (tpm_init.gmac_tx[tx_mod].tx_queue[i].owner_queue_num >= TPM_MAX_NUM_TX_QUEUE) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"TX module queue [%d]: owner_queue_num - wrong init value(%d) "
-						"is bigger than maximum queue number (%d)\n",
-						tx_mod, tpm_init.gmac_tx[tx_mod].tx_queue[i].owner_queue_num,
-						TPM_MAX_NUM_TX_QUEUE - 1);
-					return (TPM_FAIL);
-				}
-				if ((tpm_init.gmac_tx[tx_mod].tx_queue[i].sched_method < TPM_SCHED_SP) ||
-				    (tpm_init.gmac_tx[tx_mod].tx_queue[i].sched_method > TPM_SCHED_WRR)) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"TX module queue [%d]: sched_method  - wrong init value(%d) => "
-						"legal values <%d-%d>\n\n",
-						tx_mod, tpm_init.gmac_tx[tx_mod].tx_queue[i].owner_queue_num,
-						TPM_SCHED_SP, TPM_SCHED_WRR);
-					return (TPM_FAIL);
-				}
-				if (tpm_init.gmac_tx[tx_mod].tx_queue[i].queue_weight > TPM_MAX_WRR_WEIGHT) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-						"TX module queue [%d]: queue_weight  - wrong init value(%d) "
-						"=> legal values <0-%d>\n\n",
-						tx_mod, tpm_init.gmac_tx[tx_mod].tx_queue[i].queue_weight,
-						TPM_MAX_WRR_WEIGHT);
-					return (TPM_FAIL);
-				}
-			}
-		}
-
-		/********* per GMAC - validate that default TCONT & Queue - are not set as HWF in xml *****/
-		for (gmac_i = 0; gmac_i < TPM_MAX_NUM_GMACS; gmac_i++) {
-			rc = mv_eth_get_txq_cpu_def(gmac_i, &txp, &txq, 0);
-			if (rc != 0) {
-				TPM_OS_WARN(TPM_INIT_MOD, "\n Failed to GET the default queue per GMAC%d - rc= %d. \n",
-					    gmac_i, rc);
-       			continue;
-			}
-			if (gmac_i >= TPM_TX_MOD_PMAC_0) {
-				if (tpm_init.gmac_tx[gmac_i + txp].tx_queue[txq].queue_owner != TPM_Q_OWNER_CPU) {
-					TPM_OS_WARN(TPM_INIT_MOD,
-						" Default TX queue(%d) per GMAC (%d) must not be set in "
-						"hardware forwarding mode in config params.\n\n", txq, gmac_i);
-				}
-			} else {
-				if (tpm_init.gmac_tx[gmac_i].tx_queue[txq].queue_owner != TPM_Q_OWNER_CPU) {
-					TPM_OS_WARN(TPM_INIT_MOD,
-						" Default TX queue(%d) per GMAC (%d) must not be set in "
-						"hardware forwarding mode in config params.\n\n", txq, gmac_i);
-				}
-			}
-		}
-
-		/*****split mod setting validation******/
-		if (tpm_init.split_mod_config.split_mod_enable == TPM_SPLIT_MOD_ENABLED) {
-			if(tpm_init.split_mod_config.vlan_num > (TPM_DB_SPLIT_MOD_NUM_VLANS_MAX - TPM_DB_SPLIT_MOD_INIT_VLANS_NUM)) {
-				TPM_OS_FATAL(TPM_INIT_MOD,
-				     "\n Split Mod VLAN num %d, it should not larger than %d \n",
-				     tpm_init.split_mod_config.vlan_num, (TPM_DB_SPLIT_MOD_NUM_VLANS_MAX - TPM_DB_SPLIT_MOD_INIT_VLANS_NUM));
-				return (TPM_FAIL);
-			}
-			if (tpm_init.split_mod_config.p_bit_num > TPM_DB_SPLIT_MOD_P_BIT_NUM_MAX || tpm_init.split_mod_config.p_bit_num == TPM_DB_SPLIT_MOD_P_BIT_NO_SET) {
-				TPM_OS_FATAL(TPM_INIT_MOD, "\n Split Mod P_bit number out of range.\n");
-				return (TPM_FAIL);
-			}
-			for (i = 0; i < tpm_init.split_mod_config.p_bit_num; i++) {
-				if(tpm_init.split_mod_config.p_bit[i] > TPM_DB_SPLIT_MOD_P_BIT_MAX) {
-					TPM_OS_FATAL(TPM_INIT_MOD,
-				     		"\n Split Mod P_bit %d No Valid\n",
-						tpm_init.split_mod_config.p_bit[i]);
-					return (TPM_FAIL);
-				}
-				for (j = i + 1; j < tpm_init.split_mod_config.p_bit_num; j++) {
-					if(tpm_init.split_mod_config.p_bit[i] == tpm_init.split_mod_config.p_bit[j]) {
-						TPM_OS_FATAL(TPM_INIT_MOD,
-				     			"\n Split Mod P_bit %d Repeat\n",
-							tpm_init.split_mod_config.p_bit[i]);
-						return (TPM_FAIL);
-					}
-				}
-			}
-		}
-
-		/********************* CTC CNM validation *************************************/
-		if (tpm_init.ctc_cm_enable != TPM_CTC_CM_DISABLED) {
-			if (tpm_init.split_mod_config.split_mod_enable == TPM_SPLIT_MOD_DISABLED) {
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n CTC CM: CTC CnM is enabled while split modification is disabled! \n");
-				return (TPM_FAIL);
-			}
-
-			if (!found_ipv4_pre) {
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n CTC CM: CTC CnM is enabled while CNM_IPV4_PRE range size is Zero! \n");
-				return (TPM_FAIL);
-			} else {
-				exp_range_size = num_uni_ports * TPM_CNM_MAX_IPV4_PRE_FILTER_RULE_PER_PORT + 1;
-				if (exp_range_size > ipv4_pre_size) {
-					TPM_OS_WARN(TPM_INIT_MOD,
-						"\n CTC CM: CNM IPV4 PRE FILTER is not enough for "
-						"L2 & IPV4 combo rules (%d/%d) of %d UNI ports! \n",
-						exp_range_size, ipv4_pre_size, num_uni_ports);
-				}
-			}
-
-			if (!found_cnm_main) {
-				TPM_OS_FATAL(TPM_INIT_MOD,
-					"\n CTC CM: CTC CnM is enabled while CNM_MAIN range size is Zero! \n");
-				return (TPM_FAIL);
-			} else {
-				exp_range_size = num_uni_ports * TPM_MAX_NUM_CTC_PRECEDENCE + 2;
-				if (exp_range_size > cnm_main_size) {
-					TPM_OS_WARN(TPM_INIT_MOD,
-						"\n CTC CM: CNM MAIN is not enough for "
-						"8 precedence rules (%d/%d) of %d UNI ports! \n",
-						exp_range_size, cnm_main_size, num_uni_ports);
-				}
-			}
-		} else {
-			if (found_ipv4_pre) {
+	for (tx_mod = TPM_TX_MOD_GMAC0; tx_mod < TPM_MAX_NUM_TX_PORTS; (tx_mod)++) {
+		/* validate gmac_tx - according to tpm_init.num_tcont_llid */
+		if (tx_mod >= TPM_TX_MOD_PMAC_0) {
+			if (((tx_mod - TPM_TX_MOD_GMAC1) > tpm_init.num_tcont_llid) &&
+			    (tpm_init.gmac_tx[tx_mod].valid == 1)) {
+				tpm_init.gmac_tx[tx_mod].valid = 0;
 				TPM_OS_WARN(TPM_INIT_MOD,
-					"\n CTC CM: Since CTC CnM is disabled, CNM_IPV4_PRE range size should be Zero! \n");
+					    " Illegal TCONT/LLID %d configuration - max legal value is %d.\n ",
+					    tx_mod, tpm_init.num_tcont_llid);
 			}
-			if (found_cnm_main) {
-				TPM_OS_WARN(TPM_INIT_MOD,
-					"\n CTC CM: Since CTC CnM is disabled, CNM_MAIN range size should be Zero! \n");
+		}
+		for (i = 0; i < TPM_MAX_NUM_TX_QUEUE; i++) {
+			if (tpm_init.gmac_tx[tx_mod].tx_queue[i].valid != 1)
+				continue;
+
+			if ((tpm_init.gmac_tx[tx_mod].tx_queue[i].queue_owner < TPM_Q_OWNER_CPU) ||
+			    (tpm_init.gmac_tx[tx_mod].tx_queue[i].queue_owner >= TPM_Q_OWNER_MAX)) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"TX module queue [%d]: queue_owner - wrong init value(%d)"
+					" => legal values <%d-%d>\n",
+					tx_mod, tpm_init.gmac_tx[tx_mod].tx_queue[i].queue_owner,
+					TPM_Q_OWNER_CPU, TPM_Q_OWNER_PMAC);
+				return (TPM_FAIL);
+			}
+			if (tpm_init.gmac_tx[tx_mod].tx_queue[i].owner_queue_num >= TPM_MAX_NUM_TX_QUEUE) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"TX module queue [%d]: owner_queue_num - wrong init value(%d) "
+					"is bigger than maximum queue number (%d)\n",
+					tx_mod, tpm_init.gmac_tx[tx_mod].tx_queue[i].owner_queue_num,
+					TPM_MAX_NUM_TX_QUEUE - 1);
+				return (TPM_FAIL);
+			}
+			if ((tpm_init.gmac_tx[tx_mod].tx_queue[i].sched_method < TPM_SCHED_SP) ||
+			    (tpm_init.gmac_tx[tx_mod].tx_queue[i].sched_method > TPM_SCHED_WRR)) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"TX module queue [%d]: sched_method  - wrong init value(%d) => "
+					"legal values <%d-%d>\n\n",
+					tx_mod, tpm_init.gmac_tx[tx_mod].tx_queue[i].owner_queue_num,
+					TPM_SCHED_SP, TPM_SCHED_WRR);
+				return (TPM_FAIL);
+			}
+			if (tpm_init.gmac_tx[tx_mod].tx_queue[i].queue_weight > TPM_MAX_WRR_WEIGHT) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+					"TX module queue [%d]: queue_weight  - wrong init value(%d) "
+					"=> legal values <0-%d>\n\n",
+					tx_mod, tpm_init.gmac_tx[tx_mod].tx_queue[i].queue_weight,
+					TPM_MAX_WRR_WEIGHT);
+				return (TPM_FAIL);
 			}
 		}
 	}
 
+	/********* per GMAC - validate that default TCONT & Queue - are not set as HWF in xml *****/
+	for (gmac_i = 0; gmac_i < TPM_MAX_NUM_GMACS; gmac_i++) {
+		rc = mv_eth_get_txq_cpu_def(gmac_i, &txp, &txq, 0);
+		if (rc != 0) {
+			TPM_OS_WARN(TPM_INIT_MOD, "\n Failed to GET the default queue per GMAC%d - rc= %d. \n",
+				    gmac_i, rc);
+			continue;
+		}
+		if (gmac_i >= TPM_TX_MOD_PMAC_0) {
+			if (tpm_init.gmac_tx[gmac_i + txp].tx_queue[txq].queue_owner != TPM_Q_OWNER_CPU) {
+				TPM_OS_WARN(TPM_INIT_MOD,
+					" Default TX queue(%d) per GMAC (%d) must not be set in "
+					"hardware forwarding mode in config params.\n\n", txq, gmac_i);
+			}
+		} else {
+			if (tpm_init.gmac_tx[gmac_i].tx_queue[txq].queue_owner != TPM_Q_OWNER_CPU) {
+				TPM_OS_WARN(TPM_INIT_MOD,
+					" Default TX queue(%d) per GMAC (%d) must not be set in "
+					"hardware forwarding mode in config params.\n\n", txq, gmac_i);
+			}
+		}
+	}
+
+	/*****split mod setting validation******/
+	if (tpm_init.split_mod_config.split_mod_enable == TPM_SPLIT_MOD_ENABLED) {
+		if(tpm_init.split_mod_config.vlan_num > (TPM_DB_SPLIT_MOD_NUM_VLANS_MAX - TPM_DB_SPLIT_MOD_INIT_VLANS_NUM)) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+			     "\n Split Mod VLAN num %d, it should not larger than %d \n",
+			     tpm_init.split_mod_config.vlan_num, (TPM_DB_SPLIT_MOD_NUM_VLANS_MAX - TPM_DB_SPLIT_MOD_INIT_VLANS_NUM));
+			return (TPM_FAIL);
+		}
+		if (tpm_init.split_mod_config.p_bit_num > TPM_DB_SPLIT_MOD_P_BIT_NUM_MAX || tpm_init.split_mod_config.p_bit_num == TPM_DB_SPLIT_MOD_P_BIT_NO_SET) {
+			TPM_OS_FATAL(TPM_INIT_MOD, "\n Split Mod P_bit number out of range.\n");
+			return (TPM_FAIL);
+		}
+		for (i = 0; i < tpm_init.split_mod_config.p_bit_num; i++) {
+			if(tpm_init.split_mod_config.p_bit[i] > TPM_DB_SPLIT_MOD_P_BIT_MAX) {
+				TPM_OS_FATAL(TPM_INIT_MOD,
+			     		"\n Split Mod P_bit %d No Valid\n",
+					tpm_init.split_mod_config.p_bit[i]);
+				return (TPM_FAIL);
+			}
+			for (j = i + 1; j < tpm_init.split_mod_config.p_bit_num; j++) {
+				if(tpm_init.split_mod_config.p_bit[i] == tpm_init.split_mod_config.p_bit[j]) {
+					TPM_OS_FATAL(TPM_INIT_MOD,
+			     			"\n Split Mod P_bit %d Repeat\n",
+						tpm_init.split_mod_config.p_bit[i]);
+					return (TPM_FAIL);
+				}
+			}
+		}
+	}
+
+	/********************* CTC CNM validation *************************************/
+	if (tpm_init.ctc_cm_enable != TPM_CTC_CM_DISABLED) {
+		if (tpm_init.split_mod_config.split_mod_enable == TPM_SPLIT_MOD_DISABLED) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n CTC CM: CTC CnM is enabled while split modification is disabled! \n");
+			return (TPM_FAIL);
+		}
+
+		if (!found_ipv4_pre) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n CTC CM: CTC CnM is enabled while CNM_IPV4_PRE range size is Zero! \n");
+			return (TPM_FAIL);
+		} else {
+			exp_range_size = num_uni_ports * TPM_CNM_MAX_IPV4_PRE_FILTER_RULE_PER_PORT + 1;
+			if (exp_range_size > ipv4_pre_size) {
+				TPM_OS_WARN(TPM_INIT_MOD,
+					"\n CTC CM: CNM IPV4 PRE FILTER is not enough for "
+					"L2 & IPV4 combo rules (%d/%d) of %d UNI ports! \n",
+					exp_range_size, ipv4_pre_size, num_uni_ports);
+			}
+		}
+
+		if (!found_cnm_main) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n CTC CM: CTC CnM is enabled while CNM_MAIN range size is Zero! \n");
+			return (TPM_FAIL);
+		} else {
+			exp_range_size = num_uni_ports * TPM_MAX_NUM_CTC_PRECEDENCE + 2;
+			if (exp_range_size > cnm_main_size) {
+				TPM_OS_WARN(TPM_INIT_MOD,
+					"\n CTC CM: CNM MAIN is not enough for "
+					"8 precedence rules (%d/%d) of %d UNI ports! \n",
+					exp_range_size, cnm_main_size, num_uni_ports);
+			}
+		}
+	} else {
+		if (found_ipv4_pre) {
+			TPM_OS_WARN(TPM_INIT_MOD,
+				"\n CTC CM: Since CTC CnM is disabled, CNM_IPV4_PRE range size should be Zero! \n");
+		}
+		if (found_cnm_main) {
+			TPM_OS_WARN(TPM_INIT_MOD,
+				"\n CTC CM: Since CTC CnM is disabled, CNM_MAIN range size should be Zero! \n");
+		}
+	}
+
+	/********************* ds_mac_based_trunking validation *************************************/
+	if (tpm_init.ds_mac_based_trunk_enable == TPM_DS_MAC_BASED_TRUNK_ENABLED) {
+		if (    (tpm_init.cpu_loopback == TPM_CPU_LOOPBACK_ENABLED)
+		     || (tpm_init.mc_setting.per_uni_vlan_xlat)
+		     || (tpm_init.virt_uni_info.enabled == TPM_VIRT_UNI_ENABLED)) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n when ds_mac_based_trunk is enabled, cpu_loopback, per_uni_vlan_xlat"
+				" and virt_uni can not be enabled! \n");
+			return (TPM_FAIL);
+		}
+
+		if (    (tpm_init.gmac0_mh_en == 0)
+		     || (tpm_init.gmac1_mh_en == 0)) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n when ds_mac_based_trunk is enabled, MH on GMAC0/1 must be enabled\n");
+			return (TPM_FAIL);
+		}
+
+		if (    (tpm_init.eth_cmplx_profile != TPM_PON_WAN_DUAL_MAC_INT_SWITCH)
+		     && (tpm_init.eth_cmplx_profile != TPM_PON_WAN_DUAL_MAC_EXT_SWITCH)) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+				"\n when ds_mac_based_trunk is enabled, eth_cmplx_profile must be "
+				"TPM_PON_WAN_DUAL_MAC_INT_SWITCH"
+				" or TPM_PON_WAN_DUAL_MAC_EXT_SWITCH! \n");
+			return (TPM_FAIL);
+		}
+
+	}
 	/********************* No switch init(MC) validation *************************************/
 	if (tpm_init.switch_init == 0) {
 		if (tpm_init.virt_uni_info.enabled == TPM_VIRT_UNI_ENABLED) {
@@ -2116,7 +2185,8 @@ int32_t tpm_init_info_validate(void)
 			return (TPM_FAIL);
 		}
 
-		if (tpm_init.pnc_range[TPM_PNC_MAC_LEARN].range_size == 0) {
+		if (tpm_init.pnc_range[TPM_PNC_MAC_LEARN].range_size == 0 &&
+		    tpm_init.pnc_mac_learn_enable == TPM_PNC_MAC_LEARN_ENABLED) {
 			TPM_OS_FATAL(TPM_INIT_MOD,
 					"\n No Switch Init: PNC range[%d] size is 0! \n", TPM_PNC_MAC_LEARN);
 			return (TPM_FAIL);
@@ -2133,11 +2203,28 @@ int32_t tpm_init_info_validate(void)
 			TPM_OS_WARN(TPM_INIT_MOD,
 					"\n No Switch Init: MAC learn enabled, PNC range[%d] size is too small! \n", TPM_PNC_MAC_LEARN);
 		}
+
+		if (tpm_init.pnc_mac_learn_enable == TPM_PNC_MAC_LEARN_ENABLED &&
+		    tpm_init.eth_cmplx_profile != TPM_PON_WAN_G0_G1_LPBK) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+					"\n PNC MAC learning not supported with profile (%d) \n",
+					tpm_init.eth_cmplx_profile);
+			return (TPM_FAIL);
+		}
+
+		if (tpm_init.ipv6_5t_enable == TPM_IPV6_5T_ENABLED &&
+		    tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_DUAL_LAN) {
+			TPM_OS_FATAL(TPM_INIT_MOD,
+					"\n IPV6 5-tuple supported with profile (%d) \n",
+					tpm_init.eth_cmplx_profile);
+			return (TPM_FAIL);
+		}
 	} else if ((tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_SINGLE_PORT ||
 		    tpm_init.eth_cmplx_profile == TPM_PON_WAN_G1_SINGLE_PORT ||
 		    tpm_init.eth_cmplx_profile == TPM_PON_G1_WAN_G0_SINGLE_PORT ||
 		    tpm_init.eth_cmplx_profile == TPM_PON_G0_WAN_G1_SINGLE_PORT ||
-		    tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_LPBK)
+		    tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_LPBK ||
+		    tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_DUAL_LAN)
 		 && tpm_init.switch_init == 1) {
 			TPM_OS_FATAL(TPM_INIT_MOD,
 					"\n Switch can not be Init at this profile: [%d]! \n", tpm_init.eth_cmplx_profile);
@@ -2187,6 +2274,26 @@ int32_t tpm_init_info_validate(void)
 					}
 				}
 			}
+		}
+	}
+
+	/* check all the loopback features */
+	if (tpm_init.mc_setting.per_uni_vlan_xlat) {
+		if (tpm_init.virt_uni_info.enabled != TPM_VIRT_UNI_ENABLED) {
+			TPM_OS_FATAL(TPM_INIT_MOD, "\n per_uni_vlan_xlat can not be supported when virt_uni is disabled\n");
+			return (TPM_FAIL);
+		}
+	}
+	if (tpm_init.cpu_loopback == TPM_CPU_LOOPBACK_ENABLED) {
+		if (tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_LPBK)
+			;/* OK */
+		else if (    (tpm_init.gmac_port_conf[TPM_ENUM_GMAC_1].conn == TPM_GMAC_CON_SWITCH_5)
+		          && (tpm_init.eth_cmplx_profile != TPM_G0_WAN_G1_INT_SWITCH)
+		          && (tpm_init.eth_cmplx_profile != TPM_PON_G0_WAN_G1_INT_SWITCH))
+			;/* OK */
+		else {
+			TPM_OS_FATAL(TPM_INIT_MOD, "\n cpu_wan_loopback can not be supported on this profile\n");
+			return (TPM_FAIL);
 		}
 	}
 
@@ -2240,7 +2347,7 @@ void tpm_init_gmac_rxq_set(tpm_gmacs_enum_t gmac)
 {
 	uint32_t i;
 
-	for (i = 0; i < TPM_MAX_NUM_TX_QUEUE; i++) {
+	for (i = 0; i < TPM_MAX_NUM_RX_QUEUE; i++) {
 		if (tpm_init.gmac_rx[gmac].rx_queue[i].valid == TPM_TRUE)
 			tpm_db_gmac_rx_q_conf_set(gmac, i, tpm_init.gmac_rx[gmac].rx_queue[i].queue_size);
 	}
@@ -2424,6 +2531,9 @@ int32_t tpm_init_api_rng_init_all(void)
 	ret_code = tpm_init_api_rng_init(TPM_PNC_CNM_MAIN, TPM_CNM_MAIN_ACL, TPM_DIR_DS);
 	IF_ERROR(ret_code);
 
+	ret_code = tpm_init_api_rng_init(TPM_PNC_DS_LOAD_BALANCE, TPM_DS_LOAD_BALANCE_ACL, TPM_DIR_DS);
+	IF_ERROR(ret_code);
+
 	return (TPM_OK);
 }
 
@@ -2526,7 +2636,7 @@ int32_t tpm_init_info_set(void)
 	IF_ERROR(ret_code);
 	ret_code = tpm_db_pon_type_set(tpm_init.pon_type);
 	IF_ERROR(ret_code);
-	ret_code = tpm_db_backup_wan_set(tpm_init.backup_wan);
+	ret_code = tpm_db_active_wan_set(tpm_init.active_wan);
 	IF_ERROR(ret_code);
 	ret_code = tpm_db_ds_mh_set_conf_set(tpm_init.ds_mh_set_conf);
 	IF_ERROR(ret_code);
@@ -2558,6 +2668,8 @@ int32_t tpm_init_info_set(void)
 	IF_ERROR(ret_code);
 	ret_code = tpm_db_fc_conf_set(&tpm_init.port_fc_conf);
 	IF_ERROR(ret_code);
+	ret_code = tpm_db_ds_mac_based_trunk_enable_set(tpm_init.ds_mac_based_trunk_enable);
+	IF_ERROR(ret_code);
 
 	/* Set GMAC Logical Functions */
 
@@ -2586,6 +2698,7 @@ int32_t tpm_init_info_set(void)
 		printk(KERN_INFO "TPM_SRC_PORT: %d, value: %d\n", src_port, tpm_init.igmp_pkt_frwd_mod[src_port]);
 	}
 	tpm_db_igmp_set_cpu_queue(tpm_init.igmp_cpu_queue);
+	tpm_db_igmp_set_snoop_enable(tpm_init.igmp_snoop);
 	/*printk("TPM_SRC_PORT_WAN: %d, TPM_SRC_PORT_UNI_0: %d, TPM_SRC_PORT_UNI_1: %d, TPM_SRC_PORT_UNI_2: %d, "
 	   "TPM_SRC_PORT_UNI_3: %d, igmp_cpu_queue: %d\n",
 	   tpm_init.igmp_pkt_frwd_mod[4],tpm_init.igmp_pkt_frwd_mod[0],tpm_init.igmp_pkt_frwd_mod[1],
@@ -2660,7 +2773,9 @@ int32_t tpm_init_info_set(void)
 		tpm_init_gmac_rxq_set(TPM_ENUM_GMAC_1);
 	}
 	/* PMAC Rx */
-	if (tpm_init.pon_type == TPM_GPON || tpm_init.pon_type == TPM_EPON) {
+	if (    tpm_init.pon_type == TPM_GPON
+	     || tpm_init.pon_type == TPM_EPON
+	     || tpm_init.pon_type == TPM_P2P) {
 		tpm_db_gmac_rx_val_set(TPM_ENUM_PMAC);
 		tpm_init_gmac_rxq_set(TPM_ENUM_PMAC);
 	}
@@ -2754,13 +2869,24 @@ int32_t tpm_init_info_set(void)
 		tpm_db_gmac1_lpbk_en_set(false);
 
 	/* set CPU WAN loopback en */
-	if (    (tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_LPBK)
-	     || (tpm_init.gmac_port_conf[TPM_ENUM_GMAC_0].conn == TPM_GMAC_CON_SWITCH_5))
-		tpm_db_cpu_wan_lpbk_en_set(true);
-	else
-		tpm_db_cpu_wan_lpbk_en_set(false);
+	tpm_db_cpu_wan_lpbk_en_set(tpm_init.cpu_loopback);
 
 	tpm_db_switch_init_set(tpm_init.switch_init);
+	if (	(tpm_init.eth_cmplx_profile == TPM_PON_WAN_DUAL_MAC_INT_SWITCH)
+	     || (tpm_init.eth_cmplx_profile == TPM_PON_WAN_DUAL_MAC_EXT_SWITCH))
+		tpm_db_ds_load_bal_en_set(true);
+	else
+		tpm_db_ds_load_bal_en_set(false);
+
+
+	/* set switch active WAN en */
+	if (    (tpm_init.eth_cmplx_profile == TPM_PON_G1_WAN_G0_INT_SWITCH)
+	     || (tpm_init.eth_cmplx_profile == TPM_PON_G0_WAN_G1_INT_SWITCH)
+	     || (tpm_init.eth_cmplx_profile == TPM_PON_G1_WAN_G0_SINGLE_PORT)
+	     || (tpm_init.eth_cmplx_profile == TPM_PON_G0_WAN_G1_SINGLE_PORT))
+		tpm_db_switch_active_wan_en_set(true);
+	else
+		tpm_db_switch_active_wan_en_set(false);
 
 	return (TPM_OK);
 }
@@ -2801,6 +2927,14 @@ void tpm_init_hwf_set(void)
 					TPM_OS_DEBUG(TPM_INIT_MOD,
 						     "GMAC = %d TCONT = %d Q = %d HWF: owner_rx %d\n",
 						     dest_port, dest_port_txp, q_num, owner_rx_port);
+				}
+				else
+				{
+					if (mv_eth_ctrl_txq_cpu_own(dest_port, dest_port_txp, q_num, 1)){
+						TPM_OS_ERROR(TPM_INIT_MOD,
+						"mv_eth_ctrl_txq_cpu_own err GMAC = %d TCONT = %d Q = %d SWF: owner_rx %d\n",
+						     dest_port, dest_port_txp, q_num, owner_rx_port);
+					}
 				}
 			} else {
 				if (mv_eth_ctrl_txq_hwf_own(dest_port, dest_port_txp, q_num, -1)){
@@ -2898,7 +3032,7 @@ void tpm_init_rxq_size_set(void)
 	}			/* All GMACs */
 }
 
-int32_t tpm_init_mh_select(void)
+int32_t tpm_init_mh_select(tpm_init_mh_src_t ds_mh_set_conf)
 {
 	tpm_gmacs_enum_t gmac_i;
 	tpm_db_gmac_func_t gmac_func;
@@ -2911,7 +3045,7 @@ int32_t tpm_init_mh_select(void)
 		tpm_db_gmac_func_get(gmac_i, &gmac_func);
 
 		if ((gmac_func == TPM_GMAC_FUNC_LAN_AND_WAN) || (gmac_func == TPM_GMAC_FUNC_WAN)) {
-			switch (tpm_init.ds_mh_set_conf) {
+			switch (ds_mh_set_conf) {
 			case TPM_MH_SRC_RX_CTRL:
 				mvNetaHwfMhSrcSet(gmac_i, MV_NETA_HWF_MH_REG);
 				mvNetaHwfMhSelSet(gmac_i, (uint8_t) NETA_MH_REPLACE_MH_REG(0));
@@ -2922,10 +3056,10 @@ int32_t tpm_init_mh_select(void)
 				mvNetaHwfMhSelSet(gmac_i, (uint8_t) NETA_MH_DONT_CHANGE);
 				break;
 			default:
-				TPM_OS_ERROR(TPM_INIT_MOD, " Unknown d/s MH source (%d)\n", tpm_init.ds_mh_set_conf);
+				TPM_OS_ERROR(TPM_INIT_MOD, " Unknown d/s MH source (%d)\n", ds_mh_set_conf);
 				return (TPM_FAIL);
 			}
-		} else if ((gmac_func == TPM_GMAC_FUNC_LAN_AND_WAN) || (gmac_func == TPM_GMAC_FUNC_LAN)) {
+		} else if ((gmac_func == TPM_GMAC_FUNC_LAN_AND_WAN) || (gmac_func == TPM_GMAC_FUNC_LAN) || (gmac_func == TPM_GMAC_FUNC_LAN_UNI)) {
 			mvNetaHwfMhSrcSet(gmac_i, MV_NETA_HWF_MH_REG);
 			mvNetaHwfMhSelSet(gmac_i, (uint8_t) NETA_MH_REPLACE_GPON_HDR);
 		}
@@ -2984,6 +3118,34 @@ int32_t tpm_init_tx_queue_sched(void)
 	return ret_code;
 }
 
+/*******************************************************************************
+* tpm_init_gmac_PHY_poll()
+*
+* DESCRIPTION:      Initialize the GMAC PHY polling state accordint to it connect to PHY or not
+*
+* INPUTS:
+*	port -- GMAC port
+*	state -- true: enable PHY polling; false: disable PHY polling
+* OUTPUTS:None
+*
+* RETURNS:
+*
+*******************************************************************************/
+int32_t tpm_init_gmac_PHY_poll(int port, bool state)
+{
+	unsigned int regData;
+
+	regData = MV_REG_READ(ETH_UNIT_CONTROL_REG(port));
+	if (state)
+		regData |= ETH_PHY_POLLING_ENABLE_MASK;
+	else
+		regData &= (~ETH_PHY_POLLING_ENABLE_MASK);
+
+	MV_REG_WRITE(ETH_UNIT_CONTROL_REG(port), regData);
+
+	return TPM_OK;
+}
+
 int32_t tpm_init_switch(void)
 {
 	uint32_t i;
@@ -3001,6 +3163,7 @@ int32_t tpm_init_switch(void)
 	case TPM_PON_G1_WAN_G0_SINGLE_PORT:
 	case TPM_PON_G0_WAN_G1_SINGLE_PORT:
 	case TPM_PON_WAN_G0_G1_LPBK:
+	case TPM_PON_WAN_G0_G1_DUAL_LAN:
 		return (TPM_OK);
        default:
        	break;
@@ -3159,10 +3322,20 @@ int32_t tpm_init_switch(void)
 	if (mv_switch_mac_addr_set(gq_da, 0, sw_port_bmp, 1))
 		TPM_OS_WARN(TPM_INIT_MOD, "mv_switch_mac_addr_set err. sw_port_bmp 0X%x\n", sw_port_bmp);
 
+	/* If Switch port MAC no connected to PHY, disable GMAC PHY polling */
+	for (gmac_i = TPM_ENUM_GMAC_0; gmac_i < TPM_MAX_NUM_GMACS; gmac_i++) {
+		if (TPM_FALSE == tpm_init.gmac_port_conf[gmac_i].valid)
+			continue;
+
+		if (TPM_GMAC_CON_SWITCH_4 == tpm_init.gmac_port_conf[gmac_i].conn ||
+		    TPM_GMAC_CON_SWITCH_5 == tpm_init.gmac_port_conf[gmac_i].conn)
+			tpm_init_gmac_PHY_poll(gmac_i, false);
+	}
+
 	return (TPM_OK);
 }
 
-int32_t tpm_init_mh_conf_set(void)
+int32_t tpm_init_mh_conf_set(uint32_t gmac0_mh_en, uint32_t gmac1_mh_en, tpm_init_gmac_conn_conf_t *gmac_port_conf)
 {
 	tpm_gmacs_enum_t gmac_i;
 	uint32_t amber_port_num, mh_en;
@@ -3180,13 +3353,13 @@ int32_t tpm_init_mh_conf_set(void)
 
 		switch (gmac_i) {
 		case TPM_ENUM_GMAC_0:
-			mh_en = tpm_init.gmac0_mh_en;
-			if (TPM_GMAC_CON_SWITCH_4 == tpm_init.gmac_port_conf[gmac_i].conn)
+			mh_en = gmac0_mh_en;
+			if (TPM_GMAC_CON_SWITCH_4 == gmac_port_conf[gmac_i].conn)
 				amber_port_num = TPM_GMAC0_AMBER_PORT_NUM;
 			break;
 		case TPM_ENUM_GMAC_1:
-			mh_en = tpm_init.gmac1_mh_en;
-			if (TPM_GMAC_CON_SWITCH_5 == tpm_init.gmac_port_conf[gmac_i].conn)
+			mh_en = gmac1_mh_en;
+			if (TPM_GMAC_CON_SWITCH_5 == gmac_port_conf[gmac_i].conn)
 				amber_port_num = TPM_GMAC1_AMBER_PORT_NUM;
 			break;
 		case TPM_ENUM_PMAC:
@@ -3222,7 +3395,7 @@ int32_t tpm_init_mh_conf_set(void)
 	return (TPM_OK);
 }
 
-int32_t tpm_init_mh_reg_set(void)
+int32_t tpm_init_mh_reg_set(tpm_init_mh_src_t ds_mh_set_conf)
 {
 	tpm_gmacs_enum_t gmac_i;
 	uint32_t pp_port_num;
@@ -3248,7 +3421,7 @@ int32_t tpm_init_mh_reg_set(void)
 		}
 		pp_port_num = TPM_GMAC_TO_PP_PORT(gmac_i);
 
-		if (((gmac_func == TPM_GMAC_FUNC_LAN_AND_WAN) || (gmac_func == TPM_GMAC_FUNC_LAN)) &&
+		if (((gmac_func == TPM_GMAC_FUNC_LAN_AND_WAN) || (gmac_func == TPM_GMAC_FUNC_LAN) || (gmac_func == TPM_GMAC_FUNC_LAN_UNI)) &&
 		    gmac_mh_en && (tpm_init.ds_mh_set_conf == TPM_MH_SRC_PNC_RI)) {
 			/* Set MH Tx registers to full table */
 			for (tx_reg_i = 0; tx_reg_i < TPM_TX_MAX_MH_REGS; tx_reg_i++) {
@@ -3275,9 +3448,9 @@ int32_t tpm_init_mh_reg_set(void)
 				/*                   VLANTable field is  (re)set to 'all_other_switch_ports' */
 
 				if (gmac_i == TPM_ENUM_GMAC_0)
-					regVal = 0x3f & (~(1 << TPM_GMAC0_AMBER_PORT_NUM));
+					regVal = 0x7f & (~(1 << TPM_GMAC0_AMBER_PORT_NUM));
 				else
-					regVal = 0x3f & (~(1 << TPM_GMAC1_AMBER_PORT_NUM));
+					regVal = 0x7f & (~(1 << TPM_GMAC1_AMBER_PORT_NUM));
 			} else {
 				if (tpm_db_num_tcont_llid_get(&num_txp) != TPM_OK) {
 					TPM_OS_ERROR(TPM_INIT_MOD,
@@ -3307,8 +3480,8 @@ int32_t tpm_init_get_gmac_queue_rate_limit(void)
 {
 	tpm_db_tx_mod_t tx_mod_i;
 	tpm_gmacs_enum_t gmac_i;
-	uint32_t txp_i = 0;
-	uint32_t size = 0, queue = 0, rate = 0;
+	uint32_t txp_i = 0, prio = 0;
+	uint32_t size = 0, queue = 0, rate = 0, wrr = 0;
 
 	for (tx_mod_i = 0; tx_mod_i < TPM_MAX_NUM_TX_PORTS; tx_mod_i++) {
 		if (TPM_FALSE == tpm_db_gmac_tx_val_get(tx_mod_i)) {
@@ -3322,19 +3495,34 @@ int32_t tpm_init_get_gmac_queue_rate_limit(void)
 			gmac_i = TPM_ENUM_PMAC;
 			txp_i = tx_mod_i - TPM_TX_MOD_PMAC_0;
 		}
+
 		/* get Tx queue bucket size */
 		for (queue = 0; queue < TPM_MAX_NUM_TX_QUEUE; queue++) {
 #ifdef MV_ETH_WRR_NEW
 			size = MV_REG_READ(NETA_TXQ_TOKEN_SIZE_REG(gmac_i, txp_i, queue));
 			rate = MV_REG_READ(NETA_TXQ_REFILL_REG(gmac_i, txp_i, queue));
+			wrr = MV_REG_READ(NETA_TXQ_WRR_ARBITER_REG(gmac_i, txp_i, queue));
 #else /* Old WRR/EJP module */
 			/* token size and rate are in the same reg */
 			rate = MV_REG_READ(ETH_TXQ_TOKEN_CFG_REG(gmac_i, txp_i, queue));
 #endif /* MV_ETH_WRR_NEW */
 			TPM_OS_INFO(TPM_INIT_MOD, "gmac_i (%d), txp_i (%d), queue (%d), size (%d), rate (%d)\n",
 				gmac_i, txp_i, queue, size, rate);
-			tpm_db_set_gmac_rate_limit(tx_mod_i, queue, size, rate);
+			tpm_db_set_gmac_q_rate_limit(tx_mod_i, queue, size, rate, wrr);
 		}
+
+		/* get TX bucket and rate */
+#ifdef MV_ETH_WRR_NEW
+		size = MV_REG_READ(NETA_TXP_TOKEN_SIZE_REG(gmac_i, txp_i));
+		rate = MV_REG_READ(NETA_TXP_REFILL_REG(gmac_i, txp_i));
+		prio = MV_REG_READ(NETA_TX_FIXED_PRIO_CFG_REG(gmac_i, txp_i));
+#else /* Old WRR/EJP module */
+		rate = MV_REG_READ(ETH_TXP_TOKEN_RATE_CFG_REG(gmac_i, txp_i));
+		size = MV_REG_READ(ETH_TXP_TOKEN_SIZE_REG(gmac_i, txp_i));
+#endif /* MV_ETH_WRR_NEW */
+		TPM_OS_INFO(TPM_INIT_MOD, "gmac_i (%d), txp_i (%d), queue (%d), size (%d), rate (%d)\n",
+			gmac_i, txp_i, queue, size, rate);
+		tpm_db_set_gmac_rate_limit(tx_mod_i, size, rate, prio);
 	}
 	return (TPM_OK);
 }
@@ -3344,6 +3532,10 @@ int32_t tpm_init_set_gmac_queue_rate_limit(void)
 	tpm_gmacs_enum_t gmac_i;
 	uint32_t txp_i = 0;
 	uint32_t size = 0, queue = 0, rate = 0;
+	uint32_t wrr = 0, prio = 0, regVal = 0;
+
+	/* keep the compiler quiet */
+	regVal = 0;
 
 	for (tx_mod_i = 0; tx_mod_i < TPM_MAX_NUM_TX_PORTS; tx_mod_i++) {
 		if (TPM_FALSE == tpm_db_gmac_tx_val_get(tx_mod_i))
@@ -3355,18 +3547,39 @@ int32_t tpm_init_set_gmac_queue_rate_limit(void)
 			gmac_i = TPM_ENUM_PMAC;
 			txp_i = tx_mod_i - TPM_TX_MOD_PMAC_0;
 		}
-		/* get Tx queue bucket size */
+
+		/* set Tx queue bucket size */
 		for (queue = 0; queue < TPM_MAX_NUM_TX_QUEUE; queue++) {
-			tpm_db_get_gmac_rate_limit(tx_mod_i, queue, &size, &rate);
+			tpm_db_get_gmac_q_rate_limit(tx_mod_i, queue, &size, &rate, &wrr);
 			TPM_OS_INFO(TPM_INIT_MOD, "gmac_i (%d), txp_i (%d), queue (%d), size (%d), rate (%d)\n",
 				gmac_i, txp_i, queue, size, rate);
 #ifdef MV_ETH_WRR_NEW
 			MV_REG_WRITE(NETA_TXQ_REFILL_REG(gmac_i, txp_i, queue), rate);
 			MV_REG_WRITE(NETA_TXQ_TOKEN_SIZE_REG(gmac_i, txp_i, queue), size);
+			MV_REG_WRITE(NETA_TXQ_WRR_ARBITER_REG(gmac_i, txp_i, queue), wrr);
 #else /* Old WRR/EJP module */
 			MV_REG_WRITE(ETH_TXQ_TOKEN_CFG_REG(gmac_i, txp_i, queue), rate);
 #endif /* MV_ETH_WRR_NEW */
 		}
+
+		tpm_db_get_gmac_rate_limit(tx_mod_i, &size, &rate, &prio);
+		TPM_OS_INFO(TPM_INIT_MOD, "gmac_i (%d), txp_i (%d), size (%d), rate (%d)\n",
+			gmac_i, txp_i, size, rate);
+		/* set TX bucket and rate */
+#ifdef MV_ETH_WRR_NEW
+		MV_REG_WRITE(NETA_TXP_TOKEN_SIZE_REG(gmac_i, txp_i), size);
+		MV_REG_WRITE(NETA_TXP_REFILL_REG(gmac_i, txp_i), rate);
+		MV_REG_WRITE(NETA_TX_FIXED_PRIO_CFG_REG(gmac_i, txp_i), prio);
+#else /* Old WRR/EJP module */
+		regVal = MV_REG_READ(ETH_TXP_TOKEN_RATE_CFG_REG(gmac_i, txp_i));
+		regVal &= ~ETH_TXP_TOKEN_RATE_ALL_MASK;
+		regVal |= ETH_TXP_TOKEN_RATE_MASK(rate);
+		MV_REG_WRITE(ETH_TXP_TOKEN_RATE_CFG_REG(gmac_i, txp_i), regVal);
+		regVal = MV_REG_READ(ETH_TXP_TOKEN_SIZE_REG(gmac_i, txp_i));
+		regVal &= ~ETH_TXP_TOKEN_SIZE_ALL_MASK;
+		regVal |= ETH_TXP_TOKEN_SIZE_MASK(size);
+		MV_REG_WRITE(ETH_TXP_TOKEN_SIZE_REG(gmac_i, txp_i), regVal);
+#endif /* MV_ETH_WRR_NEW */
 	}
 	return (TPM_OK);
 }
@@ -3396,17 +3609,20 @@ int32_t tpm_init_reset_gmac_queue_rate_limit(void)
 	return (TPM_OK);
 }
 
-int32_t tpm_init_mh(void)
+int32_t tpm_init_mh(tpm_init_mh_src_t ds_mh_set_conf,
+			uint32_t gmac0_mh_en,
+			uint32_t gmac1_mh_en,
+			tpm_init_gmac_conn_conf_t *gmac_port_conf)
 {
-	if (tpm_init_mh_select() != TPM_OK) {
+	if (tpm_init_mh_select(ds_mh_set_conf) != TPM_OK) {
 		TPM_OS_ERROR(TPM_INIT_MOD, "tpm_init_mh_select err\n");
 		return (TPM_FAIL);
 	}
-	if (tpm_init_mh_conf_set() != TPM_OK) {
+	if (tpm_init_mh_conf_set(gmac0_mh_en, gmac1_mh_en, gmac_port_conf) != TPM_OK) {
 		TPM_OS_ERROR(TPM_INIT_MOD, "tpm_init_mh_conf_set err\n");
 		return (TPM_FAIL);
 	}
-	if (tpm_init_mh_reg_set() != TPM_OK) {
+	if (tpm_init_mh_reg_set(ds_mh_set_conf) != TPM_OK) {
 		TPM_OS_ERROR(TPM_INIT_MOD, "tpm_init_mh_reg_set err\n");
 		return (TPM_FAIL);
 	}
@@ -3451,7 +3667,7 @@ int32_t tpm_init_bm_pool(void)
 	return (TPM_OK);
 }
 
-int32_t tpm_init_ipg(void)
+int32_t tpm_init_ipg(int32_t mod_value)
 {
 	int status;
 	tpm_gmacs_enum_t gmac_i;
@@ -3460,7 +3676,14 @@ int32_t tpm_init_ipg(void)
 	tpm_db_gmac_func_t gmac_func;
 	tpm_db_gmac_conn_t gmac_con;
 	MV_BOOL link_is_up;
+	tpm_db_error_t db_ret_code;
+	uint32_t gmac0_mh_en = 0;
+	uint32_t gmac1_mh_en = 0;
 
+	db_ret_code = tpm_db_gmac_mh_en_conf_get(TPM_ENUM_GMAC_0, &gmac0_mh_en);
+	IF_ERROR(db_ret_code);
+	db_ret_code = tpm_db_gmac_mh_en_conf_get(TPM_ENUM_GMAC_1, &gmac1_mh_en);
+	IF_ERROR(db_ret_code);
 
 	for (gmac_i = 0; gmac_i < TPM_MAX_NUM_GMACS; gmac_i++) {
 		if (!INIT_GMAC_VALID(gmac_i))
@@ -3471,12 +3694,13 @@ int32_t tpm_init_ipg(void)
 
 		if (gmac_func != TPM_GMAC_FUNC_NONE) {
 
-			if ((gmac_i == 0 && tpm_init.gmac0_mh_en != TPM_FALSE && gmac_con == TPM_GMAC_CON_SWITCH_4) ||
-			    (gmac_i == 1 && tpm_init.gmac1_mh_en != TPM_FALSE && gmac_con == TPM_GMAC_CON_SWITCH_5)) {
+			if ((gmac_i == 0 && gmac0_mh_en != TPM_FALSE && gmac_con == TPM_GMAC_CON_SWITCH_4) ||
+			    (gmac_i == 1 && gmac1_mh_en != TPM_FALSE && (gmac_con == TPM_GMAC_CON_SWITCH_5 ||
+			     tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_LPBK))) {
 				mvNetaPortDisable(gmac_i);
 				mvNetaHwfEnable(gmac_i, 0);
 				ipg_val = mvNetaPortIpgGet(gmac_i);
-				ipg_val -= TPM_MH_LEN;
+				ipg_val += mod_value;
 				mvNetaPortIpgSet(gmac_i, ipg_val);
 				mvNetaHwfEnable(gmac_i, 1);
 				status = mvNetaPortEnable(gmac_i);
@@ -3487,23 +3711,25 @@ int32_t tpm_init_ipg(void)
 						mvNetaPortUp(gmac_i);
 				}
 
-				if (gmac_i == 0)
-					port = TPM_GMAC0_AMBER_PORT_NUM;
-				else
-					port = TPM_GMAC1_AMBER_PORT_NUM;
+				if ((gmac_con == TPM_GMAC_CON_SWITCH_4) || (gmac_con == TPM_GMAC_CON_SWITCH_5)) {
+					if (gmac_i == 0)
+						port = TPM_GMAC0_AMBER_PORT_NUM;
+					else
+						port = TPM_GMAC1_AMBER_PORT_NUM;
 
-				/* TODO: Need to check if switch is attached to GMAC */
-				status = mv_switch_get_port_preamble(port, &preamble);
-				if (status) {
-					TPM_OS_ERROR(TPM_INIT_MOD, "Fail to get port(%d) preamble_len\n", port);
-					return (TPM_FAIL);
-				}
-				preamble -= TPM_MH_LEN;
-				status = mv_switch_set_port_preamble(port, preamble);
-				if (status) {
-					TPM_OS_ERROR(TPM_INIT_MOD, "Fail to set port(%d) preamble_len(%d)\n"
-						     , port, preamble);
-					return (TPM_FAIL);
+					/* TODO: Need to check if switch is attached to GMAC */
+					status = mv_switch_get_port_preamble(port, &preamble);
+					if (status) {
+						TPM_OS_ERROR(TPM_INIT_MOD, "Fail to get port(%d) preamble_len\n", port);
+						return (TPM_FAIL);
+					}
+					preamble += mod_value;
+					status = mv_switch_set_port_preamble(port, preamble);
+					if (status) {
+						TPM_OS_ERROR(TPM_INIT_MOD, "Fail to set port(%d) preamble_len(%d)\n"
+							     , port, preamble);
+						return (TPM_FAIL);
+					}
 				}
 			}
 		}
@@ -3595,20 +3821,57 @@ int32_t tpm_init_ethertype_dsa_tag(void)
 * RETURNS:
 *
 *******************************************************************************/
-int32_t tpm_init_gmac_loopback(int port)
+int32_t tpm_init_gmac_loopback(tpm_gmacs_enum_t port, uint8_t enable)
 {
 	uint32_t regVal;
 
-	mvNetaPortDisable(port);
-	mvNetaHwfEnable(port, 0);
+	if (port > TPM_MAX_GMAC) {
+		TPM_OS_ERROR(TPM_INIT_MOD, "GMAC port(%d) is invalid\n", port);
+		return TPM_FAIL;
+	}
 
-	mvNetaForceLinkModeSet(port, 1, 0);/*for link up*/
-	mvNetaSpeedDuplexSet(port, MV_ETH_SPEED_1000, MV_ETH_DUPLEX_FULL);/*set 1G*/
+	/* Check Port Available or not */
+	if (!tpm_init_check_gmac_init(port)) {
+		TPM_OS_ERROR(TPM_INIT_MOD, "GMAC port(%d) is not available\n", port);
+		return TPM_FAIL;
+	}
 
-	mvNetaHwfEnable(port, 1);
-	mvNetaPortEnable(port);
+	if (mvNetaPortDisable(port)) {
+		TPM_OS_ERROR(TPM_INIT_MOD, "Fail to disable GMAC port(%d)\n", port);
+		return (TPM_FAIL);
+	}
+	if (mvNetaHwfEnable(port, 0)) {
+		TPM_OS_ERROR(TPM_INIT_MOD, "Fail to disable GMAC port(%d) HWF\n", port);
+		return (TPM_FAIL);
+	}
 
-	MV_REG_WRITE(NETA_GMAC_CTRL_1_REG(port), 0x31); /* set gmac to loopback mode */
+	if (mvNetaForceLinkModeSet(port, 1, 0)) {/*for link up*/
+		TPM_OS_ERROR(TPM_INIT_MOD, "Fail to set GMAC port(%d) force link\n", port);
+		return (TPM_FAIL);
+	}
+	if (mvNetaSpeedDuplexSet(port, MV_ETH_SPEED_1000, MV_ETH_DUPLEX_FULL)) {/*set 1G*/
+		TPM_OS_ERROR(TPM_INIT_MOD, "Fail to set GMAC port(%d) speed and duplex\n", port);
+		return (TPM_FAIL);
+	}
+
+	if (mvNetaHwfEnable(port, 1)) {
+		TPM_OS_ERROR(TPM_INIT_MOD, "Fail to enable GMAC port(%d) HWF\n", port);
+		return (TPM_FAIL);
+	}
+	if (mvNetaPortEnable(port)) {
+		TPM_OS_ERROR(TPM_INIT_MOD, "Fail to enable GMAC port(%d)\n", port);
+		return (TPM_FAIL);
+	}
+
+	/* set GMAC_CTRL_2_REG */
+	regVal = MV_REG_READ(NETA_GMAC_CTRL_2_REG(port));
+	regVal &= ~NETA_GMAC_PSC_ENABLE_MASK;
+	MV_REG_WRITE(NETA_GMAC_CTRL_2_REG(port), regVal);
+
+	if (enable)
+		MV_REG_WRITE(NETA_GMAC_CTRL_1_REG(port), 0x31); /* set gmac to loopback mode */
+	else
+		MV_REG_WRITE(NETA_GMAC_CTRL_1_REG(port), 0x11); /* set gmac to no-loopback mode */
 
 	regVal = MV_REG_READ(NETA_GMAC_AN_CTRL_REG(port));
 	regVal |=  NETA_FORCE_LINK_FAIL_MASK;  			/* enable Force Link Pass 	*/
@@ -3641,12 +3904,15 @@ int32_t tpm_init_system_mib_reset(tpm_reset_level_enum_t reset_type)
 	tpm_pnc_ranges_t cur_range = TPM_INVALID_RANGE, next_range = 0;
 	tpm_db_pnc_range_t next_range_data;
 	tpm_db_pnc_range_conf_t range_conf;
+	tpm_db_pnc_range_conf_t range_conf_tcp_flag;
 	uint32_t switch_init;
-	int32_t ret_code;
+	int32_t ret_code, ret_code_tcp_flag;
 	tpm_db_ttl_illegal_action_t ttl_illegal_action;
 	tpm_db_tcp_flag_check_t tcp_flag_check;
 	tpm_gmacs_enum_t gmac_i;
 	tpm_db_gmac_func_t gfunc;
+	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
+	uint32_t snoop_enable;
 
 	TPM_OS_DEBUG(TPM_INIT_MOD, "\n");
 
@@ -3666,19 +3932,24 @@ int32_t tpm_init_system_mib_reset(tpm_reset_level_enum_t reset_type)
 		ret_code = tpm_mod2_split_mod_init(gmac_i);
 		IF_ERROR(ret_code);
 	}
-	/* Init Tx queue rate limit */
-	ret_code = tpm_init_reset_gmac_queue_rate_limit();
-	IF_ERROR(ret_code);
 
 	/* Init Amber Switch */
 	tpm_db_switch_init_get(&switch_init);
 	if (switch_init)
 		tpm_init_switch();
-	else
-		/* Init GMAC1 in loopback mod if no switch*/
-		tpm_init_gmac_loopback(TPM_ENUM_GMAC_1);
+	else {
+		if (tpm_db_gmac1_lpbk_en_get()) {
+			/* Init GMAC1 in loopback mod if GMAC loopback is enabled */
+			ret_code = tpm_init_gmac_loopback(TPM_ENUM_GMAC_1, 1);
+			IF_ERROR(ret_code);
+		}
+	}
 	/*Init TX scheduling */
 	ret_code = tpm_init_tx_queue_sched();
+	IF_ERROR(ret_code);
+
+	/* Init Tx queue rate limit */
+	ret_code = tpm_init_reset_gmac_queue_rate_limit();
 	IF_ERROR(ret_code);
 
 	/* Initialize (wipe out) the PNC ranges in PnC HW */
@@ -3703,6 +3974,25 @@ int32_t tpm_init_system_mib_reset(tpm_reset_level_enum_t reset_type)
 		IF_ERROR(ret_code);
 	} else
 		TPM_OS_WARN(TPM_INIT_MOD, "PNC range(%d) not initialized\n", TPM_PNC_NUM_VLAN_TAGS);
+
+	tpm_db_ds_mac_based_trunk_enable_get(&ds_mac_based_trunk_enable);
+	ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_DS_LOAD_BALANCE, &range_conf);
+	if (TPM_DS_MAC_BASED_TRUNK_ENABLED == ds_mac_based_trunk_enable) {
+		if (ret_code != TPM_DB_OK) {
+			TPM_OS_ERROR(TPM_INIT_MOD, "PNC range TPM_PNC_DS_LOAD_BALANCE is not created "
+				"when ds_mac_based_trunk is enabled\n");
+			return ERR_GENERAL;
+		} else if (range_conf.range_size < 3) {
+			TPM_OS_ERROR(TPM_INIT_MOD, "PNC range TPM_PNC_DS_LOAD_BALANCE size should be at least "
+				"3 when ds_mac_based_trunk is enabled\n");
+			return ERR_GENERAL;
+		}
+	} else {
+		if ((ret_code == TPM_DB_OK) && (range_conf.range_size != 0)) {
+			TPM_OS_WARN(TPM_INIT_MOD, "do not perform ds_mac_based_trunk, "
+				"no need to create TPM_PNC_DS_LOAD_BALANCE range\n");
+		}
+	}
 
 	tpm_db_get_ttl_illegal_action(&ttl_illegal_action);
 	ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_TTL, &range_conf);
@@ -3760,11 +4050,21 @@ int32_t tpm_init_system_mib_reset(tpm_reset_level_enum_t reset_type)
 		}
 	}
 	ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_IGMP, &range_conf);
-	if (ret_code == TPM_DB_OK) {
-		ret_code = tpm_proc_ipv4_igmp_init();
-		IF_ERROR(ret_code);
-	} else
-		TPM_OS_WARN(TPM_INIT_MOD, "PNC range(%d) not initialized\n", TPM_PNC_IGMP);
+	tpm_db_igmp_get_snoop_enable(&snoop_enable);
+	if (TPM_TRUE == snoop_enable) {
+		if (ret_code == TPM_DB_OK) {
+			ret_code = tpm_proc_ipv4_igmp_init();
+			IF_ERROR(ret_code);
+		} else {
+			TPM_OS_ERROR(TPM_INIT_MOD, "PNC range(TPM_PNC_IGMP) not initialized with IGMP snoop enabled\n");
+			return ERR_GENERAL;
+		}
+	} else if (ret_code == TPM_DB_OK) {
+		if (range_conf.range_size != 0) {
+			/* igmp snoop is disabled, no need to create TPM_PNC_IGMP range */
+			TPM_OS_WARN(TPM_INIT_MOD, "igmp snoop is disabled, no need to create TPM_PNC_IGMP range\n");
+		}
+	}
 
 	ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_IPV4_PROTO, &range_conf);
 	if (ret_code == TPM_DB_OK) {
@@ -3788,16 +4088,20 @@ int32_t tpm_init_system_mib_reset(tpm_reset_level_enum_t reset_type)
 		TPM_OS_WARN(TPM_INIT_MOD, "PNC range(%d) not initialized\n", TPM_PNC_CATCH_ALL);
 
 	tpm_db_get_tcp_flag_check(&tcp_flag_check);
-	ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_TCP_FLAG, &range_conf);
+	ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_IPV4_TCP_FLAG, &range_conf);
+	ret_code_tcp_flag = tpm_db_pnc_rng_conf_get(TPM_PNC_IPV6_TCP_FLAG, &range_conf_tcp_flag);
 	if (TPM_TCP_FLAG_NOT_CHECK == tcp_flag_check) {
-		if (ret_code == TPM_DB_OK) {
+		if (ret_code == TPM_DB_OK || ret_code_tcp_flag == TPM_DB_OK) {
 			/* do not check tcp flag, no need to create tcp flag range */
-			TPM_OS_WARN(TPM_INIT_MOD, "do not check tcp flag, no need to create tcp flag range\n");
+			TPM_OS_WARN(TPM_INIT_MOD, "do not check tcp flag, no need to create IPv4/6 tcp flag range\n");
 		}
 	} else {
-		if ((ret_code != TPM_DB_OK) || (range_conf.range_size < 4)) {
+		if ((ret_code != TPM_DB_OK) || (range_conf.range_size < 3)) {
 			/* check tcp flag, need to create tcp flag range */
-			TPM_OS_WARN(TPM_INIT_MOD, "check tcp flag, need to create tcp flag range with size of 4\n");
+			TPM_OS_WARN(TPM_INIT_MOD, "check tcp flag, need to create IPv4 tcp flag range with size of 3\n");
+		} else if ((ret_code_tcp_flag != TPM_DB_OK) || (range_conf_tcp_flag.range_size < 2)) {
+			/* check tcp flag, need to create tcp flag range */
+			TPM_OS_WARN(TPM_INIT_MOD, "check tcp flag, need to create IPv6 tcp flag range with size of 2\n");
 		} else {
 			ret_code = tpm_proc_tcp_flag_init();
 			IF_ERROR(ret_code);
@@ -3906,6 +4210,20 @@ int32_t tpm_init_system_init(tpm_reset_level_enum_t reset_type)
 
 	TPM_OS_DEBUG(TPM_INIT_MOD, "\n");
 
+	/* check PON and GMAC state */
+	for (gmac_i = 0; gmac_i < TPM_MAX_NUM_GMACS; gmac_i++) {
+		if (!INIT_GMAC_VALID(gmac_i))
+			continue;
+
+		tpm_db_gmac_func_get(gmac_i, &gfunc);
+
+		if (gfunc == TPM_GMAC_FUNC_NONE)
+			continue;
+		if (!tpm_init_check_gmac_init(gmac_i)) {
+			TPM_OS_ERROR(TPM_INIT_MOD, "GMAC port(%d) is not init, system is not fully functional!\n", gmac_i);
+			return TPM_FAIL;
+		}
+	}
 	/* Init Vlan Ethertype Registers */
 	ret_code = tpm_init_vlan_etype_set();
 	IF_ERROR(ret_code);
@@ -3946,14 +4264,17 @@ int32_t tpm_init_system_init(tpm_reset_level_enum_t reset_type)
 	tpm_init_rxq_size_set();
 
 	/* Init marvell header configuration */
-	ret_code = tpm_init_mh();
+	ret_code = tpm_init_mh(tpm_init.ds_mh_set_conf,
+				tpm_init.gmac0_mh_en,
+				tpm_init.gmac1_mh_en,
+				tpm_init.gmac_port_conf);
 	IF_ERROR(ret_code);
 
 	/* Init Buffer Mngmt Pool configuration */
 	tpm_init_bm_pool();
 
 	/* Init IPG */
-	tpm_init_ipg();
+	tpm_init_ipg((-TPM_MH_LEN));
 
 	ret_code = tpm_init_system_mib_reset(reset_type);
 	IF_ERROR(ret_code);

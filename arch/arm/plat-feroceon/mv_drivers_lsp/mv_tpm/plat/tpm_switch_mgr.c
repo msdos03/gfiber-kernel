@@ -79,6 +79,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tpm_common.h"
 #include "tpm_header.h"
+#include "../../mv_mac_learn/mv_mac_learn_header.h"
 
 uint32_t trace_sw_dbg_flag = 0;
 
@@ -91,7 +92,7 @@ uint32_t trace_sw_dbg_flag = 0;
 #define SWITCH_INIT_CHECK()\
     int32_t ret_init_check;\
     ret_init_check = tpm_sw_init_check();\
-    IF_ERROR(ret_init_check);
+    IF_ERROR(ret_init_check)
 
 /*******************************************************************************
 * tpm_sw_init_check
@@ -121,6 +122,113 @@ tpm_error_code_t tpm_sw_init_check(void)
     IF_ERROR(ret);
     if (!switch_init)
         return ERR_SW_NOT_INIT;
+
+    return TPM_RC_OK;
+}
+
+/*******************************************************************************
+* tpm_phy_access_check
+*
+* DESCRIPTION:
+*       This function check the PHY access path, direct or through switch.
+*
+* INPUTS:
+*       src_port    - Source port in UNI port index, UNI0, UNI1...UNI4.
+*
+* OUTPUTS:
+*       phy_ctrl    - the PHY SMI master indication
+*       phy_direct_addr - PHY address if PHY accessed directly
+*
+* RETURNS:
+*       On success - TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*        NONE.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_phy_access_check(tpm_src_port_type_t src_port,
+                                      tpm_phy_ctrl_t *phy_access_way,
+                                      uint32_t *phy_direct_addr)
+{
+    tpm_init_gmac_conn_conf_t gmac_conn_info;
+    uint32_t i;
+    tpm_db_chip_conn_t chip_con;
+    tpm_db_int_conn_t int_con;
+    uint32_t switch_port;
+
+    /* Para check*/
+    if ((NULL == phy_access_way) || (NULL == phy_direct_addr)) {
+        printk(KERN_ERR "ERROR: Invalid pointer\n");
+        return ERR_GENERAL;
+    }
+
+    /* Check gmac port connection info */
+    for (i = 0; i < TPM_MAX_NUM_GMACS; i++) {
+        if (TPM_DB_OK != tpm_db_gmac_conn_conf_get(i, &gmac_conn_info)) {
+            printk(KERN_ERR "ERROR: (%s:%d) Gmac port(%d) connection info get failed\n", __FUNCTION__, __LINE__, i);
+            return ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+        if (TPM_TRUE == gmac_conn_info.valid && src_port == gmac_conn_info.port_src) {
+            /* PHY access directly */
+            *phy_access_way = PHY_SMI_MASTER_CPU;
+            /*get PHY addr on GMAC*/
+            *phy_direct_addr = mvBoardPhyAddrGet(i);
+
+            if (trace_sw_dbg_flag)
+                printk(KERN_INFO "Port%d PHY access directly, phyaddr %d\n", src_port, *phy_direct_addr);
+
+            return TPM_RC_OK;
+        }
+    }
+
+    /* Check eth port connection info */
+    if (TPM_DB_OK != tpm_db_eth_port_conf_get(src_port, &chip_con, &int_con, &switch_port)) {
+        printk(KERN_ERR "ERROR: (%s:%d) Eth port(%d) connection info get failed\n", __FUNCTION__, __LINE__, src_port);
+        return ERR_PHY_SRC_PORT_CONN_INVALID;
+    }
+    /* Check QSGMII */
+    if (TPM_CONN_QSGMII == chip_con && TPM_INTCON_SWITCH == int_con) {
+        /* Check MPP register, if value of MPP29 and MPP30 are both 4, then access PHY directly */
+        if ((mvBoardMppGet(3) & DB_88F6535_MPP24_31) == DB_88F6535_MPP24_31) {
+            /* PHY access directly */
+            *phy_access_way = PHY_SMI_MASTER_CPU;
+            /*get PHY addr on GMAC*/
+            *phy_direct_addr = (uint32_t)src_port;
+            if (trace_sw_dbg_flag)
+                printk(KERN_INFO "Port%d QSGMII PHY access directly, phyaddr %d\n", src_port, *phy_direct_addr);
+            return TPM_RC_OK;
+        }
+    }
+
+    *phy_access_way = PHY_SMI_MASTER_SWT;
+    if (trace_sw_dbg_flag)
+        printk(KERN_INFO "Port%d PHY access through switch\n", src_port);
+
+    return TPM_RC_OK;
+}
+
+tpm_error_code_t tpm_src_port_mac_map(tpm_src_port_type_t src_port,
+                                      tpm_gmacs_enum_t *gmac)
+{
+    tpm_init_gmac_conn_conf_t gmac_conn_info;
+    uint32_t i;
+
+    /* Check gmac port connection info */
+    for (i = 0; i < TPM_MAX_NUM_GMACS; i++) {
+        if (TPM_DB_OK != tpm_db_gmac_conn_conf_get(i, &gmac_conn_info)) {
+	    printk(KERN_ERR "ERROR: (%s:%d) Gmac port(%d) connection info get failed\n", __FUNCTION__, __LINE__, i);
+	    return ERR_GENERAL;
+        }
+        if (TPM_TRUE == gmac_conn_info.valid && src_port == gmac_conn_info.port_src) {
+            *gmac = i;
+            return TPM_RC_OK;
+        }
+    }
+    if (i == TPM_MAX_NUM_GMACS) {
+        printk(KERN_ERR "ERROR: (%s:%d) src port(%d) map to MAC failed\n", __FUNCTION__, __LINE__, src_port);
+	return ERR_SRC_PORT_INVALID;
+    }
 
     return TPM_RC_OK;
 }
@@ -185,8 +293,7 @@ tpm_error_code_t tpm_sw_add_static_mac
 {
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
-
-    SWITCH_INIT_CHECK();
+    tpm_gmacs_enum_t gmac_i;
 
     if (trace_sw_dbg_flag)
     {
@@ -196,14 +303,30 @@ tpm_error_code_t tpm_sw_add_static_mac
               __FUNCTION__,owner_id,src_port, static_mac[0],static_mac[1],static_mac[2],static_mac[3],static_mac[4],static_mac[5]);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(src_port, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+        /* Check GMAC1 lpk status, if no lpk, no way to add static MAC */
+#ifdef CONFIG_MV_MAC_LEARN
+        if (tpm_db_gmac1_lpbk_en_get())
+            retVal = mv_mac_learn_static_entry_add(&(static_mac[0]));
+	else {
+            printk(KERN_ERR "ERROR: (%s:%d) src port(%d) MAC learn not supported\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_GENERAL;
+        }
+#endif
+    } else {
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    retVal = mv_switch_add_static_mac(lPort, &(static_mac[0]));
+        retVal = mv_switch_add_static_mac(lPort, &(static_mac[0]));
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -247,9 +370,7 @@ tpm_error_code_t tpm_sw_del_static_mac
     uint8_t  static_mac[6]
 )
 {
-    tpm_error_code_t retVal;
-
-    SWITCH_INIT_CHECK();
+    tpm_error_code_t retVal = TPM_RC_OK;
 
     if (trace_sw_dbg_flag)
     {
@@ -259,7 +380,19 @@ tpm_error_code_t tpm_sw_del_static_mac
                  __FUNCTION__,owner_id,static_mac[0],static_mac[1],static_mac[2],static_mac[3],static_mac[4],static_mac[5]);
     }
 
-    retVal = mv_switch_del_static_mac(&(static_mac[0]));
+    if (tpm_sw_init_check()) {
+        /* Check GMAC1 lpk status, if no lpk, no way to add static MAC */
+#ifdef CONFIG_MV_MAC_LEARN
+        if (tpm_db_gmac1_lpbk_en_get())
+            retVal = mv_mac_learn_static_entry_del(&(static_mac[0]));
+        else {
+            printk(KERN_ERR "ERROR: (%s:%d) MAC learn not supported\n", __FUNCTION__, __LINE__);
+            return ERR_GENERAL;
+        }
+#endif
+    } else {
+        retVal = mv_switch_del_static_mac(&(static_mac[0]));
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -305,7 +438,10 @@ tpm_error_code_t tpm_sw_set_static_mac_w_ports_mask
     uint8_t  static_mac[6]
 )
 {
-    tpm_error_code_t retVal;
+    tpm_error_code_t retVal = TPM_RC_OK;
+#ifdef CONFIG_MV_MAC_LEARN
+    static uint32_t mask_check = 1;
+#endif
 
     SWITCH_INIT_CHECK();
 
@@ -324,7 +460,20 @@ tpm_error_code_t tpm_sw_set_static_mac_w_ports_mask
                static_mac[5]);
     }
 
-    retVal = mv_switch_mac_addr_set(&(static_mac[0]), 0, ports_mask, 1);
+    if (tpm_sw_init_check()) {
+        /* Check GMAC1 lpk status, if no lpk, no way to add static MAC */
+#ifdef CONFIG_MV_MAC_LEARN
+	if (tpm_db_gmac1_lpbk_en_get()) {
+            if (ports_mask & mask_check)
+                retVal = mv_mac_learn_static_entry_add(&(static_mac[0]));
+        } else {
+            printk(KERN_ERR "ERROR: (%s:%d) MAC learn not supported\n", __FUNCTION__, __LINE__);
+            return ERR_GENERAL;
+        }
+#endif
+    } else {
+        retVal = mv_switch_mac_addr_set(&(static_mac[0]), 0, ports_mask, 1);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -338,6 +487,203 @@ tpm_error_code_t tpm_sw_set_static_mac_w_ports_mask
     }
 
     return retVal;
+}
+
+/*******************************************************************************
+* tpm_sw_set_trunk_ports
+*
+* DESCRIPTION:
+*       This function creates trunk ports and trunk id
+*
+* INPUTS:
+*       owner_id    - APP owner id - should be used for all API calls.
+*       trunk_id    - valid from 0x0 to 0xf
+*       ports_mask  - mask for real switch port, not logical port like TPM_SRC_PORT_UNI_0.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success  - TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*       None.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_set_trunk_ports
+(
+    uint32_t owner_id,
+    uint32_t trunk_id,
+    uint32_t ports_mask
+)
+{
+    tpm_error_code_t ret;
+    uint16_t  reg_tmp = 0;
+    uint32_t  switch_port = 0;
+
+    SWITCH_INIT_CHECK();
+
+    if (trace_sw_dbg_flag)
+    {
+       printk(KERN_INFO
+               "==ENTER==%s: owner_id[%d], trunk_id[0x%x], ports_mask[0x%x]\n\r",
+               __FUNCTION__, owner_id, trunk_id, ports_mask);
+    }
+
+    if (trunk_id > SW_TRUNK_ID_MAX)
+    {
+       printk(KERN_INFO
+               "==ENTER==%s: trunk_id[0x%x] is bigger than [0x%x]\n\r",
+               __FUNCTION__,trunk_id, SW_TRUNK_ID_MAX);
+    }
+
+    for (switch_port = 0; switch_port <= TPM_SWITCH_NUM_PORTS; switch_port++)
+    {
+        if(0 == (ports_mask & (1 << switch_port)))
+        {
+	    continue;
+        }
+
+	/* get trunk reg from HW */
+	ret = mv_switch_reg_read(switch_port, SW_TRUNK_ID_REG, MV_SWITCH_PORT_ACCESS, &reg_tmp);
+	if (0 != ret) {
+		TPM_OS_ERROR(TPM_INIT_MOD, "Fail to get trunk reg, ret(%d)\n", ret);
+		return (TPM_FAIL);
+	}
+
+	/* set bits 8, 9 to 11, as trunk_id */
+	SW_CLEAR_REG_BIT(reg_tmp, SW_TRUNK_ID_BIT_OFF, SW_TRUNK_ID_BIT_LEN);
+	reg_tmp |= (trunk_id << SW_TRUNK_ID_BIT_OFF);
+	/* set bit 14, as trunk bit */
+	reg_tmp |= (1 << SW_TRUNK_BIT_OFF);
+	ret = mv_switch_reg_write(switch_port, SW_TRUNK_ID_REG, MV_SWITCH_PORT_ACCESS, reg_tmp);
+	if (0 != ret) {
+		TPM_OS_ERROR(TPM_INIT_MOD, "Fail to set trunk reg, ret(%d)\n", ret);
+		return (TPM_FAIL);
+	}
+    }
+
+    /* get trunk mapping reg from HW */
+    ret = mv_switch_reg_read(0, SW_TRUNK_MAPPING_REG, MV_SWITCH_GLOBAL2_ACCESS, &reg_tmp);
+    if (0 != ret) {
+	    TPM_OS_ERROR(TPM_INIT_MOD, "Fail to get trunk mapping reg, ret(%d)\n", ret);
+	    return (TPM_FAIL);
+    }
+
+    /* set bits 11 to 14, as trunk_id */
+    SW_CLEAR_REG_BIT(reg_tmp, SW_TRUNK_MAPPING_ID_BIT_OFF, SW_TRUNK_ID_BIT_LEN);
+    reg_tmp |= (trunk_id << SW_TRUNK_MAPPING_ID_BIT_OFF);
+
+    /* set bits 0 to 6, as trunk map */
+    SW_CLEAR_REG_BIT(reg_tmp, SW_TRUNK_MAPPING_BIT_OFF, SW_TRUNK_MAPPING_BIT_LEN);
+    reg_tmp |= (ports_mask << SW_TRUNK_MAPPING_BIT_OFF);
+
+    /* set bits 15, as udpate bit */
+    reg_tmp |= (1 << SW_REG_UPDATE_BIT_OFF);
+
+    ret = mv_switch_reg_write(0, SW_TRUNK_MAPPING_REG, MV_SWITCH_GLOBAL2_ACCESS, reg_tmp);
+    if (0 != ret) {
+	    TPM_OS_ERROR(TPM_INIT_MOD, "Fail to set trunk mapping reg, ret(%d)\n", ret);
+	    return (TPM_FAIL);
+    }
+
+    if (trace_sw_dbg_flag)
+    {
+        printk(KERN_INFO
+                "==EXIT== %s:\n\r",__FUNCTION__);
+    }
+
+    return ret;
+}
+
+
+/*******************************************************************************
+* tpm_sw_set_trunk_mask
+*
+* DESCRIPTION:
+*       This function sets trunk mask
+*
+* INPUTS:
+*       owner_id    - APP owner id - should be used for all API calls.
+*       mask_num    - trunk mask number, valid from 0 to 7.
+*       trunk_mask  - mask for real switch port, not logical port like TPM_SRC_PORT_UNI_0.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success  - TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*       None.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_set_trunk_mask
+(
+    uint32_t owner_id,
+    uint32_t mask_num,
+    uint32_t trunk_mask
+)
+{
+    tpm_error_code_t ret;
+    uint16_t  reg_tmp = 0;
+
+    SWITCH_INIT_CHECK();
+
+    if (trace_sw_dbg_flag)
+    {
+       printk(KERN_INFO
+               "==ENTER==%s: owner_id[%d],mask_num[0x%x],trunk_mask[0x%x]\n\r",
+               __FUNCTION__, owner_id, mask_num, trunk_mask);
+    }
+
+    if (mask_num > SW_TRUNK_MASK_NUM_MAX)
+    {
+       printk(KERN_INFO
+               "==ENTER==%s: mask_num[0x%x] is bigger than [0x%x]\n\r",
+               __FUNCTION__,mask_num, SW_TRUNK_MASK_NUM_MAX);
+    }
+
+    if (trunk_mask > SW_TRUNK_MASK_MAX)
+    {
+       printk(KERN_INFO
+               "==ENTER==%s: trunk_mask[0x%x] is bigger than [0x%x]\n\r",
+               __FUNCTION__,trunk_mask, SW_TRUNK_MASK_MAX);
+    }
+
+    /* get trunk mask reg from HW */
+    ret = mv_switch_reg_read(0, SW_TRUNK_MASK_REG, MV_SWITCH_GLOBAL2_ACCESS, &reg_tmp);
+    if (0 != ret) {
+	    TPM_OS_ERROR(TPM_INIT_MOD, "Fail to get trunk mask reg, ret(%d)\n", ret);
+	    return (TPM_FAIL);
+    }
+
+    /* set bits 11 to 14, as mask_num */
+    SW_CLEAR_REG_BIT(reg_tmp, SW_TRUNK_MASK_NUM_BIT_OFF, SW_TRUNK_MASK_NUM_BIT_LEN);
+    reg_tmp |= (mask_num << SW_TRUNK_MASK_NUM_BIT_OFF);
+
+    /* set bits 0 to 6, as trunk_mask */
+    SW_CLEAR_REG_BIT(reg_tmp, SW_TRUNK_MASK_BIT_OFF, SW_TRUNK_MASK_BIT_LEN);
+    reg_tmp |= (trunk_mask << SW_TRUNK_MASK_BIT_OFF);
+
+    /* set bits 15, as udpate bit */
+    reg_tmp |= (1 << SW_REG_UPDATE_BIT_OFF);
+
+    ret = mv_switch_reg_write(0, SW_TRUNK_MASK_REG, MV_SWITCH_GLOBAL2_ACCESS, reg_tmp);
+    if (0 != ret) {
+	    TPM_OS_ERROR(TPM_INIT_MOD, "Fail to set trunk mask reg, ret(%d)\n", ret);
+	    return (TPM_FAIL);
+    }
+
+    if (trace_sw_dbg_flag)
+    {
+        printk(KERN_INFO
+                "==EXIT== %s:\n\r",__FUNCTION__);
+    }
+
+    return ret;
 }
 
 /*******************************************************************************
@@ -422,7 +768,7 @@ tpm_error_code_t tpm_sw_set_port_mirror
     tpm_error_code_t retVal;
     GT_BOOL  state;
     uint32_t  sw_sport;
-    uint32_t  sw_dport; 
+    uint32_t  sw_dport;
 
     SWITCH_INIT_CHECK();
 
@@ -440,7 +786,7 @@ tpm_error_code_t tpm_sw_set_port_mirror
         state = GT_FALSE;
 
     sw_sport = tpm_db_eth_port_switch_port_get(sport);
-    sw_dport = tpm_db_eth_port_switch_port_get(dport); 
+    sw_dport = tpm_db_eth_port_switch_port_get(dport);
 
     if (TPM_DB_ERR_PORT_NUM == sw_sport || TPM_DB_ERR_PORT_NUM == sw_dport){
             TPM_OS_ERROR(TPM_INIT_MOD, "invalid port (sw_sport %d, sw_dport %d)\n", sw_sport, sw_dport);
@@ -590,29 +936,23 @@ tpm_error_code_t tpm_sw_set_isolate_eth_port_vector
 
     for (i=TPM_SRC_PORT_UNI_0; i<TPM_MAX_NUM_UNI_PORTS; i++)
     {
-	sw_port_num = tpm_db_eth_port_switch_port_get(i);
+        sw_port_num = tpm_db_eth_port_switch_port_get(i);
 
-	if (TPM_DB_ERR_PORT_NUM == sw_port_num)
-		continue;
+        if (TPM_DB_ERR_PORT_NUM == sw_port_num)
+            continue;
 
-	if (sw_port_num >= MEM_PORTS_NR) {
-		TPM_OS_ERROR(TPM_INIT_MOD, "sw_port_num too big! (%d >= MEM_PORTS_NR) \n", sw_port_num);
-		return ERR_SRC_PORT_INVALID;
-	}
+        if (sw_port_num >= MEM_PORTS_NR) {
+            TPM_OS_ERROR(TPM_INIT_MOD, "sw_port_num too big! (%d >= MEM_PORTS_NR) \n", sw_port_num);
+            return ERR_SRC_PORT_INVALID;
+        }
 
         if(port_vector & (1 << i))
         {
             memPorts[sw_port_num] = sw_port_num;
-            printk(KERN_INFO
-               "==ENTER==%s: 1  i[%d] sw_port_num[%d]\n\r",
-               __FUNCTION__,  i, sw_port_num);
         }
         else
         {
             memPorts[sw_port_num] = 0x80;
-            printk(KERN_INFO
-               "==ENTER==%s: 2  i[%d] sw_port_num[%d]\n\r",
-               __FUNCTION__,  i, sw_port_num);
         }
     }
 
@@ -744,8 +1084,7 @@ tpm_error_code_t tpm_set_mtu_size
 )
 {
     tpm_error_code_t retVal = TPM_RC_OK;
-
-    SWITCH_INIT_CHECK();
+    uint32_t switch_init = 0;
 
     if (trace_sw_dbg_flag)
     {
@@ -770,8 +1109,10 @@ tpm_error_code_t tpm_set_mtu_size
             retVal = mv_eth_set_mtu(2, mtu);
             break;
         case TPM_NETA_MTU_SWITCH:
-            /*Set switch MTU*/
-            retVal = mv_switch_set_mtu(mtu);
+            /*Set switch MTU if exist*/
+            tpm_db_switch_init_get(&switch_init);
+	    if (switch_init)
+                retVal = mv_switch_set_mtu(mtu);
             break;
         default:
             break;
@@ -822,8 +1163,6 @@ tpm_error_code_t tpm_get_mtu_size
 {
     tpm_error_code_t retVal = TPM_RC_OK;
 
-    SWITCH_INIT_CHECK();
-
     if (trace_sw_dbg_flag)
     {
        printk(KERN_INFO
@@ -847,8 +1186,11 @@ tpm_error_code_t tpm_get_mtu_size
             retVal = mv_eth_get_mtu(2, mtu);
             break;
         case TPM_NETA_MTU_SWITCH:
-            /*Get switch MTU*/
-            retVal = mv_switch_get_mtu(mtu);
+            /*Get switch MTU if exist*/
+            if (!tpm_sw_init_check())
+                retVal = mv_switch_get_mtu(mtu);
+            else
+                retVal = ERR_GENERAL;
             break;
         default:
             break;
@@ -904,8 +1246,7 @@ tpm_error_code_t tpm_sw_set_port_max_macs
 {
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
-
-    SWITCH_INIT_CHECK();
+    tpm_gmacs_enum_t gmac_i;
 
     if (trace_sw_dbg_flag)
     {
@@ -914,14 +1255,30 @@ tpm_error_code_t tpm_sw_set_port_max_macs
                 __FUNCTION__, owner_id, src_port, mac_per_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(src_port, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+#ifdef CONFIG_MV_MAC_LEARN
+        /* Check GMAC1 lpk status, if no lpk, no way to add static MAC */
+        if (tpm_db_gmac1_lpbk_en_get())
+            retVal = mv_mac_learn_max_count_set(mac_per_port);
+        else {
+            printk(KERN_ERR "ERROR: (%s:%d) src port(%d) MAC learn not supported\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_GENERAL;
+        }
+#endif
+    } else {
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    retVal = mv_switch_set_port_max_macs(lPort, mac_per_port);
+        retVal = mv_switch_set_port_max_macs(lPort, mac_per_port);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -983,8 +1340,8 @@ tpm_error_code_t tpm_sw_get_port_max_macs
 {
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
-
-    SWITCH_INIT_CHECK();
+    tpm_gmacs_enum_t gmac_i;
+    tpm_db_pnc_range_conf_t range_conf;
 
     if (trace_sw_dbg_flag)
     {
@@ -993,14 +1350,34 @@ tpm_error_code_t tpm_sw_get_port_max_macs
                 __FUNCTION__,owner_id,src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(src_port, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+        /* Check GMAC1 lpk status */
+        if (tpm_db_gmac1_lpbk_en_get()) {
+            if (tpm_db_pnc_rng_conf_get(TPM_PNC_MAC_LEARN, &range_conf)) {
+                printk(KERN_ERR "ERROR: (%s:%d) tpm_db_pnc_rng_conf_get failed\n", __FUNCTION__, __LINE__);
+                return ERR_GENERAL;
+            }
+            *limit = range_conf.api_end - range_conf.api_start + 1;
+            if (*limit > MAC_LEARN_FDB_MAX_COUNT)
+                *limit = MAC_LEARN_FDB_MAX_COUNT;
+        } else {
+            printk(KERN_ERR "ERROR: (%s:%d) src port(%d) MAC learn not supported\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_GENERAL;
+        }
+    } else {
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    retVal = mv_switch_get_port_max_macs(lPort, limit);
+        retVal = mv_switch_get_port_max_macs(lPort, limit);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -1026,7 +1403,7 @@ tpm_error_code_t tpm_sw_get_port_max_macs
 * INPUTS:
 *       owner_id     - APP owner id - should be used for all API calls.
 *       src_port     - Source port in UNI port index, UNI0, UNI1...UNI4.
-*       allow_tagged - set to 1 = discard tagged packets per UNI port
+*       drop_tagged - set to 1 = drop tagged packets per UNI port
 *                      set to 0 = allow tagged packets per UNI port.
 *
 * OUTPUTS:
@@ -1044,7 +1421,7 @@ tpm_error_code_t tpm_sw_set_port_tagged
 (
     uint32_t            owner_id,
     tpm_src_port_type_t src_port,
-    uint8_t             allow_tagged
+    uint8_t             drop_tagged
 )
 {
     tpm_error_code_t retVal = TPM_RC_OK;
@@ -1056,8 +1433,8 @@ tpm_error_code_t tpm_sw_set_port_tagged
     if (trace_sw_dbg_flag)
     {
        printk(KERN_INFO
-              "==ENTER==%s: owner_id[%d],src_port[%d],allow_tagged[%d]\r\n",
-              __FUNCTION__,owner_id,src_port,allow_tagged);
+              "==ENTER==%s: owner_id[%d],src_port[%d],drop_tagged[%d]\r\n",
+              __FUNCTION__,owner_id,src_port,drop_tagged);
 
     }
 
@@ -1068,7 +1445,7 @@ tpm_error_code_t tpm_sw_set_port_tagged
         return ERR_SRC_PORT_INVALID;
     }
 
-    if (allow_tagged == 1)
+    if (drop_tagged == 1)
     {
         mode = 1/*GT_TRUE*/;
     }
@@ -1165,7 +1542,7 @@ tpm_error_code_t tpm_sw_get_port_tagged
 * INPUTS:
 *       owner_id       - APP owner id - should be used for all API calls.
 *       src_port       - Source port in UNI port index, UNI0, UNI1...UNI4.
-*       allow_untagged - set to 1 = discard untagged packets per UNI port
+*       drop_untagged - set to 1 = drop untagged packets per UNI port
 *                        set to 0 = alow untagged packets per UNI port.
 *
 * OUTPUTS:
@@ -1183,7 +1560,7 @@ tpm_error_code_t tpm_sw_set_port_untagged
 (
     uint32_t            owner_id,
     tpm_src_port_type_t src_port,
-    uint8_t             allow_untagged
+    uint8_t             drop_untagged
 )
 {
     tpm_error_code_t retVal = TPM_RC_OK;
@@ -1195,11 +1572,11 @@ tpm_error_code_t tpm_sw_set_port_untagged
     if (trace_sw_dbg_flag)
     {
         printk(KERN_INFO
-                "==ENTER==%s: owner_id[%d],src_port[%d],allow_untagged[%d]\r\n",
-                __FUNCTION__,owner_id,src_port,allow_untagged);
+                "==ENTER==%s: owner_id[%d],src_port[%d],drop_untagged[%d]\r\n",
+                __FUNCTION__,owner_id,src_port,drop_untagged);
     }
 
-    if (allow_untagged == 1)
+    if (drop_untagged == 1)
     {
         mode = 1/*GT_TRUE*/;
     }
@@ -2467,9 +2844,9 @@ tpm_error_code_t tpm_sw_set_uni_q_weight
     uint8_t  weight
 )
 {
-    tpm_error_code_t retVal;
-
-    SWITCH_INIT_CHECK();
+    tpm_error_code_t retVal = GT_OK;
+    tpm_gmacs_enum_t gmac_i;
+    tpm_db_gmac_func_t gmac_func;
 
     if (trace_sw_dbg_flag)
     {
@@ -2478,15 +2855,24 @@ tpm_error_code_t tpm_sw_set_uni_q_weight
                 __FUNCTION__,owner_id,queue_id,weight);
     }
 
-    if ((queue_id == 0) ||
-        (queue_id > SW_QOS_NUM_OF_QUEUES))
-    {
-        printk(KERN_INFO
-               "%s:%d:==ERROR== invalid queue[%d]\r\n", __FUNCTION__,__LINE__,queue_id);
-        return ERR_SW_TM_QUEUE_INVALID;
-    }
+    if (tpm_sw_init_check()) {
+        for (gmac_i = TPM_ENUM_GMAC_0; gmac_i < TPM_MAX_NUM_GMACS; gmac_i++) {
+            tpm_db_gmac_func_get(gmac_i, &gmac_func);
+            if (TPM_GMAC_FUNC_LAN_UNI == gmac_func ||
+                TPM_GMAC_FUNC_US_MAC_LEARN_DS_LAN_UNI == gmac_func)
+                retVal |= mvNetaTxqWrrPrioSet(gmac_i, 0, queue_id, weight);
+        }
+    } else {
+        if ((queue_id == 0) ||
+            (queue_id > SW_QOS_NUM_OF_QUEUES))
+        {
+            printk(KERN_INFO
+                   "%s:%d:==ERROR== invalid queue[%d]\r\n", __FUNCTION__,__LINE__,queue_id);
+            return ERR_SW_TM_QUEUE_INVALID;
+        }
 
-    retVal = mv_switch_set_uni_q_weight(queue_id, weight);
+        retVal = mv_switch_set_uni_q_weight(queue_id, weight);
+    }
     if (retVal != GT_OK)
     {
         printk(KERN_ERR
@@ -2543,8 +2929,8 @@ tpm_error_code_t tpm_sw_set_uni_ingr_police_rate
     tpm_error_code_t    retVal = TPM_RC_OK;
     int32_t             lPort  = 0;
     GT_PIRL2_COUNT_MODE mode;
-
-    SWITCH_INIT_CHECK();
+    tpm_gmacs_enum_t    gmac_i;
+    tpm_db_gmac_lpk_uni_ingr_rate_limit_t rate_limit;
 
     if (trace_sw_dbg_flag)
     {
@@ -2553,16 +2939,38 @@ tpm_error_code_t tpm_sw_set_uni_ingr_police_rate
                 __FUNCTION__,owner_id,src_port,count_mode, cir, cbs,ebs);
     }
 
-    mode = (GT_PIRL2_COUNT_MODE)count_mode;
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(src_port, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+        /* Check GMAC1 lpk status, if no lpk, no ingress rate for ingress */
+        if (tpm_db_gmac1_lpbk_en_get()) {
+            retVal = tpm_tm_set_gmac0_ingr_rate_lim(owner_id, cir, cbs);
+            if (retVal == TPM_RC_OK) {
+                rate_limit.count_mode = count_mode;
+                rate_limit.cir = cir;
+                rate_limit.cbs = cbs;
+                rate_limit.ebs = ebs;
+                retVal = tpm_db_gmac_lpk_uni_ingr_rate_limit_set(src_port, rate_limit);
+            }
+        } else {
+            printk(KERN_ERR "ERROR: (%s:%d) src port(%d) ingr rate limit not support\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_GENERAL;
+        }
+    } else {
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
+        mode = (GT_PIRL2_COUNT_MODE)count_mode;
+
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_set_uni_ingr_police_rate(lPort, (GT_PIRL2_COUNT_MODE)mode, cir, cbs, ebs);
     }
-
-    retVal = mv_switch_set_uni_ingr_police_rate(lPort, (GT_PIRL2_COUNT_MODE)mode, cir, cbs, ebs);
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -2620,8 +3028,8 @@ tpm_error_code_t tpm_sw_get_uni_ingr_police_rate
     tpm_error_code_t    retVal = TPM_RC_OK;
     int32_t             lPort  = 0;
     GT_PIRL2_COUNT_MODE mode;
-
-    SWITCH_INIT_CHECK();
+    tpm_gmacs_enum_t    gmac_i;
+    tpm_db_gmac_lpk_uni_ingr_rate_limit_t rate_limit;
 
     if (trace_sw_dbg_flag)
     {
@@ -2630,14 +3038,34 @@ tpm_error_code_t tpm_sw_get_uni_ingr_police_rate
                 __FUNCTION__,owner_id,src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(src_port, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+        /* Check GMAC1 lpk status, if no lpk, no ingress rate for ingress */
+        if (tpm_db_gmac1_lpbk_en_get()) {
+            retVal = tpm_db_gmac_lpk_uni_ingr_rate_limit_get(src_port, &rate_limit);
+            if (retVal == TPM_RC_OK) {
+                mode = (GT_PIRL2_COUNT_MODE)rate_limit.count_mode;
+                *cir = rate_limit.cir;
+                *cbs = rate_limit.cbs;
+                *ebs = rate_limit.ebs;
+            }
+        } else {
+            printk(KERN_ERR "ERROR: (%s:%d) src port(%d) ingr rate limit not support\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_GENERAL;
+        }
+    } else {
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    retVal = mv_switch_get_uni_ingr_police_rate(lPort, &mode, cir, cbs, ebs);
+        retVal = mv_switch_get_uni_ingr_police_rate(lPort, &mode, cir, cbs, ebs);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -2836,8 +3264,7 @@ tpm_error_code_t tpm_sw_set_uni_egr_rate_limit
 {
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
-
-    SWITCH_INIT_CHECK();
+    tpm_gmacs_enum_t gmac_i;
 
     if (trace_sw_dbg_flag)
     {
@@ -2846,14 +3273,27 @@ tpm_error_code_t tpm_sw_set_uni_egr_rate_limit
                 __FUNCTION__,owner_id,src_port,mode,frame_rate_limit_val);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(src_port, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+        /* Set tx port rate limit on gmac_i */
+        retVal = tpm_tm_set_tx_port_rate_lim(owner_id, gmac_i, frame_rate_limit_val, 0);
+        if (retVal == TPM_RC_OK) {
+            retVal = tpm_db_gmac_uni_egr_rate_limit_set(src_port, frame_rate_limit_val);
+        }
+    } else {
 
-    retVal = mv_switch_set_uni_egr_rate_limit(lPort, (GT_PIRL_ELIMIT_MODE)mode, frame_rate_limit_val);
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_set_uni_egr_rate_limit(lPort, (GT_PIRL_ELIMIT_MODE)mode, frame_rate_limit_val);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -2905,8 +3345,7 @@ tpm_error_code_t tpm_sw_get_uni_egr_rate_limit
     tpm_error_code_t    retVal = TPM_RC_OK;
     int32_t             lPort  = 0;
     GT_PIRL_ELIMIT_MODE limit_mode;
-
-    SWITCH_INIT_CHECK();
+    tpm_gmacs_enum_t    gmac_i;
 
     if (trace_sw_dbg_flag)
     {
@@ -2915,14 +3354,24 @@ tpm_error_code_t tpm_sw_get_uni_egr_rate_limit
                 __FUNCTION__,owner_id,src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(src_port, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+        /* Set tx port rate limit on gmac_i */
+        retVal = tpm_db_gmac_uni_egr_rate_limit_get(src_port, frame_rate_limit_val);
+        limit_mode = GT_PIRL_ELIMIT_FRAME;
+    } else {
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    retVal = mv_switch_get_uni_egr_rate_limit(lPort, &limit_mode, frame_rate_limit_val);
+        retVal = mv_switch_get_uni_egr_rate_limit(lPort, &limit_mode, frame_rate_limit_val);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -3033,9 +3482,7 @@ tpm_error_code_t tpm_sw_set_mac_age_time
     uint32_t time_out
 )
 {
-    tpm_error_code_t retVal;
-
-    SWITCH_INIT_CHECK();
+    tpm_error_code_t retVal = TPM_RC_OK;
 
     if (trace_sw_dbg_flag)
     {
@@ -3044,7 +3491,19 @@ tpm_error_code_t tpm_sw_set_mac_age_time
                __FUNCTION__,owner_id,time_out);
     }
 
-    retVal = mv_switch_set_age_time(time_out);
+    if (tpm_sw_init_check()) {
+        /* Check GMAC1 lpk status, if no lpk, no way to add static MAC */
+#ifdef CONFIG_MV_MAC_LEARN
+        if (tpm_db_gmac1_lpbk_en_get())
+            retVal = mv_mac_learn_expire_time_set(time_out);
+        else {
+            printk(KERN_ERR "ERROR: (%s:%d) MAC learn not supported\n", __FUNCTION__, __LINE__);
+            return ERR_GENERAL;
+        }
+#endif
+    } else {
+        retVal = mv_switch_set_age_time(time_out);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -3086,9 +3545,7 @@ tpm_error_code_t tpm_sw_get_mac_age_time
      uint32_t *time_out
 )
 {
-    tpm_error_code_t retVal;
-
-    SWITCH_INIT_CHECK();
+    tpm_error_code_t retVal = TPM_RC_OK;
 
     if (trace_sw_dbg_flag)
     {
@@ -3097,7 +3554,19 @@ tpm_error_code_t tpm_sw_get_mac_age_time
                __FUNCTION__,owner_id);
     }
 
-    retVal = mv_switch_get_age_time(time_out);
+    if (tpm_sw_init_check()) {
+        /* Check GMAC1 lpk status, if no lpk, no way to add static MAC */
+#ifdef CONFIG_MV_MAC_LEARN
+        if (tpm_db_gmac1_lpbk_en_get())
+            retVal = mv_mac_learn_expire_time_get(time_out);
+        else {
+            printk(KERN_ERR "ERROR: (%s:%d) MAC learn not supported\n", __FUNCTION__, __LINE__);
+            return ERR_GENERAL;
+        }
+#endif
+    } else {
+        retVal = mv_switch_get_age_time(time_out);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -3147,8 +3616,7 @@ tpm_error_code_t  tpm_sw_set_mac_learn
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_BOOL          state;
-
-    SWITCH_INIT_CHECK();
+    tpm_gmacs_enum_t gmac_i;
 
     if (trace_sw_dbg_flag)
     {
@@ -3162,14 +3630,30 @@ tpm_error_code_t  tpm_sw_set_mac_learn
     else
         state = GT_FALSE;
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(src_port, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+#ifdef CONFIG_MV_MAC_LEARN
+        /* Check GMAC1 lpk status, if no lpk, no way to add static MAC */
+        if (tpm_db_gmac1_lpbk_en_get())
+            retVal = mv_mac_learn_enable_set(state);
+        else {
+            printk(KERN_ERR "ERROR: (%s:%d) src port(%d) MAC learn not supported\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_GENERAL;
+        }
+#endif
+    } else {
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    retVal = mv_switch_set_mac_learn(lPort, state);
+        retVal = mv_switch_set_mac_learn(lPort, state);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -3218,8 +3702,8 @@ tpm_error_code_t  tpm_sw_get_mac_learn
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_BOOL          state;
-
-    SWITCH_INIT_CHECK();
+    tpm_gmacs_enum_t gmac_i;
+    bool             mac_learn_enable = false;
 
     if (trace_sw_dbg_flag)
     {
@@ -3228,14 +3712,34 @@ tpm_error_code_t  tpm_sw_get_mac_learn
                __FUNCTION__,owner_id, src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(src_port, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+        /* Check GMAC1 lpk status, if no lpk, no way to add static MAC */
+#ifdef CONFIG_MV_MAC_LEARN
+        if (tpm_db_gmac1_lpbk_en_get())
+            retVal = mv_mac_learn_enable_get(&mac_learn_enable);
+        else {
+            printk(KERN_ERR "ERROR: (%s:%d) src port(%d) MAC learn not supported\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_GENERAL;
+        }
+        if(mac_learn_enable)
+            state = GT_TRUE;
+        else
+            state = GT_FALSE;
+#endif
+    } else {
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    retVal = mv_switch_get_mac_learn(lPort, &state);
+        retVal = mv_switch_get_mac_learn(lPort, &state);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -4302,8 +4806,7 @@ tpm_error_code_t tpm_phy_convert_port_index (uint32_t             owner_id,
                                              tpm_src_port_type_t *extern_port)
 {
     tpm_error_code_t retVal = TPM_RC_OK;
-
-    SWITCH_INIT_CHECK();
+    tpm_init_gmac_conn_conf_t gmac_conn_info;
 
     if (trace_sw_dbg_flag)
     {
@@ -4312,8 +4815,19 @@ tpm_error_code_t tpm_phy_convert_port_index (uint32_t             owner_id,
                __FUNCTION__, owner_id, switch_port);
     }
 
-    *extern_port = tpm_db_phy_convert_port_index(switch_port);
-    if (*extern_port == TPM_DB_ERR_PORT_NUM)
+    if (tpm_sw_init_check()) {
+        if (tpm_db_gmac_conn_conf_get((tpm_gmacs_enum_t)switch_port, &gmac_conn_info)) {
+            printk(KERN_ERR "ERROR: (%s:%d) switch_port(%d) invalid\n", __FUNCTION__, __LINE__, switch_port);
+            return ERR_GENERAL;
+        }
+        if (TPM_TRUE == gmac_conn_info.valid)
+            *extern_port = gmac_conn_info.port_src;
+        else
+            *extern_port = TPM_DB_ERR_PORT_NUM;
+    } else {
+        *extern_port = tpm_db_phy_convert_port_index(switch_port);
+    }
+    if (*extern_port == (tpm_src_port_type_t)TPM_DB_ERR_PORT_NUM)
     {
         printk(KERN_ERR "ERROR: (%s:%d) switch_port(%d) is invalid\n", __FUNCTION__, __LINE__, switch_port);
         return ERR_SRC_PORT_INVALID;
@@ -4374,8 +4888,12 @@ tpm_error_code_t tpm_phy_set_port_autoneg_mode
     int32_t          lPort  = 0;
     GT_BOOL  state, prev_state;
     GT_PHY_AUTO_MODE prev_mode;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
+    uint16_t         lsp_mode = PHY_AUTO_NEGO_MODE_HALF_10 |
+                                PHY_AUTO_NEGO_MODE_FULL_10 |
+                                PHY_AUTO_NEGO_MODE_HALF_100 |
+                                PHY_AUTO_NEGO_MODE_FULL_100;
 
     if (trace_sw_dbg_flag)
     {
@@ -4389,26 +4907,102 @@ tpm_error_code_t tpm_phy_set_port_autoneg_mode
     else
         state = GT_FALSE;
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
+    switch (autoneg_mode) {
+    case TPM_SPEED_AUTO_DUPLEX_AUTO:
+        lsp_mode = PHY_AUTO_NEGO_MODE_HALF_10 |
+                   PHY_AUTO_NEGO_MODE_FULL_10 |
+                   PHY_AUTO_NEGO_MODE_HALF_100 |
+                   PHY_AUTO_NEGO_MODE_FULL_100 |
+                   PHY_AUTO_NEGO_MODE_HALF_1000 |
+                   PHY_AUTO_NEGO_MODE_FULL_1000;
+        break;
+    case TPM_SPEED_1000_DUPLEX_AUTO:
+        lsp_mode = PHY_AUTO_NEGO_MODE_HALF_1000 |
+                   PHY_AUTO_NEGO_MODE_FULL_1000;
+        break;
+    case TPM_SPEED_100_DUPLEX_AUTO:
+        lsp_mode = PHY_AUTO_NEGO_MODE_FULL_100 |
+                   PHY_AUTO_NEGO_MODE_HALF_100;
+        break;
+    case TPM_SPEED_10_DUPLEX_AUTO:
+        lsp_mode = PHY_AUTO_NEGO_MODE_FULL_10 |
+                   PHY_AUTO_NEGO_MODE_HALF_10;
+        break;
+    case TPM_SPEED_AUTO_DUPLEX_FULL:
+        lsp_mode = PHY_AUTO_NEGO_MODE_FULL_10 |
+		   PHY_AUTO_NEGO_MODE_FULL_100 |
+		    PHY_AUTO_NEGO_MODE_FULL_1000;
+        break;
+    case TPM_SPEED_AUTO_DUPLEX_HALF:
+        lsp_mode = PHY_AUTO_NEGO_MODE_HALF_1000 |
+                   PHY_AUTO_NEGO_MODE_HALF_100 |
+                   PHY_AUTO_NEGO_MODE_HALF_10;
+        break;
+    case TPM_SPEED_1000_DUPLEX_FULL:
+        lsp_mode = PHY_AUTO_NEGO_MODE_FULL_1000;
+        break;
+    case TPM_SPEED_1000_DUPLEX_HALF:
+        lsp_mode = PHY_AUTO_NEGO_MODE_HALF_1000;
+        break;
+    case TPM_SPEED_100_DUPLEX_FULL:
+        lsp_mode = PHY_AUTO_NEGO_MODE_FULL_100;
+        break;
+    case TPM_SPEED_100_DUPLEX_HALF:
+        lsp_mode = PHY_AUTO_NEGO_MODE_HALF_100;
+        break;
+    case TPM_SPEED_10_DUPLEX_FULL:
+        lsp_mode = PHY_AUTO_NEGO_MODE_FULL_10;
+        break;
+    case TPM_SPEED_10_DUPLEX_HALF:
+        lsp_mode = PHY_AUTO_NEGO_MODE_HALF_10;
+        break;
+    default:
+        printk(KERN_ERR "ERROR: (%s:%d) invalid autoneg_mode\n", __FUNCTION__, __LINE__);
+        return ERR_GENERAL;
     }
-
-    if (TPM_RC_OK == (retVal = mv_switch_get_port_autoneg_mode(lPort, &prev_state, &prev_mode)))
-    {
-        if (prev_state != state || prev_mode != (GT_PHY_AUTO_MODE)autoneg_mode)
-        {
-            retVal = mv_switch_set_port_autoneg_mode(lPort, state, (GT_PHY_AUTO_MODE)autoneg_mode);
-            if (retVal != TPM_RC_OK)
-            {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
+        printk(KERN_ERR
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhyAutoNegoSet(phy_direct_addr, state)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+        if (state && (retVal == TPM_RC_OK)) {
+            if (mvEthPhyAdvertiseSet(phy_direct_addr, lsp_mode)) {
                 printk(KERN_ERR
-                       "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                       "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+                retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+            }
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        if (TPM_RC_OK == (retVal = mv_switch_get_port_autoneg_mode(lPort, &prev_state, &prev_mode)))
+        {
+            if (prev_state != state || prev_mode != (GT_PHY_AUTO_MODE)autoneg_mode)
+            {
+                retVal = mv_switch_set_port_autoneg_mode(lPort, state, (GT_PHY_AUTO_MODE)autoneg_mode);
+                if (retVal != TPM_RC_OK)
+                {
+                    printk(KERN_ERR
+                           "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                }
             }
         }
     }
-
     if (trace_sw_dbg_flag)
     {
         printk(KERN_INFO
@@ -4465,8 +5059,9 @@ tpm_error_code_t tpm_phy_get_port_autoneg_mode
     int32_t          lPort  = 0;
     GT_BOOL          state;
     GT_PHY_AUTO_MODE mode;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
+    uint16_t         lsp_mode;
 
     if (trace_sw_dbg_flag)
     {
@@ -4475,18 +5070,97 @@ tpm_error_code_t tpm_phy_get_port_autoneg_mode
                __FUNCTION__,owner_id,src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_get_port_autoneg_mode(lPort, &state, &mode);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhyAutoNegoGet(phy_direct_addr, (int *)&state)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+        if (state && (retVal == TPM_RC_OK)) {
+            if (mvEthPhyAdvertiseGet(phy_direct_addr, &lsp_mode)) {
+                printk(KERN_ERR
+                       "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+                retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+            }
+            switch (lsp_mode) {
+            case (PHY_AUTO_NEGO_MODE_HALF_10 |
+                  PHY_AUTO_NEGO_MODE_FULL_10 |
+                  PHY_AUTO_NEGO_MODE_HALF_100 |
+                  PHY_AUTO_NEGO_MODE_FULL_100 |
+                  PHY_AUTO_NEGO_MODE_HALF_1000 |
+                  PHY_AUTO_NEGO_MODE_FULL_1000):
+                mode = TPM_SPEED_AUTO_DUPLEX_AUTO;
+                break;
+            case (PHY_AUTO_NEGO_MODE_HALF_1000 |
+                  PHY_AUTO_NEGO_MODE_FULL_1000):
+                mode = TPM_SPEED_1000_DUPLEX_AUTO;
+                break;
+            case (PHY_AUTO_NEGO_MODE_FULL_100 |
+                  PHY_AUTO_NEGO_MODE_HALF_100):
+                mode = TPM_SPEED_100_DUPLEX_AUTO;
+                break;
+            case (PHY_AUTO_NEGO_MODE_FULL_10 |
+                  PHY_AUTO_NEGO_MODE_HALF_10):
+                mode = TPM_SPEED_10_DUPLEX_AUTO;
+                break;
+            case (PHY_AUTO_NEGO_MODE_FULL_10 |
+                  PHY_AUTO_NEGO_MODE_FULL_100 |
+                  PHY_AUTO_NEGO_MODE_FULL_1000):
+                mode = TPM_SPEED_AUTO_DUPLEX_FULL;
+                break;
+            case (PHY_AUTO_NEGO_MODE_HALF_1000 |
+                  PHY_AUTO_NEGO_MODE_HALF_100 |
+                  PHY_AUTO_NEGO_MODE_HALF_10):
+                mode = TPM_SPEED_AUTO_DUPLEX_HALF;
+                break;
+            case PHY_AUTO_NEGO_MODE_FULL_1000:
+                mode = TPM_SPEED_1000_DUPLEX_FULL;
+                break;
+            case PHY_AUTO_NEGO_MODE_HALF_1000:
+                mode = TPM_SPEED_1000_DUPLEX_HALF;
+                break;
+            case PHY_AUTO_NEGO_MODE_FULL_100:
+                mode = TPM_SPEED_100_DUPLEX_FULL;
+                break;
+            case PHY_AUTO_NEGO_MODE_HALF_100:
+                mode = TPM_SPEED_100_DUPLEX_HALF;
+                break;
+            case PHY_AUTO_NEGO_MODE_FULL_10:
+                mode = TPM_SPEED_10_DUPLEX_FULL;
+                break;
+            case PHY_AUTO_NEGO_MODE_HALF_10:
+                mode = TPM_SPEED_10_DUPLEX_HALF;
+                break;
+            default:
+                mode = TPM_SPEED_AUTO_DUPLEX_AUTO;
+                break;
+            }
+        } else {
+            mode = TPM_SPEED_AUTO_DUPLEX_AUTO;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_get_port_autoneg_mode(lPort, &state, &mode);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     if(GT_TRUE == state)
@@ -4510,6 +5184,8 @@ tpm_error_code_t tpm_phy_get_port_autoneg_mode
 *
 * DESCRIPTION:
 *       The API restart the auto negotiation of an Ethernet  UNI port.
+*	If AutoNegotiation is not enabled, it'll enable it.
+*	Loopback and Power Down will be disabled by this routine.
 * INPUTS:
 *       owner_id    - APP owner id  should be used for all API calls.
 *       src_port    - Source port in UNI port index, UNI0, UNI1...UNI4.
@@ -4535,8 +5211,9 @@ tpm_error_code_t tpm_phy_restart_port_autoneg
 {
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
+    
 
     if (trace_sw_dbg_flag)
     {
@@ -4545,18 +5222,35 @@ tpm_error_code_t tpm_phy_restart_port_autoneg
                __FUNCTION__,owner_id,src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_restart_port_autoneg(lPort);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhyRestartAN(phy_direct_addr, 0)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_restart_port_autoneg(lPort);
+        if (retVal != TPM_RC_OK)
+        {
+             printk(KERN_ERR
+                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     if (trace_sw_dbg_flag)
@@ -4601,8 +5295,8 @@ tpm_error_code_t tpm_phy_set_port_admin_state
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_BOOL  state, prev_state;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -4616,22 +5310,39 @@ tpm_error_code_t tpm_phy_set_port_admin_state
     else
         state = GT_FALSE;
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
+        printk(KERN_ERR
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
     }
-
-    if (TPM_RC_OK == (retVal = mv_switch_get_phy_port_state(lPort, &prev_state)))
-    {
-        if (prev_state != state)
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhySetAdminState(phy_direct_addr, (int)state)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
         {
-            retVal = mv_switch_set_phy_port_state(lPort, state);
-            if (retVal != TPM_RC_OK)
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        if (TPM_RC_OK == (retVal = mv_switch_get_phy_port_state(lPort, &prev_state)))
+        {
+            if (prev_state != state)
             {
-                printk(KERN_ERR
-                       "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                retVal = mv_switch_set_phy_port_state(lPort, state);
+                if (retVal != TPM_RC_OK)
+                {
+                    printk(KERN_ERR
+                           "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                }
             }
         }
     }
@@ -4677,8 +5388,8 @@ tpm_error_code_t tpm_phy_get_port_admin_state
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_BOOL          state;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -4686,19 +5397,35 @@ tpm_error_code_t tpm_phy_get_port_admin_state
                "==ENTER==%s: owner_id[%d],src_port[%d]\n\r",
                __FUNCTION__,owner_id,src_port);
     }
-
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_get_phy_port_state(lPort, &state);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhyGetAdminState(phy_direct_addr, (int *)&state)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_get_phy_port_state(lPort, &state);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     if(state == GT_TRUE)
@@ -4747,8 +5474,8 @@ tpm_error_code_t tpm_phy_get_port_link_status
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_BOOL          state;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -4756,19 +5483,31 @@ tpm_error_code_t tpm_phy_get_port_link_status
                "==ENTER==%s: owner_id[%d],src_port[%d]\n\r",
                __FUNCTION__,owner_id,src_port);
     }
-
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_get_port_link_status(lPort, &state);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        state = (GT_BOOL)mvEthPhyCheckLink(phy_direct_addr);
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_get_port_link_status(lPort, &state);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     if(state == GT_TRUE)
@@ -4804,7 +5543,11 @@ tpm_error_code_t tpm_phy_get_port_link_status
 *       On error different types are returned according to the case, see tpm_error_code_t.
 *
 * COMMENTS:
-*
+* This function is different from tpm_phy_get_port_duplex_mode, it reflects the real duplex status happening
+* in PHY now. If there is a switch, through PPU function, switch can get the duplex info from PHY and
+* store it in switch port register, so duplex info can be got from switch port register. It is a
+* "get_xxx_oper" function. If there is no switch, this info can be read from PHY spec status register,
+* offset 17
 *
 *******************************************************************************/
 tpm_error_code_t tpm_phy_get_port_duplex_status
@@ -4816,9 +5559,9 @@ tpm_error_code_t tpm_phy_get_port_duplex_status
 {
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
-    GT_BOOL          state;
-
-    SWITCH_INIT_CHECK();
+    GT_BOOL          state, status_valid;
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -4826,19 +5569,41 @@ tpm_error_code_t tpm_phy_get_port_duplex_status
                "==ENTER==%s: owner_id[%d],src_port[%d]\n\r",
                __FUNCTION__,owner_id,src_port);
     }
-
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_get_port_duplex_status(lPort, &state);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhyDuplexOperGet(phy_direct_addr, (int *)&status_valid, (int *)&state)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+
+        if (status_valid == GT_FALSE) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY duplex status is not valid on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_STATUS_UNKNOWN;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_get_port_duplex_status(lPort, &state);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     if(state == GT_TRUE)
@@ -4875,8 +5640,11 @@ tpm_error_code_t tpm_phy_get_port_duplex_status
 *       On error different types are returned according to the case, see tpm_error_code_t.
 *
 * COMMENTS:
-*
-*
+* This function is different from "tpm_phy_get_port_speed ", it reflects what really happens
+* in PHY. If there is a switch, this function will get the stats info from switch register,
+* because the PPU function will make the switch get the PHY status info and store it in port
+* register. If there is no switch, speed mode info can be got from PHY register spec status
+* register, offset is 17.
 *******************************************************************************/
 tpm_error_code_t tpm_phy_get_port_speed_mode
 (
@@ -4888,8 +5656,8 @@ tpm_error_code_t tpm_phy_get_port_speed_mode
     tpm_error_code_t   retVal = TPM_RC_OK;
     int32_t            lPort  = 0;
     GT_PORT_SPEED_MODE tmpSpeed;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t     phy_access_way;
+    uint32_t           phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -4897,19 +5665,41 @@ tpm_error_code_t tpm_phy_get_port_speed_mode
                "==ENTER==%s: owner_id[%d],src_port[%d]\n\r",
                __FUNCTION__,owner_id,src_port);
     }
-
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_get_port_speed_mode(lPort, &tmpSpeed);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhySpeedOperGet(phy_direct_addr, (uint32_t *)&tmpSpeed)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+
+        if (tmpSpeed == PORT_SPEED_UNKNOWN) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY speed status is not valid on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_STATUS_UNKNOWN;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_get_port_speed_mode(lPort, &tmpSpeed);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     *speed = (uint32_t)tmpSpeed;
@@ -4943,7 +5733,8 @@ tpm_error_code_t tpm_phy_get_port_speed_mode
 *       On success - TPM_RC_OK.
 *       On error different types are returned according to the case - see tpm_error_code_t.
 * COMMENTS:
-* data sheet register 4.10 Autonegotiation Advertisement Register
+* This function reflect flow control configuration info, it only access PHY register,
+* that is data sheet register 4.10 Autonegotiation Advertisement Register.
 *******************************************************************************/
 
 tpm_error_code_t tpm_phy_set_port_flow_control_support
@@ -4956,8 +5747,10 @@ tpm_error_code_t tpm_phy_set_port_flow_control_support
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_PHY_PAUSE_MODE pause_state, prev_state;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
+    uint32_t         switch_init;
+    tpm_gmacs_enum_t gmac_port;
 
     if (trace_sw_dbg_flag)
     {
@@ -4971,32 +5764,99 @@ tpm_error_code_t tpm_phy_set_port_flow_control_support
     else
         pause_state = GT_PHY_NO_PAUSE;
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
+        printk(KERN_ERR
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
     }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (tpm_db_switch_init_get(&switch_init) != TPM_DB_OK) {
+            printk(KERN_ERR "ERROR: (%s:%d) tpm_db_switch_init_get Failed\n", __FUNCTION__, __LINE__);
+            retVal = ERR_GENERAL;
+            return retVal;
+        }
+        /* Only PHY connected to GMAC, need write GMAC register */
+        if (!switch_init) {
+            for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
+                if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
+                break;
+            }
+            if (gmac_port == TPM_MAX_NUM_GMACS) {
+                printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
+                retVal = ERR_GENERAL;
+                return retVal;
+            }
 
-    if (TPM_RC_OK == (retVal = mv_switch_get_port_pause(lPort, &prev_state)))
-    {
-        if (prev_state != pause_state)
-        {
-            retVal = mv_switch_set_port_pause(lPort, pause_state);
-            if (retVal != TPM_RC_OK)
+            /* Write Flow Control reg on GMAC port */
+            switch(pause_state) {
+            case GT_PHY_NO_PAUSE:
+                if (mvNetaFlowCtrlSet((int)gmac_port, MV_ETH_FC_DISABLE) != MV_OK) {
+                    printk(KERN_ERR "ERROR: (%s:%d) mvNetaFlowCtrlSet Failed\n", __FUNCTION__, __LINE__);
+                    retVal = ERR_GENERAL;
+                    return retVal;
+                }
+                break;
+            case GT_PHY_PAUSE:
+                if (mvNetaFlowCtrlSet((int)gmac_port, MV_ETH_FC_ENABLE) != MV_OK) {
+                    printk(KERN_ERR "ERROR: (%s:%d) mvNetaFlowCtrlSet Failed\n", __FUNCTION__, __LINE__);
+                    retVal = ERR_GENERAL;
+                    return retVal;
+                }
+                break;
+            default:
+                printk(KERN_ERR "ERROR: (%s:%d)Invalid flow control mode%d\n", __FUNCTION__, __LINE__, pause_state);
+                retVal = ERR_GENERAL;
+                return retVal;
+            }
+        } else {
+            /* Flow control info can not be got from linkpartner through QSGMII auto negitiation, so manual needed */
+            lPort = tpm_db_eth_port_switch_port_get(src_port);
+            if (lPort == TPM_DB_ERR_PORT_NUM)
             {
-                printk(KERN_ERR
-                       "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+                return ERR_SRC_PORT_INVALID;
+            }
+            /* Set force FC value */
+            if ((retVal = mv_switch_set_port_forced_fc_value(lPort, state)) != TPM_RC_OK) {
+                printk(KERN_ERR "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                return retVal;
+            }
+            /* Set force FC */
+            if ((retVal = mv_switch_set_port_forced_flow_control(lPort, state)) != TPM_RC_OK) {
+                printk(KERN_ERR "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                return retVal;
+            }
+        }
+        if (mvEthPhyPauseSet(phy_direct_addr, (uint32_t)pause_state)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        if (TPM_RC_OK == (retVal = mv_switch_get_port_pause(lPort, &prev_state)))
+        {
+            if (prev_state != pause_state)
+            {
+                retVal = mv_switch_set_port_pause(lPort, pause_state);
+                if (retVal != TPM_RC_OK)
+                {
+                    printk(KERN_ERR
+                           "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                }
             }
         }
     }
-
-    //retVal = mv_switch_restart_port_autoneg(port);
-    // if (retVal != TPM_RC_OK)
-    // {
-    //     printk(KERN_ERR
-    //            "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
-    // }
 
     if (trace_sw_dbg_flag)
     {
@@ -5037,8 +5897,8 @@ tpm_error_code_t tpm_phy_get_port_flow_control_support
     tpm_error_code_t  retVal = TPM_RC_OK;
     int32_t           lPort  = 0;
     GT_PHY_PAUSE_MODE pause_state;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -5046,19 +5906,35 @@ tpm_error_code_t tpm_phy_get_port_flow_control_support
                "==ENTER==%s: owner_id[%d],src_port[%d]\n\r",
                __FUNCTION__,owner_id,src_port);
     }
-
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_get_port_pause(lPort, &pause_state);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhyPauseAdminGet(phy_direct_addr, (uint32_t *)&pause_state)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_get_port_pause(lPort, &pause_state);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     if(pause_state == GT_PHY_NO_PAUSE)
@@ -5096,7 +5972,11 @@ tpm_error_code_t tpm_phy_get_port_flow_control_support
 *       On success - TPM_RC_OK.
 *       On error different types are returned according to the case, see tpm_error_code_t.
 * COMMENTS:
-*       None.
+* This function is different from function tpm_phy_set_port_flow_control_support(),
+* it reflects the flow control info on MAC of PHY, so this info can only be got from
+* MAC, PHY connected to. If there is a switch, this info can be got from switch port register,
+* if there is no switch connected to PHY, this info can be got from the MAC connected to it,
+* such as GMAC0.
 *******************************************************************************/
 tpm_error_code_t tpm_phy_get_port_flow_control_state
 (
@@ -5108,8 +5988,11 @@ tpm_error_code_t tpm_phy_get_port_flow_control_state
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_BOOL          fc_state;
-
-    SWITCH_INIT_CHECK();
+    uint32_t         switch_init;
+    tpm_gmacs_enum_t gmac_port;
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
+    uint32_t         fc_mode;
 
     if (trace_sw_dbg_flag)
     {
@@ -5118,24 +6001,60 @@ tpm_error_code_t tpm_phy_get_port_flow_control_state
                __FUNCTION__,owner_id,src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
+    /* Check swicth init or not */
+    if (tpm_db_switch_init_get(&switch_init) != TPM_DB_OK) {
+        printk(KERN_ERR "ERROR: (%s:%d) tpm_db_switch_init_get failed\n", __FUNCTION__, __LINE__);
+        return ERR_GENERAL;
     }
+    if (switch_init) {
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    retVal = mv_switch_get_port_pause_state(lPort, &fc_state);
-    if (retVal != TPM_RC_OK)
-    {
-        printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        retVal = mv_switch_get_port_pause_state(lPort, &fc_state);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
+
+        if(fc_state == GT_FALSE)
+            *state = false;
+        else
+            *state = true;
+    } else {
+        /* check PHY access way */
+        retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+        if (retVal != TPM_RC_OK) {
+            printk(KERN_ERR
+                   "Port%d PHY access way check failed\n", src_port);
+            return retVal;
+        }
+        for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
+            if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
+                break;
+        }
+        if (gmac_port == TPM_MAX_NUM_GMACS) {
+            printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
+            retVal = ERR_GENERAL;
+            return retVal;
+        }
+
+        /* Get GMAC Flow Control state */
+        if (mvNetaFlowCtrlGet((int)gmac_port, &fc_mode) != MV_OK) {
+            printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
+            retVal = ERR_GENERAL;
+            return retVal;
+        }
+
+        if (fc_mode == MV_ETH_FC_DISABLE)
+            *state = false;
+        else
+            *state = true;
     }
-
-    if(fc_state == GT_FALSE)
-        *state = false;
-    else
-        *state = true;
 
     if (trace_sw_dbg_flag)
     {
@@ -5179,8 +6098,10 @@ tpm_error_code_t tpm_phy_set_port_loopback
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_BOOL          state, link_forced;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
+    uint32_t         switch_init;
+    uint32_t         gmac_idx;
 
     if (trace_sw_dbg_flag)
     {
@@ -5197,25 +6118,40 @@ tpm_error_code_t tpm_phy_set_port_loopback
     {
         state = GT_FALSE;
     }
-
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
+        printk(KERN_ERR
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
     }
-
-    switch((GT_PHY_LOOPBACK_MODE)mode)
-    {
-        case PHY_INTERNAL_LOOPBACK:
-            if (lPort == INT_GE_PHY_SWITCH_PORT)
-            {
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (PHY_INTERNAL_LOOPBACK == (GT_PHY_LOOPBACK_MODE)mode) {
+            if (mvEthPhyLoopbackSet(phy_direct_addr, state)) {
+                printk(KERN_ERR
+                       "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+                retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+            }
+            /* Force switch port link up if QSGMII mode with switch */
+            retVal = tpm_db_switch_init_get(&switch_init);
+            if (retVal) {
+                printk(KERN_ERR "ERROR: (%s:%d)switch init get failed\n", __FUNCTION__, __LINE__);
+                return retVal;
+            }
+            if (switch_init) {
+                lPort = tpm_db_eth_port_switch_port_get(src_port);
+                if (lPort == TPM_DB_ERR_PORT_NUM)
+                {
+                    printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+                    return ERR_SRC_PORT_INVALID;
+                }
                 retVal = mv_switch_get_port_forced_link(lPort, &link_forced);
                 if (retVal != TPM_RC_OK)
                 {
                     printk(KERN_ERR
                            "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
-                    break;
+                    return retVal;
                 }
                 if (((state == GT_TRUE) && (link_forced == GT_FALSE)) ||
                     ((state == GT_FALSE)&& (link_forced == GT_TRUE)))
@@ -5225,30 +6161,101 @@ tpm_error_code_t tpm_phy_set_port_loopback
                     {
                         printk(KERN_ERR
                                "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
-                        break;
+                        return retVal;
                     }
                     retVal = mv_switch_set_port_link_value(lPort, state);
                     if (retVal != TPM_RC_OK)
                     {
                         printk(KERN_ERR
                                "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
-                        break;
+                        return retVal;
                     }
                 }
+            } else {
+                /* get GMAC with Phyaddr */
+                for (gmac_idx = TPM_ENUM_GMAC_0; gmac_idx < TPM_MAX_NUM_GMACS; gmac_idx++) {
+                    if (phy_direct_addr == mvBoardPhyAddrGet(gmac_idx))
+                        break;
+                }
+                if (gmac_idx == TPM_MAX_NUM_GMACS) {
+                    printk(KERN_ERR
+                           "%s:%d: GMAC get with phyaddr invalid\r\n", __FUNCTION__,__LINE__);
+                    retVal = ERR_GENERAL;
+                    return retVal;
+                }
+                /* Force gmac link or disable it */
+                if (mvNetaForceLinkModeSet(gmac_idx, state, 0)) {
+                    printk(KERN_ERR
+                           "%s:%d: GMAC force link set failed\r\n", __FUNCTION__,__LINE__);
+                    retVal = ERR_GENERAL;
+                    return retVal;
+                }
             }
-            retVal = mv_switch_set_port_loopback(lPort, state);
-            break;
-        case PHY_EXTERNAL_LOOPBACK:
-            retVal = mv_switch_set_port_line_loopback(lPort, state);
-            break;
-        default:
-            break;
+        } else if (PHY_EXTERNAL_LOOPBACK == (GT_PHY_LOOPBACK_MODE)mode) {
+            if (mvEthPhyLineLoopbackSet(phy_direct_addr, state)) {
+                printk(KERN_ERR
+                       "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+                retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+            }
+        } else {
+            printk(KERN_INFO
+                   "==ENTER==%s: mode[%d] invalid\n\r", __FUNCTION__,mode);
+            retVal = ERR_GENERAL;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    }
-    if (retVal != TPM_RC_OK)
-    {
-        printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        switch((GT_PHY_LOOPBACK_MODE)mode)
+        {
+            case PHY_INTERNAL_LOOPBACK:
+                if (lPort == INT_GE_PHY_SWITCH_PORT)
+                {
+                    retVal = mv_switch_get_port_forced_link(lPort, &link_forced);
+                    if (retVal != TPM_RC_OK)
+                    {
+                        printk(KERN_ERR
+                               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                        break;
+                    }
+                    if (((state == GT_TRUE) && (link_forced == GT_FALSE)) ||
+                        ((state == GT_FALSE)&& (link_forced == GT_TRUE)))
+                    {
+                        retVal = mv_switch_set_port_forced_link(lPort, state);
+                        if (retVal != TPM_RC_OK)
+                        {
+                            printk(KERN_ERR
+                                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                            break;
+                        }
+                        retVal = mv_switch_set_port_link_value(lPort, state);
+                        if (retVal != TPM_RC_OK)
+                        {
+                            printk(KERN_ERR
+                                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+                            break;
+                        }
+                    }
+                }
+                retVal = mv_switch_set_port_loopback(lPort, state);
+                break;
+            case PHY_EXTERNAL_LOOPBACK:
+                retVal = mv_switch_set_port_line_loopback(lPort, state);
+                break;
+            default:
+                break;
+
+        }
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     if (trace_sw_dbg_flag)
@@ -5291,8 +6298,8 @@ tpm_error_code_t tpm_phy_get_port_loopback
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_BOOL          state;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -5300,29 +6307,57 @@ tpm_error_code_t tpm_phy_get_port_loopback
                "==ENTER==%s: owner_id[%d],src_port[%d], mode[%d]\n\r",
                __FUNCTION__,owner_id,src_port, mode);
     }
-
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    switch((GT_PHY_LOOPBACK_MODE)mode)
-    {
-        case PHY_INTERNAL_LOOPBACK:
-           retVal = mv_switch_get_port_loopback(lPort, &state);
-            break;
-        case PHY_EXTERNAL_LOOPBACK:
-            retVal = mv_switch_get_port_line_loopback(lPort, &state);
-            break;
-        default:
-            break;
-    }
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (PHY_INTERNAL_LOOPBACK == (GT_PHY_LOOPBACK_MODE)mode) {
+            if (mvEthPhyLoopbackGet(phy_direct_addr, (int *)&state)) {
+                printk(KERN_ERR
+                       "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+                retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+            }
+        } else if (PHY_EXTERNAL_LOOPBACK == (GT_PHY_LOOPBACK_MODE)mode) {
+            if (mvEthPhyLineLoopbackGet(phy_direct_addr, (int *)&state)) {
+                printk(KERN_ERR
+                       "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+                retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+            }
+        } else {
+            printk(KERN_INFO
+                   "==ENTER==%s: mode[%d] invalid\n\r", __FUNCTION__,mode);
+            retVal = ERR_GENERAL;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        switch((GT_PHY_LOOPBACK_MODE)mode)
+        {
+            case PHY_INTERNAL_LOOPBACK:
+                retVal = mv_switch_get_port_loopback(lPort, &state);
+                break;
+            case PHY_EXTERNAL_LOOPBACK:
+                retVal = mv_switch_get_port_line_loopback(lPort, &state);
+                break;
+            default:
+                break;
+        }
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     if(state == GT_TRUE)
@@ -5377,8 +6412,8 @@ tpm_error_code_t tpm_phy_set_port_duplex_mode
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_BOOL          state;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -5396,18 +6431,35 @@ tpm_error_code_t tpm_phy_set_port_duplex_mode
         state = GT_FALSE;
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_set_port_duplex_mode(lPort, state);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhyDuplexModeSet(phy_direct_addr, state)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_set_port_duplex_mode(lPort, state);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     if (trace_sw_dbg_flag)
@@ -5438,7 +6490,8 @@ tpm_error_code_t tpm_phy_set_port_duplex_mode
 *       On error different types are returned according to the case , see tpm_error_code_t.
 *
 * COMMENTS:
-*         data sheet register 0.8 - Duplex Mode
+*         This function will get the duplex configuration info just from PHY's control register
+* that is data sheet register 0.8 - Duplex Mode. It is a "get_xxx_admin" function.
 *
 *******************************************************************************/
 tpm_error_code_t tpm_phy_get_port_duplex_mode
@@ -5451,8 +6504,8 @@ tpm_error_code_t tpm_phy_get_port_duplex_mode
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_BOOL          state;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -5461,26 +6514,42 @@ tpm_error_code_t tpm_phy_get_port_duplex_mode
                __FUNCTION__,owner_id,src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_get_port_duplex_mode(lPort, &state);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
     }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhyDuplexModeAdminGet(phy_direct_addr, (int *)&state)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    if (trace_sw_dbg_flag)
-    {
-        printk(KERN_INFO
-                "==EXIT== %s:enable[%d]\n\r",__FUNCTION__,  *enable);
+        retVal = mv_switch_get_port_duplex_mode(lPort, &state);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
+
+        if (trace_sw_dbg_flag)
+        {
+            printk(KERN_INFO
+                    "==EXIT== %s:enable[%d]\n\r",__FUNCTION__,  *enable);
+        }
     }
-
 
     if(state == GT_TRUE)
     {
@@ -5527,8 +6596,8 @@ tpm_error_code_t tpm_phy_set_port_speed
 {
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -5537,18 +6606,35 @@ tpm_error_code_t tpm_phy_set_port_speed
                __FUNCTION__,owner_id,src_port, (uint32_t)speed);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_set_port_speed(lPort, (GT_PHY_SPEED)speed);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhySpeedSet(phy_direct_addr, speed)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_set_port_speed(lPort, (GT_PHY_SPEED)speed);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
     }
 
     if (trace_sw_dbg_flag)
@@ -5581,6 +6667,8 @@ tpm_error_code_t tpm_phy_set_port_speed
 *       On success - TPM_RC_OK.
 *       On error different types are returned according to the case - see tpm_error_code_t.
 * COMMENTS:
+* This function get the PHY config information from PHY controlregister, it is a
+* "get_xxx_admin" function, it reflect the configuration to PHY and it only access PHY register.
 *
 *******************************************************************************/
 tpm_error_code_t tpm_phy_get_port_speed
@@ -5593,8 +6681,8 @@ tpm_error_code_t tpm_phy_get_port_speed
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_PHY_SPEED     lSpeed;
-
-    SWITCH_INIT_CHECK();
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
 
     if (trace_sw_dbg_flag)
     {
@@ -5603,21 +6691,38 @@ tpm_error_code_t tpm_phy_get_port_speed
                __FUNCTION__,owner_id,src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
-
-    retVal = mv_switch_get_port_speed(lPort, &lSpeed);
-    if (retVal != TPM_RC_OK)
-    {
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
         printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
     }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhySpeedAdminGet(phy_direct_addr, speed)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    *speed = (tpm_phy_speed_t)lSpeed;
+        retVal = mv_switch_get_port_speed(lPort, &lSpeed);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
+
+        *speed = (tpm_phy_speed_t)lSpeed;
+    }
 
     if (trace_sw_dbg_flag)
     {
@@ -5658,9 +6763,9 @@ tpm_error_code_t tpm_sw_prv_clear_port_counters
     void
 )
 {
-    tpm_error_code_t retVal;
-
-    SWITCH_INIT_CHECK();
+    tpm_error_code_t retVal = TPM_RC_OK;
+    tpm_gmacs_enum_t gmac_i;
+    tpm_db_gmac_func_t gfunc;
 
     if (trace_sw_dbg_flag)
     {
@@ -5668,7 +6773,17 @@ tpm_error_code_t tpm_sw_prv_clear_port_counters
                 "==ENTER==%s:\n\r",__FUNCTION__);
     }
 
-    retVal = mv_switch_clear_port_counters();
+    if (tpm_sw_init_check()) {
+        for (gmac_i = TPM_ENUM_GMAC_0; gmac_i < TPM_MAX_NUM_GMACS; gmac_i++) {
+            tpm_db_gmac_func_get(gmac_i, &gfunc);
+            if (gfunc == TPM_GMAC_FUNC_LAN_UNI ||
+                gfunc == TPM_GMAC_FUNC_US_MAC_LEARN_DS_LAN_UNI) {
+                MV_NETA_PORT_CTRL *pPortCtrl = mvNetaPortHndlGet(gmac_i);
+                mvNetaMibCountersClear(gmac_i, pPortCtrl->txpNum);
+            }
+        }
+    } else
+        retVal = mv_switch_clear_port_counters();
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -5938,8 +7053,7 @@ tpm_error_code_t tpm_sw_print_port_counters
 )
 {
     tpm_error_code_t retVal;
-
-    SWITCH_INIT_CHECK();
+    tpm_gmacs_enum_t gmac_i;
 
     if (trace_sw_dbg_flag)
     {
@@ -5948,7 +7062,14 @@ tpm_error_code_t tpm_sw_print_port_counters
                 __FUNCTION__,owner_id,lport);
     }
 
-    retVal = mv_switch_print_port_counters(lport);
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(lport, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, lport);
+            return ERR_SRC_PORT_INVALID;
+        }
+        retVal = tpm_sw_pm_print_from_gmac(gmac_i);
+    } else
+        retVal = mv_switch_print_port_counters(lport);
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_INFO
@@ -5994,6 +7115,8 @@ tpm_error_code_t tpm_sw_clear_port_counters
 {
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
+    tpm_gmacs_enum_t gmac_i;
+    MV_NETA_PORT_CTRL *pPortCtrl;
 
     SWITCH_INIT_CHECK();
 
@@ -6003,14 +7126,24 @@ tpm_error_code_t tpm_sw_clear_port_counters
                 "==ENTER==%s:\n\r",__FUNCTION__);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
-    }
+    if (tpm_sw_init_check()) {
+        if (tpm_src_port_mac_map(src_port, &gmac_i)) {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) map to mac failed\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+        pPortCtrl = mvNetaPortHndlGet(gmac_i);
+        mvNetaMibCountersClear(gmac_i, pPortCtrl->txpNum);
+    } else {
 
-    retVal = mv_switch_clean_port_counters(lPort);
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_clean_port_counters(lPort);
+    }
     if (retVal != TPM_RC_OK)
     {
         printk(KERN_ERR
@@ -6022,6 +7155,205 @@ tpm_error_code_t tpm_sw_clear_port_counters
         printk(KERN_INFO
                 "==EXIT== %s:\n\r",__FUNCTION__);
     }
+
+    return retVal;
+}
+
+/*******************************************************************************
+* tpm_sw_pm_from_gmac
+*
+*
+* INPUTS:
+*       port        - GMAC port.
+* OUTPUTS:
+*       tpm_swport_pm_1 - Holds PM data1
+*       tpm_swport_pm_3 - Holds PM data all
+*
+* RETURNS:
+* TPM_RC_OK - on success, else error code
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_pm_from_gmac(int port,
+				     tpm_swport_pm_1_t   *tpm_swport_pm_1,
+				     tpm_swport_pm_3_all_t *tpm_swport_pm_3)
+{
+    uint32_t         regVaLo, regValHi = 0;
+    int32_t          mib = 0;
+
+    /* Check Input */
+    if (tpm_swport_pm_1 == NULL || tpm_swport_pm_3 == NULL) {
+        printk(KERN_ERR "ERROR: (%s:%d) Invalid Input\n", __FUNCTION__, __LINE__);
+        return ERR_GENERAL;
+    }
+
+    /* Check GMAC Port */
+    if (mvNetaTxpCheck(port, mib)) {
+        printk(KERN_ERR "ERROR: (%s:%d) mvNetaTxpCheck failed\n", __FUNCTION__, __LINE__);
+        return ERR_GENERAL;
+    }
+    if (!mvNetaPortHndlGet(port)) {
+        printk(KERN_ERR "ERROR: (%s:%d) mvNetaPortHndlGet failed\n", __FUNCTION__, __LINE__);
+        return ERR_GENERAL;
+    }
+
+    /* Initialize tpm_swport_pm_3 as Zero */
+    memset(tpm_swport_pm_1, 0, sizeof(tpm_swport_pm_1_t));
+    memset(tpm_swport_pm_3, 0, sizeof(tpm_swport_pm_3_all_t));
+
+    /* Read counter */
+    tpm_swport_pm_3->dropEvents = MV_REG_READ(ETH_RX_DISCARD_PKTS_CNTR_REG(port));
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_GOOD_OCTETS_RECEIVED_LOW, &regValHi);
+    tpm_swport_pm_3->InGoodOctetsLo = regVaLo;
+    tpm_swport_pm_3->InGoodOctetsHi = regValHi;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_BAD_OCTETS_RECEIVED, &regValHi);
+    tpm_swport_pm_3->InBadOctets = regVaLo;
+
+    tpm_swport_pm_3->Deferred = MV_REG_READ(ETH_RX_OVERRUN_PKTS_CNTR_REG(port));
+    tpm_swport_pm_1->deferredTransmissionCounter = tpm_swport_pm_3->Deferred;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_BROADCAST_FRAMES_RECEIVED, &regValHi);
+    tpm_swport_pm_3->InBroadcasts = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_MULTICAST_FRAMES_RECEIVED, &regValHi);
+    tpm_swport_pm_3->InMulticasts = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_FRAMES_64_OCTETS, &regValHi);
+    tpm_swport_pm_3->Octets64 = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_FRAMES_65_TO_127_OCTETS, &regValHi);
+    tpm_swport_pm_3->Octets127 = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_FRAMES_128_TO_255_OCTETS, &regValHi);
+    tpm_swport_pm_3->Octets255 = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_FRAMES_256_TO_511_OCTETS, &regValHi);
+    tpm_swport_pm_3->Octets511 = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_FRAMES_512_TO_1023_OCTETS, &regValHi);
+    tpm_swport_pm_3->Octets1023 = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_FRAMES_1024_TO_MAX_OCTETS, &regValHi);
+    tpm_swport_pm_3->OctetsMax = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_GOOD_OCTETS_SENT_LOW, &regValHi);
+    tpm_swport_pm_3->OutOctetsLo = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_GOOD_OCTETS_SENT_HIGH, &regValHi);
+    tpm_swport_pm_3->OutOctetsHi = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_EXCESSIVE_COLLISION, &regValHi);
+    tpm_swport_pm_1->excessiveCollisionCounter = regVaLo;
+    tpm_swport_pm_3->Excessive = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_MULTICAST_FRAMES_SENT, &regValHi);
+    tpm_swport_pm_3->OutMulticasts = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_BROADCAST_FRAMES_SENT, &regValHi);
+    tpm_swport_pm_3->OutBroadcasts = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_FC_SENT, &regValHi);
+    tpm_swport_pm_3->OutPause = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_GOOD_FC_RECEIVED, &regValHi);
+    tpm_swport_pm_3->InPause = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_UNDERSIZE_RECEIVED, &regValHi);
+    tpm_swport_pm_3->Undersize = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_FRAGMENTS_RECEIVED, &regValHi);
+    tpm_swport_pm_3->Fragments = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_OVERSIZE_RECEIVED, &regValHi);
+    tpm_swport_pm_1->frameTooLongs = regVaLo;
+    tpm_swport_pm_3->Oversize = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_JABBER_RECEIVED, &regValHi);
+    tpm_swport_pm_3->Jabber = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_MAC_RECEIVE_ERROR, &regValHi);
+    tpm_swport_pm_3->InMACRcvErr = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_BAD_CRC_EVENT, &regValHi);
+    tpm_swport_pm_3->InFCSErr = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_COLLISION, &regValHi);
+    tpm_swport_pm_3->Collisions = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_LATE_COLLISION, &regValHi);
+    tpm_swport_pm_3->Late = regVaLo;
+
+    regVaLo = mvNetaMibCounterRead(port, mib, ETH_MIB_INTERNAL_MAC_TRANSMIT_ERR, &regValHi);
+    tpm_swport_pm_1->internalMacTransmitErrorCounter = regVaLo;
+
+    return TPM_RC_OK;
+}
+
+/*******************************************************************************
+* tpm_sw_pm_print_from_gmac
+*
+*
+* INPUTS:
+*       port        - GMAC port.
+* OUTPUTS:
+*       tpm_swport_pm_1 - Holds PM data1
+*       tpm_swport_pm_3 - Holds PM data all
+*
+* RETURNS:
+* TPM_RC_OK - on success, else error code
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_pm_print_from_gmac(int port)
+{
+    tpm_error_code_t retVal = TPM_RC_OK;
+    tpm_swport_pm_3_all_t tpm_swport_pm_3;
+    tpm_swport_pm_1_t     tpm_swport_pm_1;
+    MV_NETA_PORT_CTRL *pPortCtrl = mvNetaPortHndlGet(port);
+
+    retVal = tpm_sw_pm_from_gmac(port, &tpm_swport_pm_1, &tpm_swport_pm_3);
+    if (retVal != TPM_RC_OK)
+    {
+        printk(KERN_ERR
+               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        return retVal;
+    }
+    printk("=======Counters from port[%d]=======\n",port);
+    printk("InGoodOctetsLo  %08d    ", tpm_swport_pm_3.InGoodOctetsLo);
+    printk("InGoodOctetsHi  %08d   \n", tpm_swport_pm_3.InGoodOctetsHi);
+    printk("InBadOctets     %08d    ", tpm_swport_pm_3.InBadOctets);
+    printk("OutFCSErr       %08d   \n", tpm_swport_pm_3.OutFCSErr);
+    printk("InUnicasts      %08d    ", tpm_swport_pm_3.InUnicasts);
+    printk("Deferred        %08d   \n", tpm_swport_pm_3.Deferred);
+    printk("InBroadcasts    %08d    ", tpm_swport_pm_3.InBroadcasts);
+    printk("InMulticasts    %08d   \n", tpm_swport_pm_3.InMulticasts);
+    printk("64Octets        %08d    ", tpm_swport_pm_3.Octets64);
+    printk("127Octets       %08d   \n", tpm_swport_pm_3.Octets127);
+    printk("255Octets       %08d    ", tpm_swport_pm_3.Octets255);
+    printk("511Octets       %08d   \n", tpm_swport_pm_3.Octets511);
+    printk("1023Octets      %08d    ", tpm_swport_pm_3.Octets1023);
+    printk("MaxOctets       %08d   \n", tpm_swport_pm_3.OctetsMax);
+    printk("OutOctetsLo     %08d    ", tpm_swport_pm_3.OutOctetsLo);
+    printk("OutOctetsHi     %08d   \n", tpm_swport_pm_3.OutOctetsHi);
+    printk("OutUnicasts     %08d    ", tpm_swport_pm_3.OutUnicasts);
+    printk("Excessive       %08d   \n", tpm_swport_pm_3.Excessive);
+    printk("OutMulticasts   %08d    ", tpm_swport_pm_3.OutMulticasts);
+    printk("OutBroadcasts   %08d   \n", tpm_swport_pm_3.OutBroadcasts);
+    printk("Single          %08d    ", tpm_swport_pm_3.Single);
+    printk("OutPause        %08d   \n", tpm_swport_pm_3.OutPause);
+    printk("InPause         %08d    ", tpm_swport_pm_3.InPause);
+    printk("Multiple        %08d   \n", tpm_swport_pm_3.Multiple);
+    printk("Undersize       %08d    ", tpm_swport_pm_3.Undersize);
+    printk("Fragments       %08d   \n", tpm_swport_pm_3.Fragments);
+    printk("Oversize        %08d    ", tpm_swport_pm_3.Oversize);
+    printk("Jabber          %08d   \n", tpm_swport_pm_3.Jabber);
+    printk("InMACRcvErr     %08d    ", tpm_swport_pm_3.InMACRcvErr);
+    printk("InFCSErr        %08d   \n", tpm_swport_pm_3.InFCSErr);
+    printk("Collisions      %08d    ", tpm_swport_pm_3.Collisions);
+    printk("Late            %08d   \n", tpm_swport_pm_3.Late);
+
+    /* Flush all counters */
+    mvNetaMibCountersClear(port, pPortCtrl->txpNum);
 
     return retVal;
 }
@@ -6052,8 +7384,11 @@ tpm_error_code_t tpm_sw_pm_1_read
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_STATS_COUNTER_SET3 statsCounterSet;
-
-    SWITCH_INIT_CHECK();
+    uint32_t         switch_init;
+    tpm_gmacs_enum_t gmac_port;
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
+    tpm_swport_pm_3_all_t tpm_swport_pm_3;
 
     if (trace_sw_dbg_flag)
     {
@@ -6062,34 +7397,65 @@ tpm_error_code_t tpm_sw_pm_1_read
                __FUNCTION__,owner_id, src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
+    /* Check swicth init or not */
+    if (tpm_db_switch_init_get(&switch_init) != TPM_DB_OK) {
+        printk(KERN_ERR "ERROR: (%s:%d) tpm_db_switch_init_get failed\n", __FUNCTION__, __LINE__);
+        return ERR_GENERAL;
     }
 
-    retVal = mv_switch_get_port_counters(lPort, &statsCounterSet);
-    if (retVal != TPM_RC_OK)
-    {
-        printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
-    }
+    if (switch_init) {
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    tpm_swport_pm_1->fcsErrors                       = statsCounterSet.InFCSErr;
-    tpm_swport_pm_1->excessiveCollisionCounter       = statsCounterSet.Excessive;
-    tpm_swport_pm_1->lateCollisionCounter            = statsCounterSet.Late;
-    tpm_swport_pm_1->frameTooLongs                   = statsCounterSet.Oversize;
-    tpm_swport_pm_1->bufferOverflowsOnReceive        = 0;
-    tpm_swport_pm_1->bufferOverflowsOnTransmit       = 0;
-    tpm_swport_pm_1->singleCollisionFrameCounter     = statsCounterSet.Single;
-    tpm_swport_pm_1->multipleCollisionsFrameCounter  = statsCounterSet.Multiple;
-    tpm_swport_pm_1->sqeCounter                      = 0;
-    tpm_swport_pm_1->deferredTransmissionCounter     = statsCounterSet.Deferred;
-    tpm_swport_pm_1->internalMacTransmitErrorCounter = 0;
-    tpm_swport_pm_1->carrierSenseErrorCounter        = 0;
-    tpm_swport_pm_1->alignmentErrorCounter           = 0;
-    tpm_swport_pm_1->internalMacReceiveErrorCounter  = statsCounterSet.InMACRcvErr;
+        retVal = mv_switch_get_port_counters(lPort, &statsCounterSet);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
+
+        tpm_swport_pm_1->fcsErrors                       = statsCounterSet.InFCSErr;
+        tpm_swport_pm_1->excessiveCollisionCounter       = statsCounterSet.Excessive;
+        tpm_swport_pm_1->lateCollisionCounter            = statsCounterSet.Late;
+        tpm_swport_pm_1->frameTooLongs                   = statsCounterSet.Oversize;
+        tpm_swport_pm_1->bufferOverflowsOnReceive        = 0;
+        tpm_swport_pm_1->bufferOverflowsOnTransmit       = 0;
+        tpm_swport_pm_1->singleCollisionFrameCounter     = statsCounterSet.Single;
+        tpm_swport_pm_1->multipleCollisionsFrameCounter  = statsCounterSet.Multiple;
+        tpm_swport_pm_1->sqeCounter                      = 0;
+        tpm_swport_pm_1->deferredTransmissionCounter     = statsCounterSet.Deferred;
+        tpm_swport_pm_1->internalMacTransmitErrorCounter = 0;
+        tpm_swport_pm_1->carrierSenseErrorCounter        = 0;
+        tpm_swport_pm_1->alignmentErrorCounter           = 0;
+        tpm_swport_pm_1->internalMacReceiveErrorCounter  = statsCounterSet.InMACRcvErr;
+    } else {
+        /* check PHY access way */
+        retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+        if (retVal != TPM_RC_OK) {
+            printk(KERN_ERR
+                   "Port%d PHY access way check failed\n", src_port);
+            return retVal;
+        }
+        for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
+            if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
+                break;
+        }
+        if (gmac_port == TPM_MAX_NUM_GMACS) {
+            printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
+            return ERR_GENERAL;
+        }
+
+        /* Read counter from GMAC */
+        retVal = tpm_sw_pm_from_gmac((int)gmac_port, tpm_swport_pm_1, &tpm_swport_pm_3);
+        if (retVal != TPM_RC_OK) {
+            printk(KERN_ERR "ERROR: (%s:%d) tpm_sw_pm_3_from_gmac failed\n", __FUNCTION__, __LINE__);
+            return ERR_GENERAL;
+        }
+    }
 
     if (trace_sw_dbg_flag)
     {
@@ -6107,7 +7473,7 @@ tpm_error_code_t tpm_sw_pm_1_read
 * INPUTS:
 *       owner_id        - APP owner id  should be used for all API calls.
 *       src_port        - Source port in UNI port index, UNI0, UNI1...UNI4.
-*       tpm_swport_pm_3 - Holds PM data
+*       tpm_swport_pm_3_all_t - Holds PM data
 *
 * OUTPUTS:
 *       PM data is supplied structure.
@@ -6120,14 +7486,18 @@ tpm_error_code_t tpm_sw_pm_3_read
 (
     uint32_t            owner_id,
     tpm_src_port_type_t src_port,
-    tpm_swport_pm_3_t  *tpm_swport_pm_3
+    tpm_swport_pm_3_all_t *tpm_swport_pm_3
 )
 {
     tpm_error_code_t retVal = TPM_RC_OK;
     int32_t          lPort  = 0;
     GT_STATS_COUNTER_SET3 statsCounterSet;
-
-    SWITCH_INIT_CHECK();
+    GT_PORT_STAT2         ctr;
+    uint32_t         switch_init;
+    tpm_gmacs_enum_t gmac_port;
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
+    tpm_swport_pm_1_t   tpm_swport_pm_1;
 
     if (trace_sw_dbg_flag)
     {
@@ -6136,34 +7506,95 @@ tpm_error_code_t tpm_sw_pm_3_read
                __FUNCTION__,owner_id, src_port);
     }
 
-    lPort = tpm_db_eth_port_switch_port_get(src_port);
-    if (lPort == TPM_DB_ERR_PORT_NUM)
-    {
-        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
-        return ERR_SRC_PORT_INVALID;
+    /* Initialize statsCounterSet and ctr as zero */
+    memset(&statsCounterSet, 0, sizeof(GT_STATS_COUNTER_SET3));
+    memset(&ctr, 0, sizeof(GT_PORT_STAT2));
+
+    /* Check swicth init or not */
+    if (tpm_db_switch_init_get(&switch_init) != TPM_DB_OK) {
+        printk(KERN_ERR "ERROR: (%s:%d) tpm_db_switch_init_get failed\n", __FUNCTION__, __LINE__);
+        return ERR_GENERAL;
     }
 
-    retVal = mv_switch_get_port_counters(lPort, &statsCounterSet);
-    if (retVal != TPM_RC_OK)
-    {
-        printk(KERN_ERR
-               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
-    }
+    if (switch_init) {
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
 
-    tpm_swport_pm_3->dropEvents              = 0;
-    tpm_swport_pm_3->octets                  = statsCounterSet.InGoodOctetsLo;
-    tpm_swport_pm_3->packets                 = statsCounterSet.InUnicasts;
-    tpm_swport_pm_3->broadcastPackets        = statsCounterSet.InBroadcasts;
-    tpm_swport_pm_3->multicastPackets        = statsCounterSet.InMulticasts;
-    tpm_swport_pm_3->undersizePackets        = 0;
-    tpm_swport_pm_3->fragments               = statsCounterSet.Fragments;
-    tpm_swport_pm_3->jabbers                 = statsCounterSet.Jabber;
-    tpm_swport_pm_3->packets_64Octets        = statsCounterSet.Octets64;
-    tpm_swport_pm_3->packets_65_127Octets    = statsCounterSet.Octets127;
-    tpm_swport_pm_3->packets_128_255Octets   = statsCounterSet.Octets255;
-    tpm_swport_pm_3->packets_256_511Octets   = statsCounterSet.Octets511;
-    tpm_swport_pm_3->packets_512_1023Octets  = statsCounterSet.Octets1023;
-    tpm_swport_pm_3->packets_1024_1518Octets = statsCounterSet.OctetsMax;
+        retVal = mv_switch_get_port_counters(lPort, &statsCounterSet);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function mv_switch_get_port_counters failed\r\n", __FUNCTION__,__LINE__);
+        }
+
+        retVal = mv_switch_get_port_drop_counters(lPort, &ctr);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function mv_switch_get_port_drop_counters failed\r\n", __FUNCTION__,__LINE__);
+        }
+
+        tpm_swport_pm_3->dropEvents	  = (ctr.inDiscardHi<<16) + ctr.inDiscardLo;
+        tpm_swport_pm_3->InGoodOctetsLo   = statsCounterSet.InGoodOctetsLo;
+        tpm_swport_pm_3->InGoodOctetsHi   = statsCounterSet.InGoodOctetsHi;
+        tpm_swport_pm_3->InBadOctets	  = statsCounterSet.InBadOctets;
+        tpm_swport_pm_3->OutFCSErr	  = statsCounterSet.OutFCSErr;
+        tpm_swport_pm_3->InUnicasts	  = statsCounterSet.InUnicasts;
+        tpm_swport_pm_3->Deferred	  = statsCounterSet.Deferred;
+        tpm_swport_pm_3->InBroadcasts	  = statsCounterSet.InBroadcasts;
+        tpm_swport_pm_3->InMulticasts	  = statsCounterSet.InMulticasts;
+        tpm_swport_pm_3->Octets64	  = statsCounterSet.Octets64;
+        tpm_swport_pm_3->Octets127	  = statsCounterSet.Octets127;
+        tpm_swport_pm_3->Octets255	  = statsCounterSet.Octets255;
+        tpm_swport_pm_3->Octets511	  = statsCounterSet.Octets511;
+        tpm_swport_pm_3->Octets1023	  = statsCounterSet.Octets1023;
+        tpm_swport_pm_3->OctetsMax	  = statsCounterSet.OctetsMax;
+        tpm_swport_pm_3->OutOctetsLo	  = statsCounterSet.OutOctetsLo;
+        tpm_swport_pm_3->OutOctetsHi	  = statsCounterSet.OutOctetsHi;
+        tpm_swport_pm_3->OutUnicasts	  = statsCounterSet.OutUnicasts;
+        tpm_swport_pm_3->Excessive	  = statsCounterSet.Excessive;
+        tpm_swport_pm_3->OutMulticasts	  = statsCounterSet.OutMulticasts;
+        tpm_swport_pm_3->OutBroadcasts	  = statsCounterSet.OutBroadcasts;
+        tpm_swport_pm_3->Single 	  = statsCounterSet.Single;
+        tpm_swport_pm_3->OutPause	  = statsCounterSet.OutPause;
+        tpm_swport_pm_3->InPause	  = statsCounterSet.InPause;
+        tpm_swport_pm_3->Multiple	  = statsCounterSet.Multiple;
+        tpm_swport_pm_3->Undersize	  = statsCounterSet.Undersize;
+        tpm_swport_pm_3->Fragments	  = statsCounterSet.Fragments;
+        tpm_swport_pm_3->Oversize	  = statsCounterSet.Oversize;
+        tpm_swport_pm_3->Jabber 	  = statsCounterSet.Jabber;
+        tpm_swport_pm_3->InMACRcvErr	  = statsCounterSet.InMACRcvErr;
+        tpm_swport_pm_3->InFCSErr	  = statsCounterSet.InFCSErr;
+        tpm_swport_pm_3->Collisions	  = statsCounterSet.Collisions;
+        tpm_swport_pm_3->Late		  = statsCounterSet.Late;
+    } else {
+        /* check PHY access way */
+        retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+        if (retVal != TPM_RC_OK) {
+            printk(KERN_ERR
+                   "Port%d PHY access way check failed\n", src_port);
+            return retVal;
+        }
+        for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
+            if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
+                break;
+        }
+        if (gmac_port == TPM_MAX_NUM_GMACS) {
+            printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
+            return ERR_GENERAL;
+        }
+
+        /* Read counter from GMAC */
+        retVal = tpm_sw_pm_from_gmac((int)gmac_port, &tpm_swport_pm_1, tpm_swport_pm_3);
+        if (retVal != TPM_RC_OK) {
+            printk(KERN_ERR "ERROR: (%s:%d) tpm_sw_pm_3_from_gmac failed\n", __FUNCTION__, __LINE__);
+            return ERR_GENERAL;
+        }
+    }
 
     if (trace_sw_dbg_flag)
     {
@@ -6265,9 +7696,7 @@ tpm_error_code_t tpm_sw_get_fdb
      uint16_t db_num
 )
 {
-    tpm_error_code_t retVal;
-
-    SWITCH_INIT_CHECK();
+    tpm_error_code_t retVal = TPM_RC_OK;
 
     if (trace_sw_dbg_flag)
     {
@@ -6276,7 +7705,19 @@ tpm_error_code_t tpm_sw_get_fdb
                 __FUNCTION__,owner_id,db_num);
     }
 
-    retVal =  mv_switch_print_fdb(db_num);
+    if (tpm_sw_init_check()) {
+        /* Check GMAC1 lpk status, if no lpk, no way to add static MAC */
+#ifdef CONFIG_MV_MAC_LEARN
+        if (tpm_db_gmac1_lpbk_en_get())
+            mac_learn_db_valid_print();
+        else {
+            printk(KERN_ERR "ERROR: (%s:%d) MAC learn not supported\n", __FUNCTION__, __LINE__);
+            return ERR_GENERAL;
+        }
+#endif
+    } else {
+        retVal =  mv_switch_print_fdb(db_num);
+    }
     if ((retVal != TPM_RC_OK) && (retVal != GT_NO_SUCH))
     {
         printk(KERN_INFO
@@ -6371,6 +7812,176 @@ tpm_error_code_t tpm_sw_flush_atu(uint32_t owner_id, tpm_flush_atu_type_t flush_
     {
         printk(KERN_ERR
               "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+    }
+
+    return retVal;
+}
+
+/*******************************************************************************
+* tpm_phy_set_port_speed_duplex_mode
+*
+* DESCRIPTION:
+*       This routine will disable auto-negotiation and set the PHY port speed and duplex mode.
+*
+* INPUTS:
+*       owner_id    - APP owner id  should be used for all API calls.
+*       src_port    - Source port in UNI port index, UNI0, UNI1...UNI4.
+*       speed       -    PHY_SPEED_10_MBPS   - 10Mbps
+*                        PHY_SPEED_100_MBPS  - 100Mbps
+*                        PHY_SPEED_1000_MBPS - 1000Mbps.
+*       enable      - Enable/Disable full dulpex mode
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success - TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_phy_set_port_speed_duplex_mode
+(
+    uint32_t            owner_id,
+    tpm_src_port_type_t src_port,
+    tpm_phy_speed_t     speed,
+    bool                enable
+)
+{
+    tpm_error_code_t retVal = TPM_RC_OK;
+    int32_t          lPort  = 0;
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t         phy_direct_addr;
+    GT_BOOL          state;
+
+    if (trace_sw_dbg_flag)
+    {
+       printk(KERN_INFO
+               "==ENTER==%s: owner_id[%d],src_port[%d],speed[%d]\n\r",
+               __FUNCTION__,owner_id,src_port, (uint32_t)speed);
+    }
+
+    if(enable == true)
+    {
+        state = GT_TRUE;
+    }
+    else
+    {
+        state = GT_FALSE;
+    }
+
+    /* check PHY access way */
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
+        printk(KERN_ERR
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* PHY accessed directly, call lsp API */
+    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+        if (mvEthPhySpeedDuplexModeSet(phy_direct_addr, speed, state)) {
+            printk(KERN_ERR
+                   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+            retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        }
+    } else {
+        /* PHY accessed through switch, as original do */
+        lPort = tpm_db_eth_port_switch_port_get(src_port);
+        if (lPort == TPM_DB_ERR_PORT_NUM)
+        {
+            printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+            return ERR_SRC_PORT_INVALID;
+        }
+
+        retVal = mv_switch_set_port_speed_duplex_mode(lPort, (GT_PHY_SPEED)speed, state);
+        if (retVal != TPM_RC_OK)
+        {
+            printk(KERN_ERR
+                   "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+        }
+    }
+
+    if (trace_sw_dbg_flag)
+    {
+        printk(KERN_INFO
+                "==EXIT== %s:\n\r",__FUNCTION__);
+    }
+
+    return retVal;
+}
+
+/*******************************************************************************
+* tpm_sw_port_add_vid_set_egrs_mode
+*
+* DESCRIPTION:
+*       The API adds a VID to the list of the allowed VIDs per UNI port,
+*       and sets the egress mode for the port.
+*
+* INPUTS:
+*       owner_id   - APP owner id should be used for all API calls.
+*       src_port   - Source port in UNI port index, UNI0, UNI1...UNI4.
+*       vid        - vlan id
+*       eMode      - egress mode
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success - TPM_RC_OK.
+*       On error different types are returned according to the case see tpm_error_code_t.
+*
+* COMMENTS:
+*       MEMBER_EGRESS_UNMODIFIED - 0
+*       NOT_A_MEMBER             - 1
+*       MEMBER_EGRESS_UNTAGGED   - 2
+*       MEMBER_EGRESS_TAGGED     - 3
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_port_add_vid_set_egrs_mode
+(
+    uint32_t            owner_id,
+    tpm_src_port_type_t src_port,
+    uint16_t            vid,
+    uint8_t             eMode
+)
+{
+    tpm_error_code_t retVal = TPM_RC_OK;
+    int32_t lPort = 0;
+
+    SWITCH_INIT_CHECK();
+
+    if (trace_sw_dbg_flag)
+    {
+        printk(KERN_INFO
+               "==ENTER==%s: owner_id[%d],src_port[%d],vid[%d],egress mode[%d]\n",
+               __FUNCTION__,owner_id,src_port,vid,eMode);
+    }
+
+    if (vid >= TPM_MAX_VID)
+    {
+        printk(KERN_INFO
+           "%s:%d:==ERROR== invalid VID[%d]\r\n", __FUNCTION__,__LINE__,vid);
+        return ERR_SW_VID_INVALID;
+    }
+
+    lPort = tpm_db_eth_port_switch_port_get(src_port);
+    if (lPort == TPM_DB_ERR_PORT_NUM)
+    {
+        printk(KERN_ERR "ERROR: (%s:%d) source port(%d) is invalid\n", __FUNCTION__, __LINE__, src_port);
+        return ERR_SRC_PORT_INVALID;
+    }
+
+    retVal = mv_switch_port_add_vid_set_egrs_mode(lPort, vid, TPM_GMAC0_AMBER_PORT_NUM, eMode);
+    if (retVal != TPM_RC_OK)
+    {
+        printk(KERN_ERR
+           "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
+    }
+
+    if (trace_sw_dbg_flag)
+    {
+        printk(KERN_INFO
+            "==EXIT== %s:\n\r",__FUNCTION__);
     }
 
     return retVal;

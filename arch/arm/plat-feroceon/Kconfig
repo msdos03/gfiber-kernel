@@ -449,10 +449,28 @@ config MV_PRINTK_CHUNK_SIZE
         ---help---
         Select printk buffer chunk granularity.
 
+choice
+	prompt "DRAM Access Configuration for 88F6601 SoC"
+	default MV_DRAM_DEFAULT_ACCESS_CFG
+
+config MV_DRAM_DEFAULT_ACCESS_CFG
+	bool "Default DRAM access configuration(by bootloader)"
+	---help---
+	Choosing this option keeps bootloader DRAM access configuration. 
+
+config MV_DRAM_FASTPATH_ACCESS_CFG
+	bool "DRAM fast-path access configuration"
+	---help---
+	Choosing this option will enable DRAM fast-path access configuration.
+
+config MV_DRAM_XBAR_ACCESS_CFG
+	bool "DRAM XBAR access configuration"
+	---help---
+	Choosing this option will enable DRAM XBAR access configuration.
+
+endchoice
 
 endmenu
 
 
 endif
-
-

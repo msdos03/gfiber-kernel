@@ -97,7 +97,7 @@ int mv_mac_learn_netdev_init(void)
 
 	/* Register mac learn parse function */
 	for (port_i=0;port_i< mv_eth_ports_num;port_i++) {
-		if (port_i == 0)
+		if (port_i == 0 || port_i == 1)
 			mv_eth_rx_mac_learn_func(port_i, mv_mac_learn_eth_rx_func);
 		else
 			mv_eth_rx_mac_learn_func(port_i, NULL);

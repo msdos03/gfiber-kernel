@@ -200,9 +200,18 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /*AC coupling burst mode*/
 #define GPON_TX_AC_COUPL_BUST_MODE_0        (0)
 #define GPON_TX_AC_COUPL_BUST_MODE_1        (1)
-#define GPON_TX_AC_COUPL_PREACT_BURST_TIME  (0x0)
-#define GPON_TX_AC_COUPL_DATA_PATTERN_1     (0x0)
+#define GPON_TX_AC_COUPL_PREACT_BURST_TIME  (0x30)
+#define GPON_TX_AC_COUPL_DATA_PATTERN_1     (0x66)
 #define GPON_TX_AC_COUPL_DATA_PATTERN_2     (0x0)
+
+/*UTM Active TX Bitmap*/
+#define GPON_UTM_ACTIVE_TX_BITMAP           (0xFFFF)
+#define GPON_UTM_ACTIVE_TX_BITMAP_VALID     (1)
+
+/*GSE Transmit threshold*/
+#define GPON_GST_TX_DATA_SHIFT              (12)
+#define GPON_GST_TX_DATA_THRESHOLD          (0x30)
+#define GPON_GST_TX_IDLE_THRESHOLD          (0x10)
 
 /* Typedefs
 ------------------------------------------------------------------------------*/
@@ -272,6 +281,7 @@ MV_STATUS mvOnuGponMacDgMessageSend(MV_U8 onuId);
 MV_STATUS mvOnuGponMacRxConfigSet(MV_BOOL enable);
 MV_STATUS mvOnuGponMacRxConfigBitOrderSet(MV_U32 value);
 MV_STATUS mvOnuGponMacRxPsaConfigSet(MV_U32 syncFsmM1, MV_U32 syncFsmM2, MV_U32 syncFsmM3, MV_U32 fecHyst);
+MV_STATUS mvOnuGponMacRxFecHysteresisSet(MV_U32 fecHyst);
 MV_STATUS mvOnuGponMacRxFecConfigSet(MV_BOOL swIndication, MV_BOOL forceSw, MV_BOOL ignoreParity);
 MV_STATUS mvOnuGponMacRxFecStatusGet(MV_U32 *fecStatus);
 MV_STATUS mvOnuGponMacRxPloamDataGet(MV_U32  *ploamData);
@@ -333,6 +343,9 @@ MV_STATUS mvOnuGponMacUtmOmciPortIdGet(MV_U32 *portId, MV_U32 *valid);
 MV_STATUS mvOnuGponMacUtmTcPeriodSet(MV_U32 period );
 MV_STATUS mvOnuGponMacUtmTcValidSet(MV_U32 valid);
 MV_STATUS mvOnuGponMacUtmTcConfigGet(MV_U32 *period, MV_U32 *valid);
+MV_STATUS mvOnuGponMacUtmActiveTxBitmapSet(MV_U32 bitmap);
+MV_STATUS mvOnuGponMacUtmActiveTxBitmapValidSet(MV_U32 valid);
+MV_STATUS mvOnuGponMacUtmActiveTxBitmapConfigGet(MV_U32 *bitmap, MV_U32 *valid);
 /* ========================================================================== */
 /*                        Interrupt Functions Section                         */
 /* ========================================================================== */
@@ -480,6 +493,21 @@ void      mvOnuGponMacFifoSupportSet(MV_32 value);
 #define EPON_DDM_TX_XVR_POL_DEFAULT          (0)
 #define EPON_DDM_TX_BURST_ENA_DEFAULT        (0)
 
+/* PCS RX */
+#define EPON_PCS_CONFIG_RX_ENABLE            (1)
+#define EPON_PCS_CONFIG_RX_DISABLE           (0)
+
+/* EPON 2K packet supported */
+#define EPON_MAC_RXP_DATA_FIFO_THRESHOLD_2K_SUPP      (0x800)
+#define EPON_MAC_PCS_FRAME_SIZE_LIMIT_SIZE_2K_SUPP    (0x800)
+#define EPON_MAC_PCS_FRAME_SIZE_LIMIT_LATENCY_2K_SUPP (0x1324)
+
+/* Default value of these registers */
+#define EPON_MAC_RXP_DATA_FIFO_THRESHOLD_DEF      (0x780)
+#define EPON_MAC_PCS_FRAME_SIZE_LIMIT_SIZE_DEF    (0x640)
+#define EPON_MAC_PCS_FRAME_SIZE_LIMIT_LATENCY_DEF (0xED8)
+
+
 /* Global functions
 ------------------------------------------------------------------------------*/
 
@@ -494,6 +522,8 @@ MV_STATUS mvOnuEponMacPonInterruptMaskSet(MV_U32 mask);
 /*                        General Functions Section                           */
 /* ========================================================================== */
 MV_STATUS mvOnuEponMacVersionGet(MV_U32 *version);
+MV_STATUS mvOnuEponMacPcsRxEnableSet(MV_U32 rxEnable);
+MV_STATUS mvOnuEponMacPcsTxEnableSet(MV_U32 txEnable);
 MV_STATUS mvOnuEponMacOnuEnableSet(MV_U32 rxEnable, MV_U32 txEnable);
 MV_STATUS mvOnuEponMacOnuRxEnableSet(MV_U32 rxEnable);
 MV_STATUS mvOnuEponMacOnuTxEnableSet(MV_U32 txEnable, MV_U32 macId);

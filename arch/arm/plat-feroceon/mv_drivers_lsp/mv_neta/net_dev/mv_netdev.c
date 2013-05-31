@@ -638,9 +638,15 @@ int mv_eth_ctrl_txq_size_set(int port, int txp, int txq, int value)
 	}
 	txq_ctrl = &pp->txq_ctrl[txp * CONFIG_MV_ETH_TXQ + txq];
 	if ((txq_ctrl->q) && (txq_ctrl->txq_size != value)) {
+		/* Reset of port/txp is required to change TXQ ring size */
+		if ((mvNetaTxqNextIndexGet(pp->port, txq_ctrl->txp, txq_ctrl->txq) != 0) ||
+			(mvNetaTxqPendDescNumGet(pp->port, txq_ctrl->txp, txq_ctrl->txq) != 0) ||
+			(mvNetaTxqSentDescNumGet(pp->port, txq_ctrl->txp, txq_ctrl->txq) != 0)) {
+			printk(KERN_ERR "%s: port=%d, txp=%d, txq=%d must be in its initial state\n",
+				__func__, port, txq_ctrl->txp, txq_ctrl->txq);
+			return -EINVAL;
+		}
 		mv_eth_txq_delete(pp, txq_ctrl);
-		/* Reset of port/txp is required when TXQ ring size is changed */
-		/* Reset done before as part of stop_internals function */
 	}
 	txq_ctrl->txq_size = value;
 
@@ -653,6 +659,12 @@ int mv_eth_ctrl_txq_mode_get(int port, int txp, int txq, int *value)
 	int mode = MV_ETH_TXQ_FREE, val = 0;
 	struct tx_queue *txq_ctrl;
 	struct eth_port *pp = mv_eth_port_by_id(port);
+
+	if (pp == NULL)
+		return -ENODEV;
+
+	if (pp == NULL)
+		return -ENODEV;
 
 	txq_ctrl = &pp->txq_ctrl[txp * CONFIG_MV_ETH_TXQ + txq];
 	if (txq_ctrl->cpu_owner) {
@@ -817,11 +829,12 @@ void mv_eth_rx_special_proc_func(int port, void (*func)(int port, int rxq, struc
 							struct sk_buff *skb, struct neta_rx_desc *rx_desc))
 {
 	struct eth_port *pp = mv_eth_port_by_id(port);
-	
+
 	if (pp)
 		pp->rx_special_proc = func;
 }
 #endif /* CONFIG_MV_ETH_RX_SPECIAL */
+
 #ifdef CONFIG_MV_MAC_LEARN
 /* Register mac learn parse function */
 void mv_eth_rx_mac_learn_func(int port, void (*func)(int port, int rxq, struct net_device *dev,
@@ -834,8 +847,7 @@ void mv_eth_rx_mac_learn_func(int port, void (*func)(int port, int rxq, struct n
 }
 #endif /* CONFIG_MV_MAC_LEARN */
 
-static inline u16 mv_eth_select_txq(struct net_device *dev,
-									struct sk_buff *skb)
+static inline u16 mv_eth_select_txq(struct net_device *dev, struct sk_buff *skb)
 {
 	struct eth_port *pp = MV_ETH_PRIV(dev);
 	return mv_eth_tx_policy(pp, skb);
@@ -1232,6 +1244,121 @@ static struct sk_buff *mv_eth_skb_alloc(struct bm_pool *pool, struct eth_pbuf *p
 	return skb;
 }
 
+static inline void mv_eth_txq_buf_free(struct eth_port *pp, u32 shadow)
+{
+	if (!shadow)
+		return;
+
+	if (shadow & MV_ETH_SHADOW_SKB) {
+		shadow &= ~MV_ETH_SHADOW_SKB;
+		dev_kfree_skb_any((struct sk_buff *)shadow);
+		STAT_DBG(pp->stats.tx_skb_free++);
+	} else {
+		if (shadow & MV_ETH_SHADOW_EXT) {
+			shadow &= ~MV_ETH_SHADOW_EXT;
+			mv_eth_extra_pool_put(pp, (void *)shadow);
+		} else {
+			/* packet from NFP without BM */
+			struct eth_pbuf *pkt = (struct eth_pbuf *)shadow;
+			struct bm_pool *pool = &mv_eth_pool[pkt->pool];
+
+			if (mv_eth_pool_bm(pool)) {
+				/* Refill BM pool */
+				STAT_DBG(pool->stats.bm_put++);
+				mvBmPoolPut(pkt->pool, (MV_ULONG) pkt->physAddr);
+			} else {
+				mv_eth_pool_put(pool, pkt);
+			}
+		}
+	}
+}
+
+static inline void mv_eth_txq_cpu_clean(struct eth_port *pp, struct tx_queue *txq_ctrl)
+{
+	int hw_txq_i, last_txq_i, i, count;
+	u32 shadow;
+
+	hw_txq_i = mvNetaTxqNextIndexGet(pp->port, txq_ctrl->txp, txq_ctrl->txq);
+	last_txq_i = txq_ctrl->shadow_txq_put_i;
+
+	i = hw_txq_i;
+	count = 0;
+	while (i != last_txq_i) {
+		shadow = txq_ctrl->shadow_txq[i];
+		mv_eth_txq_buf_free(pp, shadow);
+		txq_ctrl->shadow_txq[i] = (u32)NULL;
+
+		i = MV_NETA_QUEUE_NEXT_DESC(&txq_ctrl->q->queueCtrl, i);
+		count++;
+	}
+	printk(KERN_INFO "\n%s: port=%d, txp=%d, txq=%d, mode=CPU\n",
+			__func__, pp->port, txq_ctrl->txp, txq_ctrl->txq);
+	printk(KERN_INFO "Free %d buffers: from desc=%d to desc=%d, tx_count=%d\n",
+			count, hw_txq_i, last_txq_i, txq_ctrl->txq_count);
+}
+
+static inline void mv_eth_txq_hwf_clean(struct eth_port *pp, struct tx_queue *txq_ctrl, int rx_port)
+{
+	int pool, hw_txq_i, last_txq_i, i, count;
+	struct neta_tx_desc *tx_desc;
+
+	hw_txq_i = mvNetaTxqNextIndexGet(pp->port, txq_ctrl->txp, txq_ctrl->txq);
+
+	if (mvNetaHwfTxqNextIndexGet(rx_port, pp->port, txq_ctrl->txp, txq_ctrl->txq, &last_txq_i) != MV_OK) {
+		printk(KERN_ERR "%s: mvNetaHwfTxqNextIndexGet failed\n", __func__);
+		return;
+	}
+
+	i = hw_txq_i;
+	count = 0;
+	while (i != last_txq_i) {
+		tx_desc = (struct neta_tx_desc *)MV_NETA_QUEUE_DESC_PTR(&txq_ctrl->q->queueCtrl, i);
+		if (mvNetaTxqDescIsValid(tx_desc)) {
+			mvNetaTxqDescInv(tx_desc);
+			mv_eth_tx_desc_flush(tx_desc);
+
+			pool = (tx_desc->command & NETA_TX_BM_POOL_ID_ALL_MASK) >> NETA_TX_BM_POOL_ID_OFFS;
+			mvBmPoolPut(pool, (MV_ULONG)tx_desc->bufPhysAddr);
+			count++;
+		}
+		i = MV_NETA_QUEUE_NEXT_DESC(&txq_ctrl->q->queueCtrl, i);
+	}
+	printk(KERN_DEBUG "\n%s: port=%d, txp=%d, txq=%d, mode=HWF-%d\n",
+			__func__, pp->port, txq_ctrl->txp, txq_ctrl->txq, rx_port);
+	printk(KERN_DEBUG "Free %d buffers to BM pool %d: from desc=%d to desc=%d\n",
+			count, pool, hw_txq_i, last_txq_i);
+}
+
+int mv_eth_txq_clean(int port, int txp, int txq)
+{
+	int mode, rx_port;
+	struct eth_port *pp;
+	struct tx_queue *txq_ctrl;
+
+	if (mvNetaTxpCheck(port, txp))
+		return -EINVAL;
+
+	if (mvNetaMaxCheck(txq, CONFIG_MV_ETH_TXQ))
+		return -EINVAL;
+
+	pp = mv_eth_port_by_id(port);
+	if ((pp == NULL) || (pp->txq_ctrl == NULL))
+		return -ENODEV;
+
+	txq_ctrl = &pp->txq_ctrl[txp * CONFIG_MV_ETH_TXQ + txq];
+
+	mode = mv_eth_ctrl_txq_mode_get(pp->port, txq_ctrl->txp, txq_ctrl->txq, &rx_port);
+	if (mode == MV_ETH_TXQ_CPU)
+		mv_eth_txq_cpu_clean(pp, txq_ctrl);
+	else if (mode == MV_ETH_TXQ_HWF)
+		mv_eth_txq_hwf_clean(pp, txq_ctrl, rx_port);
+//	else
+// 	printk(KERN_ERR "%s: port=%d, txp=%d, txq=%d is not in use\n",
+// 		__func__, pp->port, txp, txq);
+
+	return 0;
+}
+
 static inline void mv_eth_txq_bufs_free(struct eth_port *pp, struct tx_queue *txq_ctrl, int num)
 {
 	u32 shadow;
@@ -1241,32 +1368,7 @@ static inline void mv_eth_txq_bufs_free(struct eth_port *pp, struct tx_queue *tx
 	for (i = 0; i < num; i++) {
 		shadow = txq_ctrl->shadow_txq[txq_ctrl->shadow_txq_get_i];
 		mv_eth_shadow_inc_get(txq_ctrl);
-
-		if (!shadow)
-			continue;
-
-		if (shadow & MV_ETH_SHADOW_SKB) {
-			shadow &= ~MV_ETH_SHADOW_SKB;
-			dev_kfree_skb_any((struct sk_buff *)shadow);
-			STAT_DBG(pp->stats.tx_skb_free++);
-		} else {
-			if (shadow & MV_ETH_SHADOW_EXT) {
-				shadow &= ~MV_ETH_SHADOW_EXT;
-				mv_eth_extra_pool_put(pp, (void *)shadow);
-			} else {
-				/* packet from NFP without BM */
-				struct eth_pbuf *pkt = (struct eth_pbuf *)shadow;
-				struct bm_pool *pool = &mv_eth_pool[pkt->pool];
-
-				if (mv_eth_pool_bm(pool)) {
-					/* Refill BM pool */
-					STAT_DBG(pool->stats.bm_put++);
-					mvBmPoolPut(pkt->pool, (MV_ULONG) pkt->physAddr);
-				} else {
-					mv_eth_pool_put(pool, pkt);
-				}
-			}
-		}
+		mv_eth_txq_buf_free(pp, shadow);
 	}
 }
 
@@ -1481,6 +1583,15 @@ static inline int mv_eth_rx(struct eth_port *pp, int rx_todo, int rxq)
 		dev = pp->dev;
 #endif /* CONFIG_MV_ETH_SWITCH */
 
+#ifdef CONFIG_MV_ETH_6601_LB_WA
+		/* This workaround is for the 6601 w/ loopback.
+		   All RX traffic originating from GMAC1 is treated as if comming from GMAC0 netdev */
+		if (pp->port == 1) {
+			struct eth_port *new_pp = mv_eth_port_by_id(0);
+			dev = new_pp->dev;
+		}
+#endif
+
 		STAT_DBG(pp->stats.rxq[rxq]++);
 		dev->stats.rx_packets++;
 
@@ -1659,6 +1770,9 @@ static int mv_eth_tx(struct sk_buff *skb, struct net_device *dev)
 		tx_spec.flags = pp->flags;
 	}
 
+	if (tx_spec.txq == MV_ETH_TXQ_INVALID)
+		goto out;
+
 	txq_ctrl = &pp->txq_ctrl[tx_spec.txp * CONFIG_MV_ETH_TXQ + tx_spec.txq];
 	if (txq_ctrl == NULL) {
 		printk(KERN_ERR "%s: invalidate txp/txq (%d/%d)\n", __func__, tx_spec.txp, tx_spec.txq);
@@ -1777,7 +1891,7 @@ out:
 #ifndef CONFIG_MV_ETH_TXDONE_ISR
 	if (txq_ctrl) {
 		if (txq_ctrl->txq_count >= mv_ctrl_txdone) {
-			STAT_DIST(u32 tx_done = )mv_eth_txq_done(pp, txq_ctrl);
+			u32 tx_done = mv_eth_txq_done(pp, txq_ctrl);
 
 			STAT_DIST((tx_done < pp->dist_stats.tx_done_dist_size) ? pp->dist_stats.tx_done_dist[tx_done]++ : 0);
 
@@ -2111,12 +2225,8 @@ static void mv_eth_txq_done_force(struct eth_port *pp, struct tx_queue *txq_ctrl
 
 	mv_eth_txq_bufs_free(pp, txq_ctrl, tx_done);
 
+	txq_ctrl->txq_count -= tx_done;
 	STAT_DBG(txq_ctrl->stats.txq_txdone += tx_done);
-
-	/* reset txq */
-	txq_ctrl->txq_count = 0;
-	txq_ctrl->shadow_txq_put_i = 0;
-	txq_ctrl->shadow_txq_get_i = 0;
 }
 
 inline u32 mv_eth_tx_done_pon(struct eth_port *pp, int *tx_todo)
@@ -2586,6 +2696,10 @@ int mv_eth_poll(struct napi_struct *napi, int budget)
 	causeRxTx = MV_REG_READ(NETA_INTR_NEW_CAUSE_REG(pp->port)) &
 	    (MV_ETH_MISC_SUM_INTR_MASK | MV_ETH_TXDONE_INTR_MASK | MV_ETH_RX_INTR_MASK);
 
+	if ((pp->flags & MV_ETH_F_STARTED) == 0) {
+		printk(KERN_ERR "%s: port #%d is not started", __func__, pp->port);
+	}
+
 	if (causeRxTx & MV_ETH_MISC_SUM_INTR_MASK) {
 		MV_U32 causeMisc;
 
@@ -2804,7 +2918,7 @@ static int mv_eth_load_network_interfaces(MV_U32 portMask, MV_U32 cpuMask)
 			printk(KERN_ERR "\n  o Warning: GbE port %d is powered off\n\n", port);
 			continue;
 		}
-		if (!MV_PON_PORT(port) && !mvBoardIsGbEPortConnected(port)) {
+		if (!MV_PON_PORT(port) && !mvBoardIsGbEPortConnected(port) && (mvCtrlModelGet()!= MV_6601_DEV_ID)) {
 			printk(KERN_ERR "\n  o Warning: GbE port %d is not connected to PHY/RGMII/Switch, skip initialization\n\n",
 					port);
 			continue;
@@ -2842,8 +2956,8 @@ static int mv_eth_load_network_interfaces(MV_U32 portMask, MV_U32 cpuMask)
 			} else if (status == 1) {
 				/* User selected to work without Gateway driver */
 				clear_bit(MV_ETH_F_SWITCH_BIT, &(pp->flags));
-				printk(KERN_ERR "  o Working in External Switch mode\n");
 				ext_switch_port_mask = mv_switch_link_detection_init();
+				printk(KERN_ERR "  o Working in External Switch mode - switch_port_mask = 0x%x\n", ext_switch_port_mask);
 			}
 		}
 
@@ -3760,8 +3874,22 @@ int mv_eth_txp_reset(int port, int txp)
 	for (queue = 0; queue < CONFIG_MV_ETH_TXQ; queue++) {
 		struct tx_queue *txq_ctrl = &pp->txq_ctrl[txp * CONFIG_MV_ETH_TXQ + queue];
 
-		if (txq_ctrl->q)
-			mv_eth_txq_done_force(pp, txq_ctrl);
+		if (txq_ctrl->q) {
+			int mode, rx_port;
+
+			mode = mv_eth_ctrl_txq_mode_get(pp->port, txp, queue, &rx_port);
+			if (mode == MV_ETH_TXQ_CPU) {
+				/* Free all buffers in TXQ */
+				mv_eth_txq_done_force(pp, txq_ctrl);
+				/* reset txq */
+				txq_ctrl->shadow_txq_put_i = 0;
+				txq_ctrl->shadow_txq_get_i = 0;
+			} else if (mode == MV_ETH_TXQ_HWF)
+				mv_eth_txq_hwf_clean(pp, txq_ctrl, rx_port);
+			else
+				printk(KERN_ERR "%s: port=%d, txp=%d, txq=%d is not in use\n",
+					__func__, pp->port, txp, queue);
+		}
 	}
 	mvNetaTxpReset(port, txp);
 	return 0;
@@ -4057,7 +4185,7 @@ int mv_eth_start_internals(struct eth_port *pp, int mtu)
 int mv_eth_stop_internals(struct eth_port *pp)
 {
 	unsigned long rwflags;
-	int queue;
+	int txp, queue;
 
 	write_lock_irqsave(&pp->rwlock, rwflags);
 
@@ -4080,14 +4208,11 @@ int mv_eth_stop_internals(struct eth_port *pp)
 
 #ifdef CONFIG_MV_ETH_HWF
 	mvNetaHwfEnable(pp->port, 0);
-#else
-	{
-		int txp;
-		/* Reset TX port here. If HWF is supported reset must be called externally */
-		for (txp = 0; txp < pp->txp_num; txp++)
-			mv_eth_txp_reset(pp->port, txp);
-	}
-#endif /* !CONFIG_MV_ETH_HWF */
+#endif /* CONFIG_MV_ETH_HWF */
+
+	for (txp = 0; txp < pp->txp_num; txp++)
+		for (queue = 0; queue < CONFIG_MV_ETH_TXQ; queue++)
+			mv_eth_txq_clean(pp->port, txp, queue);
 
 	if (mv_eth_ctrl_is_tx_enabled(pp)) {
 		int cpu;
@@ -5357,7 +5482,7 @@ int mv_eth_set_mtu(int portNo, int mtu)
         return mv_eth_switch_change_mtu(mv_net_devs[portNo], mtu);
 	}
 	else
-#endif		
+#endif
 	{
         return mv_eth_change_mtu(mv_net_devs[portNo], mtu);
 	}

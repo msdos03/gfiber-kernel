@@ -113,7 +113,8 @@ typedef enum {
 	TPM_GMAC_FUNC_WAN,
 	TPM_GMAC_FUNC_LAN_AND_WAN,
 	TPM_GMAC_FUNC_VIRT_UNI,
-	TPM_GMAC_FUNC_LAN_UNI
+	TPM_GMAC_FUNC_LAN_UNI,
+	TPM_GMAC_FUNC_US_MAC_LEARN_DS_LAN_UNI /* For Media Convert Loopback mode */
 } tpm_db_gmac_func_t;
 
 typedef enum {
@@ -130,6 +131,11 @@ typedef enum {
 	TPM_PNC_RNG_LAST_INIT_DROP,	/* Last entry in PnC range is hardcoded to DROP */
 	TPM_PNC_RNG_LAST_INIT_TRAP	/* Last entry in PnC range is hardcoded to TRAP to CPU */
 } tpm_db_pnc_rng_last_ent_t;
+
+typedef enum {
+	TPM_GMAC1_QUEUE_DATA_TRAFFIC,
+	TPM_GMAC1_QUEUE_MAC_LEARN_TRAFFIC,
+}tpm_db_gmac1_lpk_queue_type_t;
 
 typedef tpm_init_sched_t tpm_db_sched_t;
 typedef tpm_init_port_admin_t tpm_db_port_admin_t;
@@ -155,6 +161,7 @@ typedef tpm_init_split_mod_enable_t tpm_db_split_mod_enable_t;
 typedef tpm_init_ctc_cm_enable_t    tpm_db_ctc_cm_enable_t;
 typedef tpm_init_split_mod_mode_t    tpm_db_split_mod_mode_t;
 typedef tpm_ctc_cm_ipv6_parse_win_t tpm_db_ctc_cm_ipv6_parse_win_t;
+typedef tpm_init_ds_mac_based_trunk_enable_t tpm_db_ds_mac_based_trunk_enable_t;
 
 /*************************************************************/
 /*               DEFINITIONS                                 */
@@ -452,7 +459,7 @@ typedef struct {
 	uint32_t pnc_init_debug_port;
 	uint32_t oam_loopback_channel_configured;
 	tpm_db_pon_type_t pon_type;
-	tpm_gmacs_enum_t backup_wan;
+	tpm_gmacs_enum_t active_wan;
 
 	tpm_db_mh_src_t ds_mh_set_conf;
 
@@ -475,6 +482,7 @@ typedef struct {
 
 /* Structure holds the IGMP/MLD settings */
 typedef struct {
+	uint32_t igmp_snoop_enable;
 	uint32_t frwd_mode[TPM_MAX_NUM_PORTS];
 	uint32_t cpu_queue;
 	tpm_mc_filter_mode_t filter_mode;
@@ -511,11 +519,15 @@ typedef struct {
 	uint32_t queue_weight;
 	uint32_t bucket_size;
 	uint32_t rate_limit;
+	uint32_t wrr;
 } tpm_db_gmac_txq_t;
 
 /*Structure defines the details of a Packet Processor Tx component  */
 typedef struct {
 	uint32_t valid;						/* Defines if the Tx component is used */
+	uint32_t bucket_size;
+	uint32_t rate_limit;
+	uint32_t prio;
 	tpm_db_gmac_txq_t tx_queue[TPM_MAX_NUM_TX_QUEUE];	/* Config. of each of the 8 Tx queue of this Tx component */
 } tpm_db_gmac_tx_t;
 
@@ -635,6 +647,7 @@ typedef struct {
 	uint8_t group_addr[16];
 	uint8_t src_addr[16];
 	uint8_t ignore_src_addr;
+	uint16_t dest_queue;
 	uint32_t dest_port_bm;
 	uint32_t u4_entry;
 } tpm_db_ipv6_mc_stream_entry_t;
@@ -702,6 +715,23 @@ typedef struct {
 } tpm_db_cnm_ipv4_pre_filter_t;
 
 typedef struct {
+	/* api_ent_mem_area backup used for hot swap profile feature */
+	tpm_db_api_entry_t api_ent_mem_area_bak[TPM_DB_API_ENTRIES_TBL_SIZE];
+
+	/* API section backup used for hot swap profile feature */
+	tpm_db_api_section_t api_section_bak[TPM_MAX_NUM_API_SECTIONS];
+
+	/* MC VID setting backup */
+	tpm_mc_vid_cfg_t mc_vid_port_cfg_bak[TPM_MC_VID_NUM_MAX];
+	tpm_db_gmac_tx_t gmac_tx_bak[TPM_MAX_NUM_TX_PORTS];
+
+	uint32_t igmp_proxy_sa_mac[6];
+	uint32_t igmp_proxy_sa_mac_valid;
+
+	bool     switch_init;
+}tpm_db_hot_swap_bak_db_t;
+
+typedef struct {
 	tpm_db_ctc_cm_enable_t enable;
 	tpm_db_ctc_cm_ipv6_parse_win_t ipv6_parse_win;
 	/* init value from XML */
@@ -717,10 +747,19 @@ typedef struct {
 	bool switch_init;
 	bool gmac1_loopback_en;
 	bool cpu_wan_loopback_en;
+	bool ds_load_bal_en;
+	bool switch_active_wan_en;
 	tpm_db_ety_dsa_enable_t  ety_dsa_enable;
 	tpm_init_virt_uni_t virt_uni_info;
 
 } tpm_db_func_profile_t;
+
+typedef struct {
+	tpm_limit_mode_t count_mode;
+	uint32_t cir;
+	uint32_t cbs;
+	uint32_t ebs;
+} tpm_db_gmac_lpk_uni_ingr_rate_limit_t;
 
 typedef struct {
 	/* Physical chip config */
@@ -798,7 +837,6 @@ typedef struct {
 	tpm_db_ipv6_mc_stream_entry_t  ipv6_mc_stream[TPM_MC_MAX_STREAM_NUM];
 	tpm_db_split_mod_t   split_mod_conf;
 
-	
 	/* Array indicates which API's are currently called for synch purposes.
 	   When API is not in called, invalid=-1 When API is called, it will set it's rule_num */
 	int32_t tpm_busy_apis[TPM_MAX_API_TYPES][TPM_MAX_PARALLEL_API_CALLS];
@@ -807,6 +845,15 @@ typedef struct {
 	/* func profile, based on chip type and board profile */
 	tpm_db_func_profile_t    func_profile;
 
+	/* MC MAC learning pmt mod index */
+	uint32_t mac_learn_mod_idx;
+
+	tpm_db_ds_mac_based_trunk_enable_t  ds_mac_based_trunk_enable;
+
+	/* To record GMAC UNI egress rate limit */
+	uint32_t gmac_uni_egr_rate_limit[TPM_MAX_NUM_UNI_PORTS];
+	/* To record GMAC LPK UNI ingress rate limit */
+	tpm_db_gmac_lpk_uni_ingr_rate_limit_t gmac_lpk_uni_ingr_rate_limit[TPM_MAX_NUM_UNI_PORTS];
 } tpm_db_t;
 
 typedef struct {
@@ -816,6 +863,7 @@ typedef struct {
 	uint16_t vid;
 	uint8_t group_addr[4];
 	uint8_t src_addr[4];
+	uint16_t dest_queue;
 	uint32_t dest_port_bm;
 	uint32_t u4_entry;
 } tpm_db_mc_stream_entry_t;
@@ -866,12 +914,14 @@ int32_t tpm_db_phy_convert_port_index(int32_t switch_port);
 int32_t tpm_db_trg_port_switch_port_get(tpm_trg_port_type_t ext_port);
 int32_t tpm_db_eth_port_conf_set(tpm_init_eth_port_conf_t *eth_port_conf);
 int32_t tpm_db_gmac_conn_conf_set(tpm_init_gmac_conn_conf_t *gmac_port_conf, uint32_t arr_size);
+int32_t tpm_db_gmac_conn_conf_get(tpm_gmacs_enum_t gmac, tpm_init_gmac_conn_conf_t *gmac_port_conf);
 
 /* GMAC Config */
 int32_t tpm_db_gmac_tcont_llid_set(uint32_t num_tcont_llid);
 int32_t tpm_db_gmac_conn_get(tpm_gmacs_enum_t gmac, tpm_db_gmac_conn_t *gmac_con);
 int32_t tpm_db_gmac_mh_en_conf_set(tpm_gmacs_enum_t gmac, uint32_t mh_en);
 int32_t tpm_db_gmac_mh_en_conf_get(tpm_gmacs_enum_t gmac, uint32_t *mh_en);
+int32_t tpm_db_target_to_gmac(tpm_pnc_trg_t pnc_target, tpm_gmacs_enum_t *gmac);
 int32_t tpm_db_gmac_bm_bufs_conf_set(tpm_gmacs_enum_t gmac, uint32_t large_pkt_buffers,
 					uint32_t small_pkt_buffers);
 int32_t tpm_db_gmac_bm_bufs_conf_get(tpm_gmacs_enum_t gmac, uint32_t *valid, uint32_t *large_pkt_buffers,
@@ -897,7 +947,9 @@ int32_t tpm_db_gmac_tx_q_conf_get(tpm_db_tx_mod_t tx_mod,
 
 int32_t tpm_db_gmac_tx_val_set(tpm_db_tx_mod_t tx_mod);
 uint32_t tpm_db_gmac_tx_val_get(tpm_db_tx_mod_t tx_mod);
-uint32_t tpm_db_gmac_lpk_queue_get(tpm_gmacs_enum_t *gmac, uint32_t *queue_idx);
+uint32_t tpm_db_gmac_lpk_queue_get(tpm_gmacs_enum_t *gmac,
+				   uint32_t *queue_idx,
+				   tpm_db_gmac1_lpk_queue_type_t queue_type);
 
 /* RX queues Config */
 int32_t tpm_db_gmac_rx_val_set(tpm_gmacs_enum_t gmac);
@@ -930,6 +982,8 @@ int32_t tpm_db_igmp_set_port_frwd_mode(uint32_t port, uint32_t mode);
 int32_t tpm_db_igmp_get_port_frwd_mode(uint32_t port, uint32_t *mode);
 int32_t tpm_db_igmp_set_cpu_queue(uint32_t queue);
 int32_t tpm_db_igmp_get_cpu_queue(uint32_t *queue);
+int32_t tpm_db_igmp_get_snoop_enable(uint32_t *igmp_snoop_enable);
+int32_t tpm_db_igmp_set_snoop_enable(uint32_t igmp_snoop_enable);
 
 /* MISC */
 int32_t tpm_db_omci_type_set(uint32_t omci_etype);
@@ -953,8 +1007,7 @@ int32_t tpm_db_pon_type_get(tpm_db_pon_type_t *pon_type);
 int32_t tpm_db_ds_mh_set_conf_set(tpm_db_mh_src_t ds_mh_set_conf);
 int32_t tpm_db_ds_mh_get_conf_set(tpm_db_mh_src_t *ds_mh_set_conf);
 
-int32_t tpm_db_backup_wan_set(tpm_gmacs_enum_t backup_wan);
-int32_t tpm_db_backup_wan_get(tpm_gmacs_enum_t *backup_wan);
+int32_t tpm_db_active_wan_set(tpm_gmacs_enum_t active_wan);
 tpm_gmacs_enum_t tpm_db_active_wan_get(void);
 
 #if 0				/*Keep to be added in future version */
@@ -1032,6 +1085,9 @@ int32_t tpm_db_api_entry_get(tpm_api_sections_t api_section, uint32_t rule_num, 
 				tpm_db_pnc_conn_t *pnc_con);
 
 int32_t tpm_db_api_tcam_num_get(tpm_api_sections_t api_section, uint32_t rule_idx, uint32_t *tcam_num);
+int32_t tpm_db_api_entry_update_rule_idx(tpm_api_sections_t api_section,
+			     			uint32_t rule_idx_pre,
+			     			uint32_t rule_idx_new);
 int32_t tpm_db_api_rulenum_get(tpm_api_sections_t api_section, uint32_t rule_idx, uint32_t *rule_num);
 int32_t tpm_db_api_rulenum_get_from_l2_key(tpm_api_sections_t api_section, tpm_parse_fields_t parse_rule_bm,
 						tpm_l2_acl_key_t *l2_key, uint32_t *rule_num);
@@ -1045,6 +1101,7 @@ int32_t tpm_db_api_rulenum_get_from_ipv6_key(tpm_api_sections_t api_section, tpm
 int32_t tpm_db_api_entry_val_get_next(tpm_api_sections_t api_section, int32_t cur_rule, int32_t *next_rule,
 					uint32_t *rule_idx, uint32_t *bi_dir, tpm_rule_entry_t *api_data,
 					tpm_db_mod_conn_t *mod_con, tpm_db_pnc_conn_t *pnc_con);
+int32_t tpm_db_rule_index_set(uint32_t rule_index);
 int32_t tpm_db_api_entry_invalidate(tpm_api_sections_t api_section, uint32_t rule_num);
 int32_t tpm_db_api_entry_ind_get(tpm_api_sections_t api_section, uint32_t rule_num, int32_t *index);
 int32_t tpm_db_api_tcam_rule_idx_get(tpm_api_sections_t api_section, uint32_t tcam_num, uint32_t *rule_idx);
@@ -1116,13 +1173,15 @@ uint16_t tpm_db_mod2_convert_chain_to_pmt_entry(tpm_chain_type_t chain_type, uin
 int32_t tpm_db_mod2_get_chain_id_by_pmt_entry(tpm_gmacs_enum_t gmac_port, uint16_t entry_id,
 						tpm_chain_type_t *chain_type, uint16_t *chain_id);
 uint16_t tpm_db_mod2_get_next_free_jump_entry(tpm_gmacs_enum_t gmac_port);
+uint8_t tpm_db_mod2_rollback_chain_entry(tpm_gmacs_enum_t gmac_port, tpm_chain_type_t chain_type,
+					 uint16_t chain_id, uint8_t on_failure);
 
 uint16_t tpm_db_mod2_get_next_split_mod_free_jump_entry(tpm_gmacs_enum_t gmac_port, tpm_pkt_mod_t *mod_data);
 //void tpm_db_mod2_update_split_mod_next_free_jump_entry(tpm_gmacs_enum_t gmac_port);
 int32_t tpm_db_mod2_split_mod_insert_vlan(tpm_gmacs_enum_t port, tpm_pkt_mod_t *mod_data);
 int32_t tpm_db_mod2_split_mod_get_vlan_index(tpm_gmacs_enum_t port, tpm_pkt_mod_t *mod_data, uint32_t *index);
 int32_t tpm_db_mod2_split_mod_increase_vlan_user_num(tpm_gmacs_enum_t port, tpm_pkt_mod_t *mod_data);
-int32_t tpm_db_mod2_split_mod_decrease_vlan_user_num(tpm_gmacs_enum_t port, 
+int32_t tpm_db_mod2_split_mod_decrease_vlan_user_num(tpm_gmacs_enum_t port,
 													 uint32_t       vlan_index,
 													 uint32_t      *user_num);
 void tpm_db_mod2_set_multicast_mh_state(uint8_t enable);
@@ -1334,13 +1393,23 @@ int32_t tpm_db_inc_ipv4_pre_filter_key_user_num(tpm_src_port_type_t src_port, ui
 int32_t tpm_db_dec_ipv4_pre_filter_key_user_num(tpm_src_port_type_t src_port, uint32_t key_idx);
 int32_t tpm_db_get_ipv4_pre_filter_key_user_num(tpm_src_port_type_t src_port, uint32_t key_idx, uint32_t *num_users);
 int32_t tpm_db_set_gmac_rate_limit(tpm_db_tx_mod_t gmac_i,
+				   uint32_t bucket_size,
+				   uint32_t rate_limit,
+				   uint32_t prio);
+int32_t tpm_db_get_gmac_rate_limit(tpm_gmacs_enum_t gmac_i,
+				   uint32_t *bucket_size,
+				   uint32_t *rate_limit,
+				   uint32_t *prio);
+int32_t tpm_db_set_gmac_q_rate_limit(tpm_db_tx_mod_t gmac_i,
 				   uint32_t queue,
 				   uint32_t bucket_size,
-				   uint32_t rate_limit);
-int32_t tpm_db_get_gmac_rate_limit(tpm_gmacs_enum_t gmac_i,
+				   uint32_t rate_limit,
+				   uint32_t wrr);
+int32_t tpm_db_get_gmac_q_rate_limit(tpm_gmacs_enum_t gmac_i,
 				   uint32_t queue,
 				   uint32_t *bucket_size,
-				   uint32_t *rate_limit);
+				   uint32_t *rate_limit,
+				   uint32_t *wrr);
 int32_t tpm_db_fc_conf_set(tpm_init_fc_params_t *port_fc_conf);
 int32_t tpm_db_fc_conf_get(tpm_init_fc_params_t *port_fc_conf);
 /* switch_init */
@@ -1353,6 +1422,30 @@ bool tpm_db_gmac1_lpbk_en_get(void);
 void tpm_db_gmac1_lpbk_en_set(bool en);
 bool tpm_db_cpu_wan_lpbk_en_get(void);
 void tpm_db_cpu_wan_lpbk_en_set(bool en);
+bool tpm_db_ds_load_bal_en_get(void);
+void tpm_db_ds_load_bal_en_set(bool en);
+bool tpm_db_switch_active_wan_en_get(void);
+void tpm_db_switch_active_wan_en_set(bool en);
+int32_t tpm_db_api_data_backup(void);
+int32_t tpm_db_api_data_rcvr(void);
+int32_t tpm_db_api_section_bak_num_entries_get(tpm_api_sections_t api_section, uint32_t *num_entries);
+int32_t tpm_db_api_section_bak_ent_tbl_get(tpm_api_sections_t api_sec, tpm_db_api_entry_t *api_ent_mem_area, uint32_t index);
+int32_t tpm_db_api_entry_bak_get_next(tpm_api_sections_t api_section,
+				      int32_t cur_rule,
+				      int32_t *next_rule);
+int32_t tpm_db_wan_lan_rate_limit_exchange(void);
+
+int32_t tpm_db_mac_learn_mod_idx_set(uint32_t mod_idx);
+int32_t tpm_db_mac_learn_mod_idx_get(uint32_t *mod_idx);
+int32_t tpm_db_ds_mac_based_trunk_enable_set(tpm_db_ds_mac_based_trunk_enable_t enable);
+int32_t tpm_db_ds_mac_based_trunk_enable_get(tpm_db_ds_mac_based_trunk_enable_t *enable);
+
+int32_t tpm_db_max_uni_port_nr_get(uint32_t *max_uni_port_nr);
+
+int32_t tpm_db_gmac_uni_egr_rate_limit_set(tpm_src_port_type_t port, uint32_t rate_limit);
+int32_t tpm_db_gmac_uni_egr_rate_limit_get(tpm_src_port_type_t port, uint32_t *rate_limit);
+int32_t tpm_db_gmac_lpk_uni_ingr_rate_limit_set(tpm_src_port_type_t port, tpm_db_gmac_lpk_uni_ingr_rate_limit_t rate_limit);
+int32_t tpm_db_gmac_lpk_uni_ingr_rate_limit_get(tpm_src_port_type_t port, tpm_db_gmac_lpk_uni_ingr_rate_limit_t *rate_limit);
 
 #ifdef __cplusplus
 }

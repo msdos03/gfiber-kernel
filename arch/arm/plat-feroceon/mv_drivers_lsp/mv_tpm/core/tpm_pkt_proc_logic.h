@@ -141,6 +141,10 @@ extern "C" {
 #define      TPM_AI_DNRT_BIT_SIZE               (1)
 #define      TPM_AI_DNRT_MASK                   (AI_TO_MASK(TPM_AI_DNRT_BIT_OFF, TPM_AI_DNRT_BIT_SIZE))
 
+#define      TPM_AI_DNRT_DS_TRUNK_BIT_OFF       (3)
+#define      TPM_AI_DNRT_DS_TRUNK_BIT_SIZE      (1)
+#define      TPM_AI_DNRT_DS_TRUNK_MASK          (AI_TO_MASK(TPM_AI_DNRT_DS_TRUNK_BIT_OFF, TPM_AI_DNRT_DS_TRUNK_BIT_SIZE))
+
 #define      TPM_AI_MTM_BIT_OFF                 (2)
 #define      TPM_AI_MTM_BIT_SIZE                (1)
 #define      TPM_AI_MTM_MASK                    (AI_TO_MASK(TPM_AI_MTM_BIT_OFF, TPM_AI_MTM_BIT_SIZE))
@@ -232,6 +236,7 @@ extern "C" {
 #define GMAC_IS_WAN(gmac_func)          ((gmac_func == TPM_GMAC_FUNC_LAN_AND_WAN) || (gmac_func == TPM_GMAC_FUNC_WAN))
 #define GMAC_IS_UNI_LAN(gmac_func)      (gmac_func == TPM_GMAC_FUNC_LAN_UNI)
 #define GMAC_IS_UNI_VIRT(gmac_func)     (gmac_func == TPM_GMAC_FUNC_VIRT_UNI)
+#define GMAC_IS_DS_UNI_LAN(gmac_func)   (gmac_func == TPM_GMAC_FUNC_US_MAC_LEARN_DS_LAN_UNI)
 
 
 #define TPM_CNM_L2_MAIN_LUID_OFFSET      (0)
@@ -249,6 +254,7 @@ typedef enum {
 } ttl_illegal_action_t;
 
 typedef enum {
+	TPM_ADD_DS_LOAD_BALANCE_RULE,
 	TPM_ADD_L2_PRIM_ACL_RULE,
 	TPM_ADD_L3_TYPE_ACL_RULE,
 	TPM_ADD_IPV4_ACL_RULE,
@@ -306,6 +312,13 @@ typedef struct {
 	del_cnm_ipv4_pre_filter_key_fn_t del_cnm_ipv4_pre_filter;
 } tpm_cnm_ipv4_pre_filter_rule_oper_t;
 
+typedef tpm_error_code_t (*tpm_acl_recovery_func)(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+
+typedef struct {
+	tpm_api_type_t api_type;
+	tpm_acl_recovery_func func;
+} tpm_hot_swap_acl_recovery_t;
+
 
 /* API's */
 
@@ -335,6 +348,14 @@ tpm_error_code_t tpm_proc_add_cpu_wan_loopback(uint32_t owner_id,
 					       uint32_t *mod_idx);
 
 tpm_error_code_t tpm_proc_del_cpu_wan_loopback(uint32_t owner_id, tpm_pkt_frwd_t *pkt_frwd);
+tpm_error_code_t tpm_proc_add_ds_load_balance_acl_rule(uint32_t owner_id,
+					       uint32_t rule_num,
+					       uint32_t *rule_idx,
+					       tpm_parse_fields_t parse_rule_bm,
+					       tpm_parse_flags_t parse_flags_bm,
+					       tpm_l2_acl_key_t *l2_key,
+					       tpm_ds_load_balance_tgrt_t tgrt_port);
+tpm_error_code_t tpm_proc_del_ds_load_balance_acl_rule(uint32_t owner_id, uint32_t rule_idx, uint32_t ext_call);
 
 int32_t tpm_proc_l2_tcam_build(tpm_src_port_type_t src_port,
 			       tpm_dir_t dir,
@@ -409,7 +430,9 @@ tpm_error_code_t tpm_proc_oam_epon_add_channel(uint32_t owner_id,
 					       uint32_t cpu_rx_queue,
 					       tpm_trg_port_type_t llid_num);
 
-tpm_error_code_t tpm_proc_loop_detect_add_channel(uint32_t owner_id);
+tpm_error_code_t tpm_proc_loop_detect_add_channel(uint32_t owner_id, tpm_ether_type_key_t ety);
+
+tpm_error_code_t tpm_proc_loop_detect_del_channel(uint32_t owner_id);
 
 tpm_error_code_t tpm_proc_oam_loopback_add_channel(uint32_t owner_id);
 
@@ -450,6 +473,7 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_stream(uint32_t owner_id,
 					     uint8_t ipv4_src_add[4],
 					     uint8_t ipv4_dst_add[4],
 					     uint8_t ignore_ipv4_src,
+					     uint16_t dest_queue,
 					     tpm_trg_port_type_t dest_port_bm);
 
 int32_t tpm_proc_ipv4_sram_build(tpm_src_port_type_t src_port,
@@ -486,11 +510,13 @@ int32_t tpm_proc_ipv4_mc_tcam_build(tpm_mc_filter_mode_t filter_mode,
 				    uint8_t ignore_ipv4_src,
 				    tpm_pncl_tcam_data_t *tcam_data);
 
-int32_t tpm_proc_ipv4_mc_sram_build(tpm_mc_filter_mode_t filter_mode,
+int32_t tpm_proc_ipvx_mc_sram_build(tpm_mc_filter_mode_t filter_mode,
 				    tpm_mc_igmp_mode_t igmp_mode,
+				    uint16_t dest_queue,
 				    tpm_trg_port_type_t target_port,
 				    uint32_t mod_entry,
-				    tpm_pncl_sram_data_t *sram_data);
+				    tpm_pncl_sram_data_t *sram_data,
+				    tpm_ip_ver_t ip_version);
 
 tpm_error_code_t tpm_proc_updt_ipv4_mc_stream(uint32_t owner_id,
 					      uint32_t stream_num, tpm_trg_port_type_t dest_port_bm);
@@ -506,12 +532,6 @@ int32_t tpm_proc_ipv6_mc_tcam_build(tpm_mc_filter_mode_t filter_mode,
 				    uint8_t ignore_sip,
 				    tpm_pncl_tcam_data_t *tcam_data);
 
-int32_t tpm_proc_ipv6_mc_sram_build(tpm_mc_filter_mode_t filter_mode,
-				    tpm_mc_igmp_mode_t igmp_mode,
-				    tpm_trg_port_type_t target_port,
-				    uint32_t mod_entry,
-				    tpm_pncl_sram_data_t *sram_data);
-
 tpm_error_code_t tpm_proc_add_ipv6_mc_stream(uint32_t owner_id,
 					     uint32_t stream_num,
 					     tpm_mc_igmp_mode_t igmp_mode,
@@ -520,6 +540,7 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_stream(uint32_t owner_id,
 					     uint8_t ipv6_src_add[16],
 					     uint8_t ipv6_dst_add[16],
 					     uint8_t ignore_ipv6_src,
+					     uint16_t dest_queue,
 					     tpm_trg_port_type_t dest_port_bm);
 
 tpm_error_code_t tpm_proc_updt_ipv6_mc_stream(uint32_t owner_id,
@@ -532,6 +553,8 @@ int32_t tpm_proc_src_port_gmac_bm_map(tpm_src_port_type_t src_port, tpm_gmac_bm_
 
 tpm_error_code_t tpm_proc_l2_num_vlan_tags_init(void);
 tpm_error_code_t tpm_proc_ipv4_ttl_init(uint32_t ttl_illegal_action);
+tpm_error_code_t tpm_proc_ds_load_balance_init(void);
+
 tpm_error_code_t tpm_proc_tcp_flag_init(void);
 tpm_error_code_t tpm_proc_ipv4_len_init(void);
 tpm_error_code_t tpm_proc_ipv4_igmp_init(void);
@@ -691,6 +714,11 @@ tpm_error_code_t tpm_proc_update_mc_vid_cfg(uint32_t mc_vid,
 tpm_error_code_t tpm_proc_set_mc_vid_port_vids(uint32_t owner_id,
 					       uint32_t mc_vid,
 					       tpm_mc_vid_port_vid_set_t *mc_vid_uniports_config);
+tpm_error_code_t tpm_proc_delete_ipvx_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode,
+						   uint32_t stream_num,
+						   uint32_t dest_port_bm,
+						   uint32_t u4_entry,
+						   tpm_ip_ver_t ip_version);
 
 tpm_error_code_t tpm_proc_catch_all_init(void);
 
@@ -828,12 +856,24 @@ int32_t tpm_proc_cnm_ipv4_sram_build(tpm_pkt_frwd_t *pkt_frwd,
 				     tpm_pkt_action_t pkt_act,
 				     uint32_t mod_cmd,
 				     tpm_pncl_sram_data_t *sram_data);
+tpm_pnc_trg_t tpm_proc_cnm_pnc_trg_get(tpm_trg_port_type_t trg_port);
 
 uint8_t tpm_proc_if_ipv4_pre_range_is_full(tpm_src_port_type_t src_port, tpm_parse_fields_t ipv4_parse_rule_bm, tpm_ipv4_acl_key_t *ipv4_key);
 uint8_t tpm_proc_if_cnm_main_range_is_full(tpm_src_port_type_t src_port, uint32_t precedence);
 int32_t tpm_proc_add_cnm_ipv4_pre_filter_key(uint32_t owner_id, tpm_src_port_type_t src_port, tpm_parse_fields_t ipv4_parse_rule_bm, tpm_ipv4_acl_key_t *ipv4_key, uint32_t *key_idx);
 int32_t tpm_proc_del_cnm_ipv4_pre_filter_key(uint32_t owner_id, tpm_src_port_type_t src_port, uint32_t key_idx);
-int32_t tpm_proc_add_l2_cnm_rule(uint32_t owner_id, tpm_src_port_type_t src_port, uint32_t precedence, tpm_parse_fields_t l2_parse_rule_bm, tpm_l2_acl_key_t *l2_key, uint32_t ipv4_key_idx, tpm_pkt_frwd_t *pkt_frwd, tpm_pkt_action_t pkt_act, uint32_t pbits, uint32_t *rule_idx);
+int32_t tpm_proc_add_l2_cnm_rule(uint32_t owner_id,
+				 tpm_src_port_type_t src_port,
+				 uint32_t precedence,
+				 tpm_parse_fields_t l2_parse_rule_bm,
+				 tpm_l2_acl_key_t *l2_key,
+				 tpm_parse_fields_t ipv4_parse_rule_bm,
+				 tpm_ipv4_acl_key_t *ipv4_key,
+				 uint32_t ipv4_key_idx,
+				 tpm_pkt_frwd_t *pkt_frwd,
+				 tpm_pkt_action_t pkt_act,
+				 uint32_t pbits,
+				 uint32_t *rule_idx);
 int32_t tpm_proc_del_l2_cnm_rule(uint32_t owner_id, uint32_t rule_idx);
 int32_t tpm_proc_add_ipv4_cnm_rule(uint32_t owner_id, tpm_src_port_type_t src_port, uint32_t precedence, tpm_parse_fields_t ipv4_parse_rule_bm, tpm_ipv4_acl_key_t *ipv4_key, tpm_pkt_frwd_t *pkt_frwd, tpm_pkt_action_t pkt_act, uint32_t pbits, uint32_t *rule_idx);
 int32_t tpm_proc_add_ipv6_cnm_rule(uint32_t owner_id,
@@ -853,20 +893,42 @@ tpm_error_code_t tpm_proc_add_static_mac_rule(uint32_t owner_id, tpm_l2_acl_key_
 tpm_error_code_t tpm_proc_del_static_mac_rule(uint32_t owner_id, tpm_l2_acl_key_t *src_mac_addr);
 tpm_error_code_t tpm_proc_mac_learn_default_rule_act_set(uint32_t owner_id, tpm_unknown_mac_conf_t mac_conf);
 tpm_error_code_t tpm_proc_mac_learn_entry_num_get(uint32_t *entry_num);
+#ifdef CONFIG_MV_ETH_WAN_SWAP
+tpm_error_code_t tpm_proc_hot_swap_profile(uint32_t owner_id,
+				    tpm_eth_complex_profile_t profile_id);
+#endif /* CONFIG_MV_ETH_WAN_SWAP */
 
 
 int32_t tpm_proc_check_api_busy(tpm_api_type_t api_type, uint32_t rule_num);
 int32_t tpm_proc_api_busy_done(tpm_api_type_t api_type, uint32_t rule_num);
 int32_t tpm_proc_src_port_dir_map(tpm_src_port_type_t src_port, tpm_dir_t *dir);
+int32_t tpm_proc_check_all_api_busy(void);
+int32_t tpm_proc_all_api_busy_done(void);
 
 bool tpm_split_mod_stage1_check(tpm_pkt_mod_bm_t pkt_mod_bm,
 				tpm_pkt_mod_t *pkt_mod,
 				tpm_rule_action_t *rule_action,
 				bool check_vlan_noop);
 int32_t tpm_proc_calc_cnm_precedence(tpm_src_port_type_t src_port, uint32_t rule_num, uint32_t *precedence);
+tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint8_t enable);
 
 tpm_error_code_t tpm_proc_check_dst_uni_port(tpm_trg_port_type_t dest_port_bm);
+tpm_error_code_t tpm_proc_set_active_wan(tpm_gmacs_enum_t active_wan);
 
+/* hot swap profile acl recovery func api section */
+tpm_error_code_t tpm_acl_rcvr_func_mac_learn(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_ds_load_balance(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_cpu_loopback(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_l2_prim(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_l3_type(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_ipv4(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_ipv4_mc(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_ipv6_gen(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_ipv6_dip(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_ipv6_mc(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_ipv6_nh(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_ipv6_l4(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
+tpm_error_code_t tpm_acl_rcvr_func_cnm(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
 
 #ifdef __cplusplus
 }

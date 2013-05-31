@@ -105,7 +105,6 @@ typedef struct {
 	int (*cdevIoctl)(struct inode *, struct file *, unsigned int, unsigned long);
 } S_PonFunctions;
 
-
 typedef struct {
 	E_PonDriverMode		drvMode;
 	int					devOpen;

@@ -133,7 +133,8 @@ static int mvcust_dev_ioctl(struct inode *inode, struct file *filp, unsigned int
     mv_cust_ioctl_omci_set_t      cust_omci_set;
     mv_cust_ioctl_llid_set_t      cust_llid_set;
     mv_cust_ioctl_flow_map_t      cust_flow_map;
-    mv_cust_ioctl_dscp_map_t      cust_dscp_map;    
+    mv_cust_ioctl_dscp_map_t      cust_dscp_map;
+    mv_cust_ioctl_app_etype_t     cust_app_etype;
     int                           enable;
     int                           rc;
 
@@ -165,7 +166,7 @@ static int mvcust_dev_ioctl(struct inode *inode, struct file *filp, unsigned int
             MVCUST_ERR_PRINT("copy_from_user failed\n");
             goto ioctlErr;
           }
-          mv_cust_omci_enable(enable);
+          mv_cust_app_flag_set(MV_CUST_APP_TYPE_OMCI, enable);
           ret = 0;
           break;
 
@@ -176,7 +177,7 @@ static int mvcust_dev_ioctl(struct inode *inode, struct file *filp, unsigned int
             MVCUST_ERR_PRINT("copy_from_user failed\n");
             goto ioctlErr;
           }
-          mv_cust_eoam_enable(enable);
+          mv_cust_app_flag_set(MV_CUST_APP_TYPE_OAM, enable);
           ret = 0;
           break;
 
@@ -268,6 +269,17 @@ static int mvcust_dev_ioctl(struct inode *inode, struct file *filp, unsigned int
             goto ioctlErr;
           }          
           break;
+
+      case MV_CUST_IOCTL_APP_ETH_TYPE_SET:
+          if(copy_from_user(&cust_app_etype, (mv_cust_ioctl_app_etype_t *)arg, sizeof(mv_cust_ioctl_app_etype_t)))
+          {
+            MVCUST_ERR_PRINT("copy_from_user failed\n");
+            goto ioctlErr;
+          }
+
+          mv_cust_app_etype_set(cust_app_etype.app_type, cust_app_etype.eth_type);\
+          ret = 0;
+          break; 
 
       default:
           ret = -EINVAL;

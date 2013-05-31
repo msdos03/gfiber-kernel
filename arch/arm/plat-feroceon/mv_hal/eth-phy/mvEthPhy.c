@@ -69,6 +69,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "mvSysEthPhyConfig.h"
 #include "mvEthPhyRegs.h"
 #include "mvEthPhy.h"
+#include "gbe/mvNeta.h"
+#include "boardEnv/mvBoardEnvLib.h"
 
 static 	MV_VOID	mvEthPhyPower(MV_U32 ethPortNum, MV_BOOL enable);
 
@@ -441,6 +443,7 @@ MV_STATUS mvEthPhyRegWrite(MV_U32 phyAddr, MV_U32 regOffs, MV_U16 data)
 *
 * INPUT:
 *       phyAddr - Phy address.
+*	data    - PHY control register value want to be, if 0xFFFF, use original value
 *       timeout - in millisec
 *
 * OUTPUT:
@@ -450,17 +453,30 @@ MV_STATUS mvEthPhyRegWrite(MV_U32 phyAddr, MV_U32 regOffs, MV_U16 data)
 *           MV_TIMEOUT  - Timeout
 *
 *******************************************************************************/
-MV_STATUS mvEthPhyReset(MV_U32 phyAddr, int timeout)
+MV_STATUS mvEthPhyReset(MV_U32 phyAddr, MV_U16 data, int timeout)
 {
-	MV_U16  phyRegData;
+	MV_U16  phyRegData, temp;
+	MV_BOOL power_down = 0;
 
 	/* Reset the PHY */
-	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &temp) != MV_OK)
 		return MV_FAIL;
 
-	/* Set bit 15 to reset the PHY */
-	phyRegData |= ETH_PHY_CTRL_RESET_MASK;
-	mvEthPhyRegWrite(phyAddr, ETH_PHY_CTRL_REG, phyRegData);
+	if (temp & ETH_PHY_CTRL_POWER_DOWN_MASK)
+		power_down = 1;
+
+	if (data != 0xFFFF)
+		temp = data;
+
+	if (power_down)
+		temp |= ETH_PHY_CTRL_POWER_DOWN_MASK;
+	else
+		temp |= ETH_PHY_CTRL_RESET_MASK;
+
+	mvEthPhyRegWrite(phyAddr, ETH_PHY_CTRL_REG, temp);
+
+	if (power_down)
+		return MV_OK;
 
 	/* Wait untill Reset completed */
 	while (timeout > 0) {
@@ -482,6 +498,8 @@ MV_STATUS mvEthPhyReset(MV_U32 phyAddr, int timeout)
 *
 * DESCRIPTION:
 *       This function resets a given ethernet Phy.
+*	If AutoNegotiation is not enabled, it'll enable it.
+*	Loopback and Power Down will be disabled by this routine
 *
 * INPUT:
 *       phyAddr - Phy address.
@@ -498,9 +516,16 @@ MV_STATUS mvEthPhyRestartAN(MV_U32 phyAddr, int timeout)
 {
 	MV_U16  phyRegData;
 
-	/* Reset the PHY */
+	/* Disable internal loopback first, in order to restore value of related register */
+	if (mvEthPhyLoopbackSet(phyAddr, MV_FALSE) != MV_OK)
+		return MV_FAIL;
+
+	/* Read Control reg of the PHY */
 	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
 		return MV_FAIL;
+
+	/* disable loopback and power down */
+	phyRegData &= (ETH_PHY_CTRL_DUPLEX_MASK | ETH_PHY_CTRL_SPEED_LSB_MASK | ETH_PHY_CTRL_SPEED_MSB_MASK);
 
 	/* Set bit 12 to Enable autonegotiation of the PHY */
 	phyRegData |= ETH_PHY_CTRL_AN_ENABLE_MASK;
@@ -624,7 +649,7 @@ MV_STATUS   mvEthPhyLoopback(MV_U32 phyAddr, MV_BOOL isEnable)
 		regVal &= ~(BIT5 | BIT6 | BIT8 | BIT9);
 		mvEthPhyRegWrite(phyAddr, ETH_PHY_SPEC_CTRL_REG, regVal);
 
-		status = mvEthPhyReset(phyAddr, 1000);
+		status = mvEthPhyReset(phyAddr, 0xFFFF, MV_PHY_RESET_EXPIRE_COUNT);
 		if (status != MV_OK) {
 			mvOsPrintf("mvEthPhyReset failed: status=0x%x\n", status);
 			return status;
@@ -636,9 +661,8 @@ MV_STATUS   mvEthPhyLoopback(MV_U32 phyAddr, MV_BOOL isEnable)
 	} else {
 		/* Cancel Loopback */
 		ctrlVal &= ~ETH_PHY_CTRL_LOOPBACK_MASK;
-		mvEthPhyRegWrite(phyAddr, ETH_PHY_CTRL_REG, ctrlVal);
 
-		status = mvEthPhyReset(phyAddr, 1000);
+		status = mvEthPhyReset(phyAddr, ctrlVal, MV_PHY_RESET_EXPIRE_COUNT);
 		if (status != MV_OK) {
 			mvOsPrintf("mvEthPhyReset failed: status=0x%x\n", status);
 			return status;
@@ -650,7 +674,7 @@ MV_STATUS   mvEthPhyLoopback(MV_U32 phyAddr, MV_BOOL isEnable)
 		regVal |= (BIT5 | BIT6 | BIT8 | BIT9);
 		mvEthPhyRegWrite(phyAddr, ETH_PHY_SPEC_CTRL_REG, regVal);
 
-		status = mvEthPhyReset(phyAddr, 1000);
+		status = mvEthPhyReset(phyAddr, 0xFFFF, MV_PHY_RESET_EXPIRE_COUNT);
 		if (status != MV_OK) {
 			mvOsPrintf("mvEthPhyReset failed: status=0x%x\n", status);
 			return status;
@@ -808,6 +832,14 @@ MV_STATUS mvEthPhyAdvertiseSet(MV_U32 phyAddr, MV_U16 advertise)
 	regVal = regVal & (~ETH_PHY_1000BASE_ADVERTISE_MASK);
 	regVal = regVal | (tmp << ETH_PHY_1000BASE_ADVERTISE_OFFSET);
 	mvEthPhyRegWrite(phyAddr, ETH_PHY_1000BASE_T_CTRL_REG, regVal);
+
+	/* Reset PHY */
+	mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &tmp);
+	mvEthPhyRegWrite(phyAddr, ETH_PHY_CTRL_REG, tmp | ETH_PHY_CTRL_RESET_MASK);
+	mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &tmp);
+	while(tmp & ETH_PHY_CTRL_RESET_MASK)
+		mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &tmp);
+
 	return MV_OK;
 }
 
@@ -2045,4 +2077,880 @@ MV_VOID mvEthE1512PhyBasicInit(MV_U32 ethPortNum, MV_BOOL eeeEnable)
 		mvOsDelay(10);
 	}
 }
+
+/* Check GEPHY or FEPHY through Reg1.8 */
+static MV_STATUS mvEthPhyIsFe(MV_U32 phyAddr, MV_BOOL *Is_Fe_PHY)
+{
+	MV_U16  phyRegData;
+	MV_BOOL isfe = 0;
+
+	/* Check PHY exist or not */
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_ID2_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	if (phyRegData == ETH_PHY_SMI_DATA_MASK)
+		return MV_FAIL;
+
+	/* Judge PHY is FE or GE through reg1.8 */
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_STATUS_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	if (ETH_PHY_STATUS_EXTEND_MASK & phyRegData)
+		isfe = 0;
+	else
+		isfe = 1;
+
+	*Is_Fe_PHY = isfe;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhySetAdminState - Set phy power down state.
+*
+* DESCRIPTION:
+*       The API Configures the PHY state on the eth port.
+* INPUTS:
+*       phyAddr - Phy address.
+*       phy_state  - PHY port  state to set.
+*                         0:power down
+*                         1:power up
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+
+MV_STATUS mvEthPhySetAdminState(MV_U32 phyAddr, MV_BOOL phy_state)
+{
+	MV_U16  phyRegData;
+	MV_BOOL pre_state;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	pre_state = (phyRegData & ETH_PHY_CTRL_POWER_DOWN_MASK) ? 0 : 1;
+
+	if (pre_state != phy_state) {
+		if (!phy_state) {
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_CTRL_REG, phyRegData | ETH_PHY_CTRL_POWER_DOWN_MASK) != MV_OK)
+				return MV_FAIL;
+		} else {
+			/* from down to normal, 0.11 and 16.2 must be set 0 */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_CTRL_REG, phyRegData & (~ETH_PHY_CTRL_POWER_DOWN_MASK)) != MV_OK)
+				return MV_FAIL;
+			if (mvEthPhyRegRead(phyAddr, ETH_PHY_SPEC_CTRL_REG, &phyRegData) != MV_OK)
+				return MV_FAIL;
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_SPEC_CTRL_REG, phyRegData & (~ETH_PHY_SPEC_CTRL_POWER_DOWN_MASK)) != MV_OK)
+				return MV_FAIL;
+		}
+	}
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyGetAdminState - Get PHY power down dtate.
+*
+* DESCRIPTION:
+*       The API get the PHY state on the eth port.
+* INPUTS:
+*       phyAddr - Phy address.
+*       phy_state  - PHY port  state to set.
+*                         0:power down
+*                         1:power up
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhyGetAdminState(MV_U32 phyAddr, MV_BOOL *phy_state)
+{
+	MV_U16  phyRegData;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	*phy_state = (phyRegData & ETH_PHY_CTRL_POWER_DOWN_MASK) ? 0 : 1;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyGetLinkStatus - Get PHY link state.
+*
+* DESCRIPTION:
+*       The API get the PHY  link state on the eth port.
+* INPUTS:
+*       phyAddr - Phy address.
+*       link_state  - PHY link state to set.
+*                         0:link down
+*                         1:link up
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhyGetLinkStatus(MV_U32 phyAddr, MV_BOOL *link_state)
+{
+	MV_U16  phyRegData;
+
+	/* Check if the PHY exist */
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_ID2_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	if (phyRegData == ETH_PHY_SMI_DATA_MASK)
+		return MV_FAIL;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_SPEC_STATUS_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	/* Check status valid or not */
+	if (!(phyRegData & ETH_PHY_SPEC_STATUS_RESOLVE_MASK))
+		return MV_FAIL;
+
+	*link_state = (phyRegData & ETH_PHY_SPEC_STATUS_LINK_MASK) ? 1 : 0;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyDuplexOperGet - Get PHYduplex info.
+*
+* DESCRIPTION:
+*       The API get the PHY duplex status on the eth port. It reflects the real
+*       configuration happened in PHY.
+* INPUTS:
+*       phyAddr       - Phy address.
+*       state_valid   - indicates PHY state is valid or not
+*                         0: invalid
+*                         1: valid
+*       duplex_state  - PHY link state to set.
+*                         0:half duplex
+*                         1:full duplex
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+* COMMENT: Reg17.13
+*******************************************************************************/
+MV_STATUS mvEthPhyDuplexOperGet(MV_U32 phyAddr, MV_BOOL *state_valid, MV_BOOL *duplex_state)
+{
+	MV_U16  phyRegData;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_SPEC_STATUS_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	/* Check status valid or not */
+	if (!(phyRegData & ETH_PHY_SPEC_STATUS_RESOLVE_MASK)) {
+		*state_valid = MV_FALSE;
+		return MV_OK;
+	}
+	*state_valid = MV_TRUE;
+
+	*duplex_state = (phyRegData & ETH_PHY_SPEC_STATUS_DUPLEX_MASK) ? 1 : 0;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyPauseSet - Set pause of PHY.
+*
+* DESCRIPTION:
+*       The API set pause state.
+* INPUTS:
+*       phyAddr       - Phy address.
+*       pause_state   - pause state set to
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhyPauseSet(MV_U32 phyAddr, MV_U32 pause_state)
+{
+	MV_U16  phyRegData;
+	MV_U32 pre_state = MV_ETHPHY_NO_PAUSE;
+
+	/* read current pause state */
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_AUTONEGO_AD_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	if (phyRegData & ETH_PHY_SPEC_CTRL_PAUSE_MASK)
+		pre_state |= MV_ETHPHY_PAUSE;
+	if (phyRegData & ETH_PHY_SPEC_CTRL_ASY_PAUSE_MASK)
+		pre_state |= MV_ETHPHY_ASYMMETRIC_PAUSE;
+
+	if (pause_state == pre_state)
+		return MV_OK;
+
+	/*set expected PAUSE state*/
+	phyRegData &= ((~ETH_PHY_SPEC_CTRL_PAUSE_MASK) & (~ETH_PHY_SPEC_CTRL_ASY_PAUSE_MASK));
+	switch (pause_state) {
+	case MV_ETHPHY_NO_PAUSE:
+		if (mvEthPhyRegWrite(phyAddr, ETH_PHY_AUTONEGO_AD_REG, phyRegData) != MV_OK)
+			return MV_FAIL;
+		break;
+	case MV_ETHPHY_PAUSE:
+		if (mvEthPhyRegWrite(phyAddr, ETH_PHY_AUTONEGO_AD_REG, phyRegData |
+								       ETH_PHY_SPEC_CTRL_PAUSE_MASK) != MV_OK)
+			return MV_FAIL;
+		break;
+	case MV_ETHPHY_ASYMMETRIC_PAUSE:
+		if (mvEthPhyRegWrite(phyAddr, ETH_PHY_AUTONEGO_AD_REG, phyRegData |
+								       ETH_PHY_SPEC_CTRL_ASY_PAUSE_MASK) != MV_OK)
+			return MV_FAIL;
+		break;
+	case MV_ETHPHY_BOTH_PAUSE:
+		if (mvEthPhyRegWrite(phyAddr, ETH_PHY_AUTONEGO_AD_REG, phyRegData |
+								       ETH_PHY_SPEC_CTRL_ASY_PAUSE_MASK |
+								       ETH_PHY_SPEC_CTRL_PAUSE_MASK) != MV_OK)
+			return MV_FAIL;
+		break;
+	default:
+		return MV_FAIL;
+	}
+
+	/*restart auto-nego, let set above take effect*/
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	phyRegData = phyRegData | ETH_PHY_CTRL_AN_RESTART_MASK;
+
+	if (mvEthPhyRegWrite(phyAddr, ETH_PHY_CTRL_REG, phyRegData) != MV_OK)
+		return MV_FAIL;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyPauseAdminGet - Get pause state of PHY.
+*
+* DESCRIPTION:
+*       The API get pause state.
+* INPUTS:
+*       phyAddr       - Phy address.
+*       pause_state   - pause state set to
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+* COMMENT: Reg4.10 4.11
+*******************************************************************************/
+MV_STATUS mvEthPhyPauseAdminGet(MV_U32 phyAddr, MV_U32 *pause_state)
+{
+	MV_U16  phyRegData;
+	MV_U32 pre_state = MV_ETHPHY_NO_PAUSE;
+
+	/* read current pause state */
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_AUTONEGO_AD_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	if (phyRegData & ETH_PHY_SPEC_CTRL_PAUSE_MASK)
+		pre_state |= MV_ETHPHY_PAUSE;
+	if (phyRegData & ETH_PHY_SPEC_CTRL_ASY_PAUSE_MASK)
+		pre_state |= MV_ETHPHY_ASYMMETRIC_PAUSE;
+
+	*pause_state = pre_state;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyLoopbackSet - Set loopback state of PHY.
+*
+* DESCRIPTION:
+*       The API set loopback state.
+* INPUTS:
+*       phyAddr       - Phy address.
+*       isEnable      - loopback state.
+*                     0--disable
+*                     1--enabled
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhyLoopbackSet(MV_U32 phyAddr, MV_BOOL isEnable)
+{
+	MV_U16	phyRegData, ctrlVal;
+	MV_BOOL isfe = 0;
+
+	if (mvEthPhyIsFe(phyAddr, &isfe))
+		return MV_FAIL;
+
+	/* Set loopback speed and duplex accordingly with current */
+	/* Bits: 6, 8, 13 */
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &ctrlVal) != MV_OK)
+		return MV_FAIL;
+
+	if (isEnable) {
+		if (!isfe) {
+			/* select page 2 */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 2) != MV_OK)
+				return MV_FAIL;
+
+			/* Set register 21_2 */
+			if (mvEthPhyRegRead(phyAddr, ETH_PHY_SPEC_CTRL2_PAGE2, &phyRegData) != MV_OK)
+				return MV_FAIL;
+			phyRegData &= ~(ETH_PHY_CTRL_DUPLEX_MASK | ETH_PHY_CTRL_SPEED_LSB_MASK |
+					ETH_PHY_CTRL_SPEED_MSB_MASK | ETH_PHY_CTRL_AN_ENABLE_MASK);
+			phyRegData |= (ctrlVal & (ETH_PHY_CTRL_DUPLEX_MASK | ETH_PHY_CTRL_SPEED_LSB_MASK |
+						  ETH_PHY_CTRL_SPEED_MSB_MASK | ETH_PHY_CTRL_AN_ENABLE_MASK));
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_SPEC_CTRL2_PAGE2, phyRegData) != MV_OK)
+				return MV_FAIL;
+
+			/* restore page0 */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 0) != MV_OK)
+				return MV_FAIL;
+
+			/* Force master */
+			if (mvEthPhyRegRead(phyAddr, ETH_PHY_1000BASE_T_CTRL_REG, &phyRegData) != MV_OK)
+				return MV_FAIL;
+			phyRegData |= ETH_PHY_1000BASE_MASTER_ENABLE_MASK;
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_1000BASE_T_CTRL_REG, phyRegData) != MV_OK)
+				return MV_FAIL;
+
+			/*reset PHY */
+			if (mvEthPhyReset(phyAddr, 0xFFFF, MV_PHY_RESET_EXPIRE_COUNT) != MV_OK)
+				return MV_FAIL;
+			/* When auto-nego is disabled, 2 PHY reset is needed */
+			if (mvEthPhyReset(phyAddr, 0xFFFF, MV_PHY_RESET_EXPIRE_COUNT) != MV_OK)
+				return MV_FAIL;
+
+			/* Select page 0x00FA, there is no description in reference */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 0x00FA) != MV_OK)
+				return MV_FAIL;
+
+			/* write register 7, force 1000M link, dfault is 0x200*/
+			if (mvEthPhyRegWrite(phyAddr, 7, 0x020c) != MV_OK)
+				return MV_FAIL;
+
+			/* restore page0 */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 0) != MV_OK)
+				return MV_FAIL;
+		}
+
+		/* Set loopback */
+		ctrlVal |= ETH_PHY_CTRL_LOOPBACK_MASK;
+		if (mvEthPhyRegWrite(phyAddr, ETH_PHY_CTRL_REG, ctrlVal) != MV_OK)
+			return MV_FAIL;
+	} else {
+		if (!isfe) {
+			/*restore original setting*/
+			/* Select page 0x00FA */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 0x00FA) != MV_OK)
+				return MV_FAIL;
+
+			/* write register 7, restore default is 0x200*/
+			if (mvEthPhyRegWrite(phyAddr, 7, 0x0200) != MV_OK)
+				return MV_FAIL;
+
+			/* restore page0 */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 0) != MV_OK)
+				return MV_FAIL;
+
+			/* Cancel  Force master */
+			if (mvEthPhyRegRead(phyAddr, ETH_PHY_1000BASE_T_CTRL_REG, &phyRegData) != MV_OK)
+				return MV_FAIL;
+			phyRegData &= (~ETH_PHY_1000BASE_MASTER_ENABLE_MASK);
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_1000BASE_T_CTRL_REG, phyRegData) != MV_OK)
+				return MV_FAIL;
+		}
+		/*disable loopback*/
+		ctrlVal &= (~ETH_PHY_CTRL_LOOPBACK_MASK);
+		if (mvEthPhyReset(phyAddr, ctrlVal, MV_PHY_RESET_EXPIRE_COUNT) !=MV_OK)
+			return MV_FAIL;
+	}
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyLoopbackGet - Get loopback state of PHY.
+*
+* DESCRIPTION:
+*       The API get loopback state.
+* INPUTS:
+*       phyAddr       - Phy address.
+*
+* OUTPUT:
+*       isEnable      - loopback state.
+*                     0--disable
+*                     1--enabled
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhyLoopbackGet(MV_U32 phyAddr, MV_BOOL *isEnable)
+{
+	MV_U16  phyRegData;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+
+	*isEnable = (phyRegData & ETH_PHY_CTRL_LOOPBACK_MASK) ? 1 : 0;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyLineLoopbackSet - Set line loopback state of PHY.
+*
+* DESCRIPTION:
+*       The API set loopback state.
+* INPUTS:
+*       phyAddr       - Phy address.
+*       isEnable      - loopback state.
+*                     0--disable
+*                     1--enabled
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhyLineLoopbackSet(MV_U32 phyAddr, MV_BOOL isEnable)
+{
+	MV_U16  phyRegData;
+	MV_BOOL isfe = 0;
+
+	if (mvEthPhyIsFe(phyAddr, &isfe))
+		return MV_FAIL;
+
+	if (isEnable) {
+		if (!isfe) {
+			/* select page 2 */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 2) != MV_OK)
+				return MV_FAIL;
+			/* set speed to 1000Mbps */
+			if (mvEthPhyRegRead(phyAddr, ETH_PHY_SPEC_CTRL2_PAGE2, &phyRegData) != MV_OK)
+				return MV_FAIL;
+			phyRegData &= 0xFFFFFFF8;
+			phyRegData |= ETH_PHY_SPEC_CTRL2_PAGE2_MAC_SPEED_1000M;
+			phyRegData |= ETH_PHY_SPEC_CTRL2_PAGE2_LINE_LPK_MASK;
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_SPEC_CTRL2_PAGE2, phyRegData) != MV_OK)
+				return MV_FAIL;
+			/* restore page0 */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 0) != MV_OK)
+				return MV_FAIL;
+		} else {
+
+			if (mvEthPhyRegRead(phyAddr, ETH_PHY_FE_SPEC_CTRL2, &phyRegData) != MV_OK)
+				return MV_FAIL;
+
+			phyRegData |= ETH_PHY_SPEC_CTRL2_FE_LINE_LPK_MASK;
+
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_FE_SPEC_CTRL2, phyRegData) != MV_OK)
+				return MV_FAIL;
+		}
+	} else {
+		if (!isfe) {
+			/* select page 2 */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 2) != MV_OK)
+				return MV_FAIL;
+			phyRegData &= (~ETH_PHY_SPEC_CTRL2_PAGE2_LINE_LPK_MASK);
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_SPEC_CTRL2_PAGE2, phyRegData) != MV_OK)
+				return MV_FAIL;
+			/* restore page0 */
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 0) != MV_OK)
+				return MV_FAIL;
+		} else {
+
+			if (mvEthPhyRegRead(phyAddr, ETH_PHY_FE_SPEC_CTRL2, &phyRegData) != MV_OK)
+				return MV_FAIL;
+
+			phyRegData &= (~ETH_PHY_SPEC_CTRL2_FE_LINE_LPK_MASK);
+
+			if (mvEthPhyRegWrite(phyAddr, ETH_PHY_FE_SPEC_CTRL2, phyRegData) != MV_OK)
+				return MV_FAIL;
+		}
+	}
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyLineLoopbackGet - Get line loopback state of PHY, external loopback
+*
+* DESCRIPTION:
+*       The API get loopback state.
+* INPUTS:
+*       phyAddr       - Phy address.
+*
+* OUTPUT:
+*       isEnable      - loopback state.
+*                     0--disable
+*                     1--enabled
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhyLineLoopbackGet(MV_U32 phyAddr, MV_BOOL *isEnable)
+{
+	MV_U16  phyRegData;
+	MV_BOOL isfe = 0;
+
+	if (mvEthPhyIsFe(phyAddr, &isfe))
+		return MV_FAIL;
+
+	if (!isfe) {
+		/* select page 2 */
+		if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 2) != MV_OK)
+			return MV_FAIL;
+
+		if (mvEthPhyRegRead(phyAddr, ETH_PHY_SPEC_CTRL2_PAGE2, &phyRegData) != MV_OK)
+			return MV_FAIL;
+		/* restore page0 */
+		if (mvEthPhyRegWrite(phyAddr, ETH_PHY_PAGE_ADDR, 0) != MV_OK)
+			return MV_FAIL;
+
+		*isEnable = (phyRegData & ETH_PHY_SPEC_CTRL2_PAGE2_LINE_LPK_MASK) ? 1 : 0;
+	} else {
+		if (mvEthPhyRegRead(phyAddr, ETH_PHY_FE_SPEC_CTRL2, &phyRegData) != MV_OK)
+			return MV_FAIL;
+		*isEnable = (phyRegData & ETH_PHY_SPEC_CTRL2_FE_LINE_LPK_MASK) ? 1 : 0;
+	}
+
+	return MV_OK;
+}
+
+
+/*******************************************************************************
+* mvEthPhyDuplexModeSet - Set duplex mode of PHY.
+*
+* DESCRIPTION:
+*		This function will keep the speed and loopback mode to the
+*		previous value, but disable others, such as Autonegotiation.
+* INPUTS:
+*       phyAddr       - Phy address.
+*       isEnable      - duplex state
+*                     0--half duplex
+*                     1--full duplex
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhyDuplexModeSet(MV_U32 phyAddr, MV_BOOL isEnable)
+{
+	MV_U16  phyRegData;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+
+	if (isEnable)
+		phyRegData = phyRegData | ETH_PHY_CTRL_DUPLEX_MASK;
+	else
+		phyRegData = phyRegData & (~ETH_PHY_CTRL_DUPLEX_MASK);
+
+	phyRegData = phyRegData & (ETH_PHY_CTRL_DUPLEX_MASK |
+				   ETH_PHY_CTRL_LOOPBACK_MASK |
+				   ETH_PHY_CTRL_SPEED_LSB_MASK |
+				   ETH_PHY_CTRL_SPEED_MSB_MASK);
+	/* Write Control reg and reset PHY */
+	if (mvEthPhyReset(phyAddr, phyRegData, MV_PHY_RESET_EXPIRE_COUNT) != MV_OK)
+		return MV_FAIL;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyDuplexModeAdminGet - Get configured duplex mode of PHY.
+*
+* DESCRIPTION:
+*       The API get duplex mode.
+* INPUTS:
+*       phyAddr       - Phy address.
+*
+* OUTPUT:
+*       isEnable      - duplex state
+*                     0--half duplex
+*                     1--full duplex
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+* Comment: reg0.8
+*******************************************************************************/
+MV_STATUS mvEthPhyDuplexModeAdminGet(MV_U32 phyAddr, MV_BOOL *isEnable)
+{
+	MV_U16  phyRegData;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	*isEnable = (phyRegData & ETH_PHY_CTRL_DUPLEX_MASK) ? 1 : 0;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhySpeedSet - Set speed of PHY.
+*
+* DESCRIPTION:
+*		This function will keep the duplex mode and loopback mode to the
+*		previous value, but disable others, such as Autonegotiation.
+* INPUTS:
+*       phyAddr       - Phy address.
+*       speed         - PHY speed
+*                     0--10 Mbps
+*                     1--100 Mbps
+*                     2--1000 Mbps
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhySpeedSet(MV_U32 phyAddr, MV_U32 speed)
+{
+	MV_U16  phyRegData;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+
+	phyRegData = phyRegData & ((~ETH_PHY_CTRL_SPEED_LSB_MASK) & (~ETH_PHY_CTRL_SPEED_MSB_MASK));
+
+	switch (speed) {
+	case MV_ETHPHY_SPEED_10_MBPS:
+		phyRegData = phyRegData & (ETH_PHY_CTRL_DUPLEX_MASK | ETH_PHY_CTRL_LOOPBACK_MASK);
+		break;
+	case MV_ETHPHY_SPEED_100_MBPS:
+		phyRegData = (phyRegData & (ETH_PHY_CTRL_DUPLEX_MASK | ETH_PHY_CTRL_LOOPBACK_MASK)) |
+			     ETH_PHY_CTRL_SPEED_LSB_MASK;
+		break;
+	case MV_ETHPHY_SPEED_1000_MBPS:
+		phyRegData = (phyRegData & (ETH_PHY_CTRL_DUPLEX_MASK | ETH_PHY_CTRL_LOOPBACK_MASK)) |
+			     ETH_PHY_CTRL_SPEED_MSB_MASK;
+		break;
+	default:
+		return MV_FAIL;
+	}
+
+	if (mvEthPhyReset(phyAddr, phyRegData, MV_PHY_RESET_EXPIRE_COUNT) != MV_OK)
+		return MV_FAIL;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhySpeedOperGet - Get PHYduplex info.
+*
+* DESCRIPTION:
+*       The API get the PHY speed status on the eth port. It reflects the real
+*       configuration happened in PHY.
+* INPUTS:
+*       phyAddr       - Phy address.
+*       speed         - PHY connection speed.
+*                         0--10 Mbps
+*                         1--100 Mbps
+*                         2--1000 Mbps
+*                         3--Unknown
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+* COMMENT: Reg17.14 and 17.15
+*******************************************************************************/
+MV_STATUS mvEthPhySpeedOperGet(MV_U32 phyAddr, MV_U32 *speed)
+{
+	MV_U16  phyRegData;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_SPEC_STATUS_REG, &phyRegData) != MV_OK)
+		return MV_ERROR;
+	/* Check status valid or not */
+	if (!(phyRegData & ETH_PHY_SPEC_STATUS_RESOLVE_MASK)) {
+		*speed = MV_ETHPHY_SPEED_UNKNOWN;
+		return MV_OK;
+	}
+
+	switch (phyRegData & ETH_PHY_SPEC_STATUS_SPEED_MASK) {
+	case ETH_PHY_SPEC_STATUS_SPEED_1000MBPS:
+		*speed = MV_ETHPHY_SPEED_1000_MBPS;
+		break;
+	case ETH_PHY_SPEC_STATUS_SPEED_100MBPS:
+		*speed = MV_ETHPHY_SPEED_100_MBPS;
+		break;
+	case ETH_PHY_SPEC_STATUS_SPEED_10MBPS:
+		*speed = MV_ETHPHY_SPEED_10_MBPS;
+		break;
+	default:
+		return MV_FAIL;
+	}
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhySpeedAdminGet - Get Configured speed of PHY.
+*
+* DESCRIPTION:
+*       The API get speed.
+* INPUTS:
+*       phyAddr       - Phy address.
+*
+* OUTPUT:
+*       speed         - duplex state
+*                     0--10 Mbps
+*                     1--100 Mbps
+*                     2--1000 Mbps
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+* Comment: Reg0.6, 0.13
+*******************************************************************************/
+MV_STATUS mvEthPhySpeedAdminGet(MV_U32 phyAddr, MV_U32 *speed)
+{
+	MV_U16  phyRegData;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_ERROR;
+
+	/* MSB = 1, LSB = 0, 1000M */
+	if ((phyRegData & ETH_PHY_CTRL_SPEED_MSB_MASK) && (!(phyRegData & ETH_PHY_CTRL_SPEED_LSB_MASK)))
+		*speed = MV_ETHPHY_SPEED_1000_MBPS;
+	/* MSB = 0, LSB = 1, 100M */
+	else if ((phyRegData & ETH_PHY_CTRL_SPEED_LSB_MASK) && (!(phyRegData & ETH_PHY_CTRL_SPEED_MSB_MASK)))
+		*speed = MV_ETHPHY_SPEED_100_MBPS;
+	/* MSB = 0, LSB = 0, 10M */
+	else if ((!(phyRegData & ETH_PHY_CTRL_SPEED_LSB_MASK)) && (!(phyRegData & ETH_PHY_CTRL_SPEED_MSB_MASK)))
+		*speed = MV_ETHPHY_SPEED_10_MBPS;
+	else
+		return MV_FAIL;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhySpeedDuplexModeSet - Set Speed and duplex mode of PHY.
+*
+* DESCRIPTION:
+*		This function will keep the loopback mode to the
+*		previous value, but disable others, such as Autonegotiation.
+* INPUTS:
+*       phyAddr       - Phy address.
+*       speed         - PHY speed
+*                     0--10 Mbps
+*                     1--100 Mbps
+*                     2--1000 Mbps
+*       isEnable      - duplex state
+*                     0--half duplex
+*                     1--full duplex
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhySpeedDuplexModeSet(MV_U32 phyAddr, MV_U32 speed, MV_BOOL isEnable)
+{
+	MV_U16  phyRegData;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+
+	if (isEnable)
+		phyRegData = phyRegData | ETH_PHY_CTRL_DUPLEX_MASK;
+	else
+		phyRegData = phyRegData & (~ETH_PHY_CTRL_DUPLEX_MASK);
+
+	phyRegData = phyRegData & ((~ETH_PHY_CTRL_SPEED_LSB_MASK) & (~ETH_PHY_CTRL_SPEED_MSB_MASK));
+
+	switch (speed) {
+	case MV_ETHPHY_SPEED_10_MBPS:
+		phyRegData = phyRegData & (ETH_PHY_CTRL_DUPLEX_MASK | ETH_PHY_CTRL_LOOPBACK_MASK);
+		break;
+	case MV_ETHPHY_SPEED_100_MBPS:
+		phyRegData = (phyRegData & (ETH_PHY_CTRL_DUPLEX_MASK | ETH_PHY_CTRL_LOOPBACK_MASK)) |
+			     ETH_PHY_CTRL_SPEED_LSB_MASK;
+		break;
+	case MV_ETHPHY_SPEED_1000_MBPS:
+		phyRegData = (phyRegData & (ETH_PHY_CTRL_DUPLEX_MASK | ETH_PHY_CTRL_LOOPBACK_MASK)) |
+			     ETH_PHY_CTRL_SPEED_MSB_MASK;
+		break;
+	default:
+		return MV_FAIL;
+	}
+
+	if (mvEthPhyReset(phyAddr, phyRegData, MV_PHY_RESET_EXPIRE_COUNT) != MV_OK)
+		return MV_FAIL;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyAutoNegoSet - Set auto nego of PHY.
+*
+* DESCRIPTION:
+*       The API set auto nego.
+* INPUTS:
+*       phyAddr       - Phy address.
+*       isEnable      - auto nego state
+*                     0--disable auto nego
+*                     1--enable auto nego
+*
+* OUTPUT:
+*       None.
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhyAutoNegoSet(MV_U32 phyAddr, MV_BOOL isEnable)
+{
+	MV_U16  phyRegData;
+	MV_BOOL pre_state;
+
+	/* Disable internal loopback first if enable auto-nego, in order to restore value of related register */
+	if (isEnable) {
+		if (mvEthPhyLoopbackSet(phyAddr, MV_FALSE) != MV_OK)
+			return MV_FAIL;
+	}
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	pre_state = (phyRegData & ETH_PHY_CTRL_AN_ENABLE_MASK) ? 1 : 0;
+	if (isEnable == pre_state)
+		return MV_OK;
+	if (isEnable)
+		phyRegData |= ETH_PHY_CTRL_AN_ENABLE_MASK;
+	else
+		phyRegData &= (~ETH_PHY_CTRL_AN_ENABLE_MASK);
+
+	/*reset PHY, let set above take effect*/
+	if (mvEthPhyReset(phyAddr, phyRegData, MV_PHY_RESET_EXPIRE_COUNT) != MV_OK)
+		return MV_FAIL;
+
+	return MV_OK;
+}
+
+/*******************************************************************************
+* mvEthPhyAutoNegoGet - Get auto nego of PHY.
+*
+* DESCRIPTION:
+*       The API get duplex mode.
+* INPUTS:
+*       phyAddr       - Phy address.
+*
+* OUTPUT:
+*       isEnable      - auto nego state
+*                     0--disable
+*                     1--enable
+*
+* RETURN:   MV_OK   - Success
+*           MV_FAIL - Failure
+*******************************************************************************/
+MV_STATUS mvEthPhyAutoNegoGet(MV_U32 phyAddr, MV_BOOL *isEnable)
+{
+	MV_U16  phyRegData;
+
+	if (mvEthPhyRegRead(phyAddr, ETH_PHY_CTRL_REG, &phyRegData) != MV_OK)
+		return MV_FAIL;
+	*isEnable = (phyRegData & ETH_PHY_CTRL_AN_ENABLE_MASK) ? 1 : 0;
+
+	return MV_OK;
+}
+
 

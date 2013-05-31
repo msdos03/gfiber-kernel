@@ -1239,6 +1239,7 @@ int32_t tpm_mod2_process_mh_set (tpm_gmacs_enum_t      gmac_port,
         entry_p = tpm_mod2_get_chain_from_pattern_set(pattern_data->pattern_set, pattern_data->main_chain_type, pattern_data->main_chain_id);
         if (main_chain_id != TPM_MOD2_INVALID_CHAIN_ID)
         {
+            tpm_db_mod2_rollback_chain_entry(gmac_port, TPM_CHAIN_TYPE_MH, pattern_data->main_chain_id, false);
             pattern_data->main_chain_id = main_chain_id;
         }
     }
@@ -1741,7 +1742,7 @@ int32_t tpm_mod2_config_tpid (uint8_t is_vlan1, uint16_t tpid, uint16_t tpid_mas
 		else
 			eth_type_sel = TPM_MOD2_TP_FROM_VLAN_2;
 	}
-	
+
 	*conf_data = eth_type_sel;
 	return TPM_OK;
 }
@@ -2328,7 +2329,8 @@ int32_t tpm_mod2_process_pppoe_add (tpm_gmacs_enum_t      gmac_port,
 	tpm_chain_type_t    subr_chain = TPM_CHAIN_TYPE_PPPOE;
     tpm_mod2_entry_t    *tmp_pattern = ipv4_pattern;
 	uint32_t            entry_num = TPM_MOD2_PPPOE_ADD_CMD_ENTRIES;
-	
+    uint32_t  gmac_mh_en;
+
 
     memset(ipv4_pattern, 0, sizeof(ipv4_pattern));
     memset(ipv6_pattern, 0, sizeof(ipv6_pattern));
@@ -2344,12 +2346,15 @@ int32_t tpm_mod2_process_pppoe_add (tpm_gmacs_enum_t      gmac_port,
 		tmp_pattern = ipv6_pattern;
 		entry_num = TPM_MOD2_IPV6_PPPOE_ADD_CMD_ENTRIES;
 	}
-	
+
     /* Build pattern entries */
 	if (bm & TPM_IPV6_UPDATE) {
 	    memcpy(tmp_pattern, tpm_mod2_ipv6_pppoe_pattern.entry,
 	           entry_num * sizeof(tpm_mod2_entry_t));
 	    tmp_pattern[2].data = mod_data->pppoe_mod.ppp_session;
+	    tpm_db_gmac_mh_en_conf_get(gmac_port, &gmac_mh_en);
+	    if (!gmac_mh_en)
+	        tmp_pattern[3].data = TPM_MOD2_DEFAULT_PPPOE_LEN_MH_DIS;
 	} else {
 	    memcpy(tmp_pattern, tpm_mod2_pattern_array[cmd_idx].entry,
 	           entry_num * sizeof(tpm_mod2_entry_t));
@@ -3409,7 +3414,7 @@ int32_t    tpm_mod2_fill_in_pattern   (tpm_gmacs_enum_t     gmac_port,
             max_sz = tpm_db_mod2_get_chain_max_size(entry_p->chain_type);
             if (entry_p->line_num > max_sz)
             {
-                TPM_OS_ERROR(TPM_MODZ2_HM_MOD, "chain(%d) PMT entry number(%d) exceeds the maximum chain size(%d)\n", 
+                TPM_OS_ERROR(TPM_MODZ2_HM_MOD, "chain(%d) PMT entry number(%d) exceeds the maximum chain size(%d)\n",
                              entry_p->chain_type, entry_p->line_num, max_sz);
                 return TPM_FAIL;
             }
@@ -3585,7 +3590,7 @@ int32_t    tpm_mod2_flush_all   (tpm_gmacs_enum_t       gmac_port,
 {
     uint16_t set_id;
     tpm_pattern_entry_t *pattern_set = NULL;
-    
+
     if (pattern_data == NULL)
     {
         TPM_OS_ERROR(TPM_MODZ2_HM_MOD, "NULL pointer\n");
@@ -3604,7 +3609,7 @@ int32_t    tpm_mod2_flush_all   (tpm_gmacs_enum_t       gmac_port,
 	    }
 	    spin_unlock_bh(&tpmMod2JumpEntryLock);
 	}
-	
+
 	if (pattern_data->main_chain_type != TPM_CHAIN_TYPE_NONE) {
 	    for (set_id = 1; set_id < TPM_MOD2_MAX_PATTERN_SETS; set_id++)
 	    {
@@ -3622,7 +3627,7 @@ int32_t    tpm_mod2_flush_all   (tpm_gmacs_enum_t       gmac_port,
 	        }
 	    }
 	}
-	
+
     return TPM_OK;
 }
 
@@ -4365,14 +4370,26 @@ int32_t    tpm_mod2_mac_inv  (tpm_gmacs_enum_t   gmac_port)
 *******************************************************************************/
 int32_t    tpm_mod2_registers_init  (tpm_gmacs_enum_t   gmac_port, uint16_t  txp)
 {
+    uint32_t gmac_mh_en;
 
     TPM_OS_DEBUG(TPM_MODZ2_HM_MOD, "\n");
 
     /* Init PPPOE registers*/
     MV_REG_WRITE (NETA_TX_PMT_PPPOE_TYPE_REG(gmac_port, txp), TPM_MOD2_DEFAULT_PPPOE_ETY);
     MV_REG_WRITE (NETA_TX_PMT_PPPOE_DATA_REG(gmac_port, txp), TPM_MOD2_DEFAULT_PPPOE_DATA);
-    MV_REG_WRITE (NETA_TX_PMT_PPPOE_LEN_REG(gmac_port, txp), TPM_MOD2_DEFAULT_PPPOE_LEN);
     MV_REG_WRITE (NETA_TX_PMT_PPPOE_PROTO_REG(gmac_port, txp), TPM_MOD2_DEFAULT_PPPOE_PROTO);
+
+    if ((TPM_ENUM_GMAC_0 == gmac_port) || (TPM_ENUM_GMAC_1 == gmac_port))
+        tpm_db_gmac_mh_en_conf_get(gmac_port, &gmac_mh_en);
+    else
+        gmac_mh_en = 1;
+
+    TPM_OS_DEBUG(TPM_MODZ2_HM_MOD, "GMAC: (%d), mh_en: (%d)\n", gmac_port, gmac_mh_en);
+
+    if (gmac_mh_en)
+        MV_REG_WRITE (NETA_TX_PMT_PPPOE_LEN_REG(gmac_port, txp), TPM_MOD2_DEFAULT_PPPOE_LEN_MH_EN);
+    else
+        MV_REG_WRITE (NETA_TX_PMT_PPPOE_LEN_REG(gmac_port, txp), TPM_MOD2_DEFAULT_PPPOE_LEN_MH_DIS);
 
     return TPM_OK;
 }
@@ -4518,7 +4535,7 @@ int32_t tpm_mod2_split_mod_create_l2_pmts(tpm_gmacs_enum_t port, tpm_pkt_mod_t *
 		tpm_db_mod2_split_mod_increase_vlan_user_num(port, mod_data);
 		return(TPM_OK);
 	}
-	
+
 	db_ret = tpm_db_mod2_split_mod_insert_vlan(port, mod_data);
 	if (TPM_DB_OK != db_ret)
 	{
@@ -4567,7 +4584,7 @@ int32_t tpm_mod2_split_mod_init(tpm_gmacs_enum_t port)
 {
 	int32_t	    tpm_ret;
 	tpm_pkt_mod_t mod_data;
-	
+
 	if (TPM_SPLIT_MOD_DISABLED == tpm_db_split_mod_get_enable())
 	{
 		TPM_OS_DEBUG(TPM_MODZ2_HM_MOD, "SPLIT_MOD_DISABLED\n");
@@ -4601,16 +4618,51 @@ int32_t tpm_mod2_split_mod_init(tpm_gmacs_enum_t port)
 	return TPM_OK;
 }
 
-int32_t tpm_mod2_split_mod_try_pmt_entry_del(tpm_api_sections_t api_section, 
+void tpm_mod2_split_mod_entry_del(tpm_gmacs_enum_t     gmac_port,
+                                  uint32_t             mod_entry,
+                                  uint32_t             vlan_index)
+{
+	int32_t  tpm_ret;
+	uint32_t i = 0;
+	uint32_t num_pbits;
+	uint32_t user_num = 0;
+
+	/* decrease user number of this vlan */
+	tpm_ret = tpm_db_mod2_split_mod_decrease_vlan_user_num(gmac_port, vlan_index, &user_num);
+	if (TPM_DB_OK != tpm_ret)
+	{
+		TPM_OS_ERROR(TPM_MODZ2_HM_MOD, "failed to decrease vlan user num, index: %d\n", vlan_index);
+		return;
+	}
+
+	/* still other usr, do not remove */
+	if (user_num != 0)
+	{
+		TPM_OS_INFO(TPM_MODZ2_HM_MOD, "still other usr, do not remove, usr num: %d\n", user_num);
+		return;
+	}
+
+	/* remove all the PMT entry for this VLAN */
+	num_pbits = TPM_DB_SPLIT_MOD_P_BIT_NUM_MAX;
+	for(i = 0; i <= num_pbits; i++) {
+		tpm_ret = tpm_mod2_entry_del(TPM_MOD_OWNER_TPM, gmac_port, (vlan_index * 16 + i));
+		if (TPM_DB_OK != tpm_ret)
+		{
+			TPM_OS_ERROR(TPM_MODZ2_HM_MOD, "failed to del split mod, index: %d\n", (vlan_index * 16 + i));
+			return;
+		}
+	}
+
+	return;
+}
+int32_t tpm_mod2_split_mod_try_pmt_entry_del(tpm_api_sections_t api_section,
                                   tpm_gmacs_enum_t     gmac_port,
                                   uint32_t             mod_entry)
 {
 	uint32_t num_vlans;
-	uint32_t num_pbits;
 	uint32_t vlan_index;
-	uint32_t user_num = 0;
-	int32_t  tpm_ret;
-	uint32_t i = 0;
+	tpm_gmacs_enum_t duplicate_gmac;
+	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
 
 	if (!mod_entry) {
 		TPM_OS_DEBUG(TPM_MODZ2_HM_MOD, "mod_entry is zero, PMT do not need to be removed\n");
@@ -4621,13 +4673,16 @@ int32_t tpm_mod2_split_mod_try_pmt_entry_del(tpm_api_sections_t api_section,
 		TPM_OS_DEBUG(TPM_MODZ2_HM_MOD, "SPLIT_MOD_DISABLED, PMT need to be removed\n");
 		return(TPM_FAIL);
 	}
-	
-	if (	(TPM_IPV4_ACL == api_section)
-		 && (mod_entry <= TPM_DB_SPLIT_MOD_P_BIT_NUM_MAX)) {
-		TPM_OS_DEBUG(TPM_MODZ2_HM_MOD, "IPv4 split mod, PMT do not need to be removed\n");
+
+	if (	(    (TPM_IPV4_ACL == api_section)
+		  || (TPM_L4_ACL == api_section)
+		  || (TPM_IPV6_GEN_ACL == api_section)
+		  || (TPM_IPV6_DIP_ACL == api_section))
+	     && (mod_entry <= TPM_DB_SPLIT_MOD_P_BIT_NUM_MAX)) {
+		TPM_OS_DEBUG(TPM_MODZ2_HM_MOD, "IPv4/6 split mod, PMT do not need to be removed\n");
 		return(TPM_OK);
 	}
-	
+
 	if (TPM_L2_PRIM_ACL != api_section) {
 		TPM_OS_DEBUG(TPM_MODZ2_HM_MOD, "Not L2 ACL, PMT need to be removed\n");
 		return(TPM_FAIL);
@@ -4651,32 +4706,22 @@ int32_t tpm_mod2_split_mod_try_pmt_entry_del(tpm_api_sections_t api_section,
 		return(TPM_OK);
 	}
 
-	/* decrease user number of this vlan */
-	tpm_ret = tpm_db_mod2_split_mod_decrease_vlan_user_num(gmac_port, vlan_index, &user_num);
-	if (TPM_DB_OK != tpm_ret)
-	{
-		TPM_OS_ERROR(TPM_MODZ2_HM_MOD, "failed to decrease vlan user num, index: %d\n", vlan_index);
-		return(TPM_OK);
-	}
+	tpm_mod2_split_mod_entry_del(gmac_port, mod_entry, vlan_index);
 
-	/* still other usr, do not remove */
-	if (user_num != 0)
-	{
-		TPM_OS_INFO(TPM_MODZ2_HM_MOD, "still other usr, do not remove, usr num: %d\n", user_num);
-		return(TPM_OK);
+	/* when ds load balance on G0 and G1 is enabled, need to duplicate DS PMT on G0/1 */
+	tpm_db_ds_mac_based_trunk_enable_get(&ds_mac_based_trunk_enable);
+	if (	(TPM_DS_MAC_BASED_TRUNK_ENABLED == ds_mac_based_trunk_enable)
+	     && (TPM_ENUM_GMAC_0 == gmac_port || TPM_ENUM_GMAC_1 == gmac_port)) {
+
+		/* if this is DS and DS_MAC_BASED_TRUNK is ENABLED */
+		if (gmac_port == TPM_ENUM_GMAC_0)
+			duplicate_gmac = TPM_ENUM_GMAC_1;
+		else
+			duplicate_gmac = TPM_ENUM_GMAC_0;
+
+		tpm_mod2_split_mod_entry_del(duplicate_gmac, mod_entry, vlan_index);
 	}
-	
-	/* remove all the PMT entry for this VLAN */
-	num_pbits = TPM_DB_SPLIT_MOD_P_BIT_NUM_MAX;
-	for(i = 0; i <= num_pbits; i++) {
-		tpm_ret = tpm_mod2_entry_del(TPM_MOD_OWNER_TPM, gmac_port, (vlan_index * 16 + i));
-		if (TPM_DB_OK != tpm_ret)
-		{
-			TPM_OS_ERROR(TPM_MODZ2_HM_MOD, "failed to del split mod, index: %d\n", (vlan_index * 16 + i));
-			return(TPM_OK);
-		}
-	}
-    return TPM_OK;
+	return TPM_OK;
 }
 
 

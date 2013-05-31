@@ -80,6 +80,7 @@ static ssize_t mv_eth_help(char *buf)
 	off += sprintf(buf+off, "echo p rxq t       > rxq_type      - set RXQ for different packet types. t=0-bpdu, 1-arp, 2-tcp, 3-udp\n");
 	off += sprintf(buf+off, "echo p             > rx_reset      - reset RX part of the port <p>\n");
 	off += sprintf(buf+off, "echo p txp         > txp_reset     - reset TX part of the port <p/txp>\n");
+	off += sprintf(buf+off, "echo p txp txq     > txq_clean     - clean TXQ <p/txp/txq> - invalidate descripotrs and free buffers\n");
 	off += sprintf(buf+off, "echo p txq tos     > txq_tos       - set <txq> for outgoing IP packets with <tos>\n");
 	off += sprintf(buf+off, "echo p txp txq cpu > txq_def       - set default <txp/txq> for packets sent to port <p> by <cpu>\n");
 	off += sprintf(buf+off, "echo p txp {0|1}   > ejp           - enable/disable EJP mode for <port/txp>\n");
@@ -392,6 +393,8 @@ static ssize_t mv_eth_4_store(struct device *dev,
 		mvNetaTxqShow(p, txp, txq, v);
 	} else if (!strcmp(name, "txq_regs")) {
 		mvNetaTxqRegs(p, txp, txq);
+	} else if (!strcmp(name, "txq_clean")) {
+		err = mv_eth_txq_clean(p, txp, txq);
 	} else {
 		err = 1;
 		printk(KERN_ERR "%s: illegal operation <%s>\n", __func__, attr->attr.name);
@@ -416,6 +419,7 @@ static DEVICE_ATTR(txq_def,     S_IWUSR, mv_eth_show, mv_eth_4_store);
 static DEVICE_ATTR(txq_wrr,     S_IWUSR, mv_eth_show, mv_eth_4_store);
 static DEVICE_ATTR(txq_rate,    S_IWUSR, mv_eth_show, mv_eth_4_store);
 static DEVICE_ATTR(txq_burst,   S_IWUSR, mv_eth_show, mv_eth_4_store);
+static DEVICE_ATTR(txq_clean,   S_IWUSR, mv_eth_show, mv_eth_4_store);
 static DEVICE_ATTR(txp_rate,    S_IWUSR, mv_eth_show, mv_eth_3_store);
 static DEVICE_ATTR(txp_burst,   S_IWUSR, mv_eth_show, mv_eth_3_store);
 static DEVICE_ATTR(txp_reset,   S_IWUSR, mv_eth_show, mv_eth_3_store);
@@ -470,6 +474,7 @@ static struct attribute *mv_eth_attrs[] = {
 	&dev_attr_txq_wrr.attr,
 	&dev_attr_txq_rate.attr,
 	&dev_attr_txq_burst.attr,
+	&dev_attr_txq_clean.attr,
 	&dev_attr_txp_rate.attr,
 	&dev_attr_txp_burst.attr,
 	&dev_attr_txp_reset.attr,

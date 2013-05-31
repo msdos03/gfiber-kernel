@@ -627,7 +627,11 @@ void onuEponPonMngAlarmHandlerExecute(MV_U32 macId)
   if (linkStatusCallback != NULL)
   {
     if (onuEponForceTxDownStateGet(0) != MV_TRUE)
-      linkStatusCallback(MV_FALSE);
+	{ 
+	  mvPonPrint(PON_PRINT_DEBUG, PON_ISR_INT_MODULE, 
+                 "DEBUG: (%s:%d) Notify link is DOWN\n", __FILE_DESC__, __LINE__); 
+      linkStatusCallback(MV_FALSE); 
+    } 
   }
 
   if (onuEponDbOnuHoldoverStateGet() != ONU_HOLDOVER_NOT_ACTIVE)
@@ -924,6 +928,7 @@ void onuEponPonMngIntrMessageHandler(MV_U32 msg)
 				mvPonPrint(PON_PRINT_ERROR, PON_MNG_MODULE,
 						   "ERROR: (%s:%d) Handle Rx Ctrl Frame\n\r", __FILE_DESC__, __LINE__);
 				onuEponPmSwRxCountersAdd(TOTAL_MPCP_RX_ERROR_FRAME_CNT, 0);
+                return;
 			}
 		} while (status == MV_OK);
 
@@ -947,6 +952,7 @@ void onuEponPonMngIntrMessageHandler(MV_U32 msg)
 
 		mvPonPrint(PON_PRINT_ERROR, PON_MNG_MODULE,
 				   "ERROR: (%s:%d) Unsupported Frame\n\r", __FILE_DESC__, __LINE__);
+        return;
 	}
 }
 
@@ -1999,6 +2005,8 @@ MV_STATUS onuEponPonMngRegMsgFlagAck(S_OnuEponRegMpcFrame *mpcFrame)
   linkStatusCallback = onuEponDbLinkStatusCallbackGet();
   if (linkStatusCallback != NULL)
   {
+  	 mvPonPrint(PON_PRINT_DEBUG, PON_ISR_INT_MODULE, 
+                "DEBUG: (%s:%d) Notify link is UP\n", __FILE_DESC__, __LINE__); 
     linkStatusCallback(MV_TRUE);
   }
 
@@ -3104,4 +3112,38 @@ MV_STATUS onuEponDbaModeInit(MV_32 dbaMode)
 
 	return(status);
 }
+
+/*******************************************************************************
+**
+**  onuEponTimerTxPwrHndl
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function start / stop 1 sec timer that will disable Tx if
+**               expired
+**
+**  PARAMETERS:  unsigned long data
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+void onuEponTimerTxPwrHndl(unsigned long data)
+{
+  unsigned long flags;
+
+  spin_lock_irqsave(&onuPonIrqLock, flags);
+
+  onuPonResourceTbl_s.onuPonTxPwrTimerId.onuPonTimerActive = ONU_PON_TIMER_NOT_ACTIVE;
+
+  if (onuEponDbOnuStateGet(0) < ONU_EPON_03_OPERATION)
+  {
+     onuPonTxPowerOn(MV_FALSE);
+  }
+
+  onuPonTimerDisable(&(onuPonResourceTbl_s.onuPonTxPwrTimerId));
+
+  spin_unlock_irqrestore(&onuPonIrqLock, flags);
+}
+
 

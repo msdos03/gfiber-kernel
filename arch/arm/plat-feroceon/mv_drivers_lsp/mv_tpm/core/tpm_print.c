@@ -83,6 +83,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "tpm_common.h"
 #include "tpm_header.h"
 #include "tpm_sysfs_utils.h"
+#include "dbg-trace.h"
 
 /*TODO - currently some printing funtions are directly accessing DB */
 extern tpm_db_t tpm_db;
@@ -152,6 +153,7 @@ db_enum_string_t tpm_db_gmac_func_str[] = {
 	BuildEnumString(TPM_GMAC_FUNC_LAN_AND_WAN),
 	BuildEnumString(TPM_GMAC_FUNC_VIRT_UNI),
 	BuildEnumString(TPM_GMAC_FUNC_LAN_UNI),
+	BuildEnumString(TPM_GMAC_FUNC_US_MAC_LEARN_DS_LAN_UNI),
 };
 
 db_enum_string_t tpm_pnc_ranges_str[] = {
@@ -159,6 +161,7 @@ db_enum_string_t tpm_pnc_ranges_str[] = {
 	BuildEnumString(TPM_PNC_MAC_LEARN),
 	BuildEnumString(TPM_PNC_CPU_WAN_LPBK_US),
 	BuildEnumString(TPM_PNC_NUM_VLAN_TAGS),
+	BuildEnumString(TPM_PNC_DS_LOAD_BALANCE),
 	BuildEnumString(TPM_PNC_VIRT_UNI),
 	BuildEnumString(TPM_PNC_MULTI_LPBK),
 	BuildEnumString(TPM_PNC_LOOP_DET_US),
@@ -167,7 +170,7 @@ db_enum_string_t tpm_pnc_ranges_str[] = {
 	BuildEnumString(TPM_PNC_IGMP),
 	BuildEnumString(TPM_PNC_IPV4_MC_DS),
 	BuildEnumString(TPM_PNC_IPV4_MAIN),
-	BuildEnumString(TPM_PNC_TCP_FLAG),
+	BuildEnumString(TPM_PNC_IPV4_TCP_FLAG),
 	BuildEnumString(TPM_PNC_TTL),
 	BuildEnumString(TPM_PNC_IPV4_PROTO),
 	BuildEnumString(TPM_PNC_IPV4_FRAG),
@@ -179,6 +182,7 @@ db_enum_string_t tpm_pnc_ranges_str[] = {
 	BuildEnumString(TPM_PNC_IPV6_MC_DS),
 	BuildEnumString(TPM_PNC_IPV6_NH),
 	BuildEnumString(TPM_PNC_IPV6_L4_MC_DS),
+	BuildEnumString(TPM_PNC_IPV6_TCP_FLAG),
 	BuildEnumString(TPM_PNC_IPV6_L4),
 	BuildEnumString(TPM_PNC_CNM_IPV4_PRE),
 	BuildEnumString(TPM_PNC_CNM_MAIN),
@@ -209,16 +213,22 @@ static tpm_str_map_t api_section_str[] = {
 
 static tpm_str_map_t api_type_str[] = {
 	{TPM_API_MGMT, "MNGMT"},
-	{TPM_API_CPU_LOOPBACK, "CPU_LOOPBACK"},
+	{TPM_API_MAC_LEARN,       "MAC_LEARN   "},
+	{TPM_API_DS_LOAD_BALANCE, "DS_LOAD_BAL "},
+	{TPM_API_CPU_LOOPBACK,    "CPU_LOOPBACK"},
 	{TPM_API_L2_PRIM, "L2      "},
 	{TPM_API_L3_TYPE, "L3      "},
-	{TPM_API_IPV4, "IPV4    "},
+	{TPM_API_IPV4,    "IPV4    "},
 	{TPM_API_IPV4_MC, "IPV4_MC "},
 	{TPM_API_IPV6_GEN, "IPV6_GEN"},
 	{TPM_API_IPV6_DIP, "IPV6_DIP"},
+	{TPM_API_IPV6_MC, "IPV6_MC"},
 	{TPM_API_IPV6_NH, "IPV6_NH "},
 	{TPM_API_IPV6_L4, "L4      "},
+	{TPM_API_CNM,     "CNM     "},
 };
+char *tpm_db_params_illegal_str = "??";
+
 
 
 /********************************************************************************/
@@ -306,7 +316,7 @@ static uint8_t *api_sec_to_str(tpm_api_sections_t api_section)
 * COMMENTS:
 *
 *******************************************************************************/
-static uint8_t *api_type_to_str(tpm_api_type_t api_type)
+uint8_t *api_type_to_str(tpm_api_type_t api_type)
 {
 	uint32_t i;
 
@@ -314,7 +324,7 @@ static uint8_t *api_type_to_str(tpm_api_type_t api_type)
 		if (api_type_str[i].enum_in == api_type)
 			return (&(api_type_str[i].str_out[0]));
 	}
-	return (NULL);
+	return (tpm_db_params_illegal_str);
 }
 
 /*******************************************************************************
@@ -824,10 +834,10 @@ void tpm_print_misc(void)
 	printk("Debug port          %4d\n", tpm_db.init_misc.pnc_init_debug_port);
 	printk("PON type            %s\n", pon_type[tpm_db.init_misc.pon_type]);
 
-	if ((tpm_db.init_misc.backup_wan < TPM_MAX_GMAC) && (tpm_db.init_misc.backup_wan >= TPM_ENUM_GMAC_0))
-		printk("Backup WAN          %s\n", gmac_name[tpm_db.init_misc.backup_wan]);
+	if ((tpm_db.init_misc.active_wan <= TPM_MAX_GMAC) && (tpm_db.init_misc.active_wan >= TPM_ENUM_GMAC_0))
+		printk("Active WAN          %s\n", gmac_name[tpm_db.init_misc.active_wan]);
 	else
-		printk("Backup WAN          N/A");
+		printk("Active WAN          N/A");
 	printk("DS MH select source %4d\n", tpm_db.init_misc.ds_mh_set_conf);
 	printk("CFG PNC parse       %4d\n", tpm_db.init_misc.cfg_pnc_parse);
 	printk("CPU loopback        %4d\n", tpm_db.init_misc.cpu_loopback);
@@ -1067,24 +1077,6 @@ void tpm_print_api_dump_head(void)
 	printk("==========================================================================================================================================================\n");
 }
 
-char *tpm_db_params_illegal_str = "??";
-
-char *tpm_db_api_type_str[TPM_MAX_API_TYPES] = {
-	"MGNT",
-	"MAC_LEARN",
-	"CPU_LPBK",
-	"L2",
-	"L3",
-	"IPV4",
-	"IPV4_MC",
-	"IPV6_GEN",
-	"IPV6_DIP",
-	"IPV6_MC",
-	"IPV6_NH",
-	"IPV6_L4",
-	"CTC_CNM"
-};
-
 char *tpm_db_src_port_str[] = {
        "UNI_0",
 	"UNI_1",
@@ -1225,6 +1217,8 @@ tpm_str_map_t *tpm_db_parse_type_str[TPM_MAX_API_TYPES] = {
 	tpm_db_none_parse_type_str,
 	/* TPM_API_MAC_LEARN */
 	tpm_db_none_parse_type_str,
+	/* TPM_API_DS_LOAD_BALANCE */
+	tpm_db_l2_parse_type,
 	/* TPM_API_CPU_LOOPBACK */
 	tpm_db_none_parse_type_str,
 	/* TPM_API_L2_PRIM */
@@ -1235,16 +1229,16 @@ tpm_str_map_t *tpm_db_parse_type_str[TPM_MAX_API_TYPES] = {
 	tpm_db_ipv4_parse_type,
 	/* TPM_API_IPV4_MC */
 	tpm_db_ipv4_mc_parse_type,
+	/* TPM_API_IPV6_NH */
+	tpm_db_ipv6_nh_parse_type,
+	/* TPM_API_IPV6_L4 */
+	tpm_db_ipv6_l4_parse_type,
 	/* TPM_API_IPV6_GEN */
 	tpm_db_ipv6_gen_parse_type,
 	/* TPM_API_IPV6_DIP */
 	tpm_db_ipv6_dip_parse_type,
 	/* TPM_API_IPV6_MC */
 	tpm_db_ipv6_mc_parse_type,
-	/* TPM_API_IPV6_NH */
-	tpm_db_ipv6_nh_parse_type,
-	/* TPM_API_IPV6_L4 */
-	tpm_db_ipv6_l4_parse_type,
 	/* TPM_API_CTC_CM */
 	tpm_db_ctc_cm_parse_type,
 };
@@ -1485,7 +1479,7 @@ void tpm_print_api_dump_line(uint8_t first_rule,
 
 		if (first_rule) {
 			if (api_type < TPM_MAX_API_TYPES)
-				api_type_str = tpm_db_api_type_str[api_type];
+				api_type_str = api_type_to_str(api_type);
 			else
 				api_type_str = tpm_db_params_illegal_str;
 		}
@@ -1743,7 +1737,7 @@ void tpm_print_api_dump(tpm_api_type_t api_type)
 
 	if (-1 == next_rule) {
 		if (api_type < TPM_MAX_API_TYPES)
-			api_type_str = tpm_db_api_type_str[api_type];
+			api_type_str = api_type_to_str(api_type);
 		else
 			api_type_str = tpm_db_params_illegal_str;
 
@@ -2474,6 +2468,8 @@ void tpm_print_fc(unsigned int print_only)
 		printk(KERN_INFO "UNEXPECTED ERROR\n");
 		return;
 	}
+
+	//TRC_OUTPUT(0,1);
 
 	printk(KERN_INFO "---------------------------------------------------------------------------------\n");
 	printk(KERN_INFO "FC is %s\n", (tpm_fc_is_running() == MV_TRUE) ? "ENABLED" : "DISABLED");

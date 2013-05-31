@@ -88,6 +88,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Global Variables
 ------------------------------------------------------------------------------*/
+extern MV_BOOL onuGponLogEnable;
 
 /* Local Variables
 ------------------------------------------------------------------------------*/
@@ -2373,6 +2374,59 @@ int onuGponUiDebugManagerAcCouplingGet(char *buf)
 	return(off);
 }
 
+/*******************************************************************************
+**
+**  onuGponUiDebugManagerActiveTxBitmapSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function configures UTM Active TX Bitmap
+**
+**  PARAMETERS:  MV_U32 bitmap - bitmap
+**               MV_U32 valid  - valid
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+void onuGponUiDebugManagerActiveTxBitmapSet(MV_U32 bitmap, MV_U32 valid)
+{
+	mvOnuGponMacUtmActiveTxBitmapSet(bitmap);
+	mvOnuGponMacUtmActiveTxBitmapValidSet(valid);
+}
+
+/*******************************************************************************
+**
+**  onuGponUiDebugManagerActiveTxBitmapGet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function prints UTM Active TX bitmap
+**
+**  PARAMETERS:  char *buf
+**
+**  OUTPUTS:     char *buf
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+int onuGponUiDebugManagerActiveTxBitmapGet(char *buf)
+{
+
+	int        off = 0;
+	MV_U32     bitmap, valid;
+	MV_STATUS  status;
+
+
+	status  = mvOnuGponMacUtmActiveTxBitmapConfigGet(&bitmap, &valid);
+
+	if (status != MV_OK)
+		off += mvOsSPrintf(buf+off, "Failed to obtain UTM Active TX bitmap!\n");
+	else
+		off += mvOsSPrintf(buf+off, "UTM Active TX bitmap = %#x valid = %d\n", bitmap, valid);
+
+	return(off);
+}
+
 
 /*******************************************************************************
 **
@@ -2607,8 +2661,10 @@ int onuGponUiProtoHelpShow(char* buf)
 	off += mvOsSPrintf(buf+off, " echo 0                         > clearFifoCnts - clear all SW FIFO counters\n");
 	off += mvOsSPrintf(buf+off, " echo [enable(1) or disable(0)] > fifoSupport - config US SW FIFO support\n");
 	if (devId == MV_6601_DEV_ID){
-		off += mvOsSPrintf(buf+off, " echo [Mode] [Time] [Pattern1] [Pattern2] > acCoupling - "
-									"configure TX AC Coupling parameters\n");
+		off += mvOsSPrintf(buf+off, " echo [Mode] [Burst_Time] [Pattern1] [Pattern2] > acCoupling - "
+									"configure TX AC Coupling parameters\r\n");
+		off += mvOsSPrintf(buf+off, " echo [Bitmap] [Valid]                    > activeTxBm - "
+									"configure UTM Active TX Bitmap\n");
 	}
 	off += mvOsSPrintf(buf+off, "============================================================================\n");
 	off += mvOsSPrintf(buf+off, "Display Commands: cat <file>\n");
@@ -2618,6 +2674,8 @@ int onuGponUiProtoHelpShow(char* buf)
 	if (devId == MV_6601_DEV_ID){
 		off += mvOsSPrintf(buf+off, " cat acCoupling                           - "
 									"dump TX AC Coupling parameters\n");
+		off += mvOsSPrintf(buf+off, " cat activeTxBm - "
+									"show UTM Active TX Bitmap\n");
 	}
 	off += mvOsSPrintf(buf+off, "============================================================================\n");
 
@@ -2903,11 +2961,14 @@ void onuGponUiDebugUponModeSet(MV_U32 uponMode)
 void onuGponUiCfgSetPatternBurst(MV_U32 enable,MV_U32 pattern, MV_U32 burst, MV_U32 duration, MV_U32 period)
 {
 
-    if (enable == 0) {
-        onuPonPatternBurstOff();
+    if (enable == 0)
+    {
+      onuPonPatternBurstOff();
     }
-    else{
-        onuPonPatternBurstOn(pattern, (MV_BOOL)burst, period, duration);
+    else
+    {
+      onuPonTxPowerOn(MV_TRUE);
+      onuPonPatternBurstOn(pattern, (MV_BOOL)burst, period, duration);
     }
 
 }
@@ -3127,6 +3188,43 @@ void onuGponUiT02IntervalConfig(MV_U32 interval)
 
 }
 
+/*******************************************************************************
+**
+**  onuGponUiSyncLogEnable
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function
+**
+**  PARAMETERS:  MV_U32 enable
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+void onuGponUiSyncLogEnable(MV_U32 enable)
+{
+	onuGponSyncLogEnable(enable);
+}
+
+/*******************************************************************************
+**
+**  onuGponUiSyncLogPrint
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+void onuGponUiSyncLogPrint(void)
+{
+	onuGponSyncLogPrint();
+}
 
 /*******************************************************************************
 **
@@ -3184,12 +3282,31 @@ int onuGponUiMiscHelpShow(char* buf)
 						"config T01 timer interval in mS\n");
 	off += mvOsSPrintf(buf+off, " echo [T02 Interval]             > t02IntervalCfg  - "
 						"config T02 timer interval in mS\n");
+	off += mvOsSPrintf(buf+off, " echo [0]                        > syncLogEnable  - Enable or Disable record GPON range log\n");
 	off += mvOsSPrintf(buf+off, "============================================================================\n");
 	off += mvOsSPrintf(buf+off, "Display Commands: cat <file>\n");
 	off += mvOsSPrintf(buf+off, "============================================================================\n");
 	off += mvOsSPrintf(buf+off, " cat printMask                                     - dump printing options\n");
+    off += mvOsSPrintf(buf+off, " cat syncLogEnable                                 - dump GPON range log enable status\n");
+    off += mvOsSPrintf(buf+off, " cat syncLog                                       - print GPON range log\n");
 
 	return(off);
+}
+
+int onuGponUiSyncLogEnableShow()
+{
+    printk("The Sync Log is ");
+    
+    if (onuGponLogEnable == MV_TRUE)
+    {
+        printk("enabled\r\n");
+    }
+    else
+    {
+        printk("disabled\r\n");
+    }
+    
+    return 0;
 }
 
 /******************************************************************************/
@@ -3227,6 +3344,10 @@ static ssize_t misc_show(struct device *dev,
 		return ponOnuPrintStatus(buf);
 	else if (!strcmp(name, "helpMisc"))
 		return onuGponUiMiscHelpShow(buf);
+	else if (!strcmp(name, "syncLogEnable"))	/* sync log enable or disable */
+		onuGponUiSyncLogEnableShow();
+    else if (!strcmp(name, "syncLog"))	/* sync log stop */
+		onuGponUiSyncLogPrint();
 
 	return 0;
 }
@@ -3287,6 +3408,8 @@ static ssize_t misc_store(struct device *dev,
 		onuGponUiT01IntervalConfig((MV_U32)param1);
 	else if (!strcmp(name, "t02IntervalCfg"))	/* T02 interval in mS */
 		onuGponUiT02IntervalConfig((MV_U32)param1);
+	else if (!strcmp(name, "syncLogEnable"))	/* sync log enable or disable */
+		onuGponUiSyncLogEnable((MV_U32)param1);
 	else
 		printk(KERN_ERR "%s: illegal operation <%s>\n", __func__, attr->attr.name);
 
@@ -3318,6 +3441,8 @@ static DEVICE_ATTR(adminCfg,              S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(helpMisc,              S_IRUSR, misc_show, misc_store);
 static DEVICE_ATTR(t01IntervalCfg,        S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(t02IntervalCfg,        S_IWUSR, misc_show, misc_store);
+static DEVICE_ATTR(syncLogEnable,         S_IRUSR | S_IWUSR, misc_show, misc_store);
+static DEVICE_ATTR(syncLog,               S_IRUSR, misc_show, misc_store);
 
 static struct attribute *misc_attrs[] = {
 	&dev_attr_serialNumCfg.attr,
@@ -3340,6 +3465,8 @@ static struct attribute *misc_attrs[] = {
 	&dev_attr_adminCfg.attr,
 	&dev_attr_t01IntervalCfg.attr,
 	&dev_attr_t02IntervalCfg.attr,
+	&dev_attr_syncLogEnable.attr,
+	&dev_attr_syncLog.attr,
 	NULL
 };
 
@@ -3378,6 +3505,8 @@ static ssize_t protocol_show(struct device *dev,
 	else if (devId == MV_6601_DEV_ID) {
 		if (!strcmp(name, "acCoupling"))
 			return onuGponUiDebugManagerAcCouplingGet(buf);
+		else if (!strcmp(name, "activeTxBm"))
+			return onuGponUiDebugManagerActiveTxBitmapGet(buf);
 	}
 	return 0;
 }
@@ -3435,9 +3564,11 @@ static ssize_t protocol_store(struct device *dev,
 	else if (!strcmp(name, "fifoSupport"))		/* enable/disable */
 		onuGponUiDebugManagerFifoSupportSet((MV_U32)param1);
 	else if (devId == MV_6601_DEV_ID) {
-		if (!strcmp(name, "acCoupling"))				/* mode, time, pattern1, pattern2 */
-			onuGponUiDebugManagerAcCouplingSet((MV_U32)param1, (MV_U32)param2, (MV_U32)param3,
-							   (MV_U32)param4);
+		if (!strcmp(name, "acCoupling"))	
+            /* mode, time, pattern1, pattern2 */
+			onuGponUiDebugManagerAcCouplingSet((MV_U32)param1, (MV_U32)param2, (MV_U32)param3, (MV_U32)param4);
+		else if (!strcmp(name, "activeTxBm"))				/* bitmap, valid */
+			onuGponUiDebugManagerActiveTxBitmapSet((MV_U32)param1, (MV_U32)param2);
 		else
 			printk(KERN_ERR "%s: illegal operation <%s>\n", __func__, attr->attr.name);
 	} else
@@ -3467,6 +3598,8 @@ static DEVICE_ATTR(ploamBurstRcv,    S_IWUSR, protocol_show, protocol_store);
 static DEVICE_ATTR(ploamBurstCfg,    S_IWUSR, protocol_show, protocol_store);
 static DEVICE_ATTR(clearFifoCnts,    S_IWUSR, protocol_show, protocol_store);
 static DEVICE_ATTR(fifoSupport,      S_IWUSR, protocol_show, protocol_store);
+static DEVICE_ATTR(acCoupling,       S_IRUSR | S_IWUSR, protocol_show, protocol_store);
+static DEVICE_ATTR(activeTxBm,       S_IRUSR | S_IWUSR, protocol_show, protocol_store);
 static DEVICE_ATTR(helpProto,        S_IRUSR, protocol_show, protocol_store);
 
 static struct attribute *protocol_attrs[] = {
@@ -3486,6 +3619,8 @@ static struct attribute *protocol_attrs[] = {
 	&dev_attr_ploamBurstCfg.attr,
 	&dev_attr_clearFifoCnts.attr,
 	&dev_attr_fifoSupport.attr,
+	&dev_attr_acCoupling.attr, 
+	&dev_attr_activeTxBm.attr,
 	&dev_attr_helpProto.attr,
 	NULL
 };

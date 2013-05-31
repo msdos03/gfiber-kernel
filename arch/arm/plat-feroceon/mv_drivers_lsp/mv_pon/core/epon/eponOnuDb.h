@@ -353,10 +353,11 @@ typedef struct
   DYINGGASPFUNC    onuDgCallback;
   LINKSTATUSFUNC   onuLinkStatusCallback;
   MV_U32           onuEponMode;
+  MV_U32           onuEponP2PForceMode;
   MV_U32           onuEponPcsCfg;             
   MV_U32           onuEponOverHead;             
   MV_U32           onuEponPhyOutput;             
-  MV_U32           onuEponXvrPolarity;             
+  MV_U32           onuEponXvrBurstEnPolarity;
 }S_OnuEponGenTbl;                                     
 
 /* ONU EPON Data Path tables */
@@ -506,12 +507,14 @@ MV_STATUS matchDestAddressToMacId(MV_U8 *destAddr, MV_U32 *macId);
 
 MV_STATUS   onuEponDbModeSet(MV_U32 mode);
 MV_U32      onuEponDbModeGet(void);
+MV_STATUS   onuEponDbP2PForceModeSet(MV_U32 mode);
+MV_U32      onuEponDbP2PForceModeGet(void);
 MV_STATUS   onuEponDbPcsCfgSet(MV_U32 val);
 MV_U32      onuEponDbPcsCfgGet(void);
 MV_STATUS   onuEponDbOverheadSet(MV_U32 val);
 MV_U32      onuEponDbOverheadGet(void);
-MV_STATUS   onuEponDbXvrPolaritySet(MV_U32 val);
-MV_U32      onuEponDbXvrPolarityGet(void);
+MV_STATUS   onuEponDbBurstEnablePolaritySet(MV_U32 val);
+MV_U32      onuEponDbBurstEnablePolarityGet(void);
 
 /* Macros
 ------------------------------------------------------------------------------*/    

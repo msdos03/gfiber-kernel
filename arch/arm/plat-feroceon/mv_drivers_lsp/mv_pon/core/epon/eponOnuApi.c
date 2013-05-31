@@ -757,35 +757,82 @@ MV_STATUS onuEponApiLinkStatusCallbackRegister(void)
 **
 **  onuEponLinkIsUp
 **  ____________________________________________________________________________
-** 
+**
 **  DESCRIPTION: The function register Link Status callback function
-**               
+**
 **  PARAMETERS:  None
 **
 **  OUTPUTS:     None
 **
 **  RETURNS:     MV_TRUE or MV_FLASE
-**                   
+**
 *******************************************************************************/
 MV_BOOL onuEponLinkIsUp(void)
 {
-  MV_U32 mode;
+	MV_U32 mode;
 
-  mode = onuEponDbModeGet();
+	mode = onuEponDbModeGet();
 
-  if (onuEponForceTxDownStateGet(0) == MV_TRUE)
-    return(MV_TRUE);
+	if (onuEponForceTxDownStateGet(0) == MV_TRUE)
+	{
+        return (MV_TRUE);
+	}
 
-  if (mode == E_EPON_IOCTL_STD_MODE) 
-  {
-    if (onuEponDbOnuStateGet(0) == ONU_EPON_03_OPERATION) return(MV_TRUE);
-    else                                                  return(MV_FALSE);
-  }
-  else /* P2P */
-  {
-    if (onuEponDbOnuSignalDetectGet() == 1) return(MV_TRUE);
-    else                                    return(MV_FALSE);
-  }
+	if (mode == E_EPON_IOCTL_STD_MODE)
+	{
+        if (onuEponDbOnuStateGet(0) == ONU_EPON_03_OPERATION)
+        {
+            return (MV_TRUE);
+        }
+        else
+        {
+            return (MV_FALSE);
+        }
+	}
+	else /* P2P */
+	{
+        if (onuEponDbOnuSignalDetectGet() == 1)
+        {
+            mvPonPrint(PON_PRINT_DEBUG, PON_API_MODULE,
+                       "DEBUG: (%s:%d) onuPonLinkIsUp, UP\n", __FILE_DESC__, __LINE__);
+            return (MV_TRUE);
+        }
+        else
+        {
+            mvPonPrint(PON_PRINT_DEBUG, PON_API_MODULE,
+                       "DEBUG: (%s:%d) onuPonLinkIsUp, DOWN\n", __FILE_DESC__, __LINE__);
+            return (MV_FALSE);
+        }
+	}
+}
+
+MV_STATUS mvEponApi2kSupportedSet(MV_U32 pkt2kSupported)
+{
+    MV_STATUS status;
+    MV_U32    devId;
+
+    devId = mvCtrlModelGet();
+	if (devId != MV_6601_DEV_ID)
+	{
+		return(MV_OK);
+	}
+
+    //status =  mvOnuEponMacPcsRxEnableSet(EPON_PCS_CONFIG_RX_DISABLE);
+
+    if (pkt2kSupported == 1)  /* 2K packet supported */
+    {
+        status |= mvOnuEponMacPcsFrameSizeLimitsSet(EPON_MAC_PCS_FRAME_SIZE_LIMIT_SIZE_2K_SUPP, 
+                                                    EPON_MAC_PCS_FRAME_SIZE_LIMIT_LATENCY_2K_SUPP);
+        status |= mvOnuEponMacRxpDataFifoThresholdSet(EPON_MAC_RXP_DATA_FIFO_THRESHOLD_2K_SUPP);
+    }
+    else if (pkt2kSupported == 0)
+    {
+        status |= mvOnuEponMacPcsFrameSizeLimitsSet(EPON_MAC_PCS_FRAME_SIZE_LIMIT_SIZE_DEF, 
+                                                    EPON_MAC_PCS_FRAME_SIZE_LIMIT_LATENCY_DEF);
+        status |= mvOnuEponMacRxpDataFifoThresholdSet(EPON_MAC_RXP_DATA_FIFO_THRESHOLD_DEF);
+    }
+
+    return (status);
 }
 
 

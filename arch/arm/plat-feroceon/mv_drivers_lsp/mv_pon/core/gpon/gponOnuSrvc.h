@@ -80,11 +80,29 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ------------------------------------------------------------------------------*/
  
 /* Definitions
-------------------------------------------------------------------------------*/ 
+------------------------------------------------------------------------------*/
+#define ONU_GPON_LOG_INTERRUPT			(1)
+#define ONU_GPON_LOG_INTERRUPT_XVR_SD		(2)
+#define ONU_GPON_LOG_INTERRUPT_LOF		(3)
+#define ONU_GPON_LOG_INTERRUPT_SERDES_START	(4)
+#define ONU_GPON_LOG_INTERRUPT_SERDES_STOP	(5)
+#define ONU_GPON_LOG_STATE			(6)
+#define ONU_GPON_LOG_MSG			(7)
+#define ONU_GPON_LOG_MSG_CONTENT		(8)
 
-/* Enums                              
-------------------------------------------------------------------------------*/ 
-  
+#define ONU_GPON_LOG_SIZE                       (512)
+
+#define TCONT_CLEAN_EVENT                       (0)
+#define TCONT_CLEAN_ALL_EVENT                   (1)
+#define TCONT_ACTIVE_EVENT                      (2)
+
+#define TCONT_FLUSH_READY_STATE                 (1)
+#define TCONT_FLUSH_RUNNING_STATE               (2)
+#define TCONT_FLUSH_BLOCKING_STATE              (3)
+
+/* Enums
+------------------------------------------------------------------------------*/
+
 /* Typedefs
 ------------------------------------------------------------------------------*/
 typedef struct
@@ -93,8 +111,22 @@ typedef struct
   MV_U32 blockSize;
 }S_DbrBlockSize;
 
+typedef struct
+{
+  MV_U16  event;
+  MV_U16  state;
+  MV_U32  time;
+  MV_U32  dataVal1;
+  MV_U32  dataVal2;
+  MV_U32  dataVal3;
+}S_OnuGponLogEntry;
+
 /* Global variables
 ------------------------------------------------------------------------------*/
+extern S_onuPonWork      gponTcontCleanWork[8];
+extern S_onuPonWork      gponTcontCleanAllWork;
+extern S_onuPonWork      gponTcontActiveWork[8];
+extern S_onuPonWorkQueue gponTcontFlushWq;
 
 /* Global functions
 ------------------------------------------------------------------------------*/
@@ -111,6 +143,14 @@ unsigned int  onuGponSrvcCalcCrc(unsigned char msg[], int size);
 void          onuGponSrvcAesKeyGenerate(MV_U8 *key);
 MV_STATUS     onuGponSrvcDbrBlockSizeSet(MV_U32 blockSize, MV_U32 *actualBlockSize);
 MV_STATUS     onuGponSrvcRangingRandomInit(void);
+
+void 	      onuGponSyncLog(MV_U32 event, MV_U32 data1, MV_U32 data2, MV_U32 data3);
+void 	      onuGponSyncLogEnable(MV_U32 enable);
+void 	      onuGponSyncLogPrint(void);
+
+extern void onuGponWqTcontFunc(struct work_struct *work);
+extern MV_STATUS onuGponWqTcontFlush(MV_U32 tcont);
+extern MV_STATUS onuGponWqTcontActivate(MV_U32 tcont);
 
 /* Macros
 ------------------------------------------------------------------------------*/    

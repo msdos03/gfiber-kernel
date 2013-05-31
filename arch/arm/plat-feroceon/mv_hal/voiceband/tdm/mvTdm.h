@@ -164,11 +164,27 @@ typedef struct {
 	MV_FRAME_TS frameTs;
 } MV_TDM_HAL_DATA;
 
+#ifdef MV_TDM_EXT_STATS
+typedef struct {
+	MV_U32 intRxCount;
+	MV_U32 intTxCount;
+	MV_U32 intRx0Count;
+	MV_U32 intTx0Count;
+	MV_U32 intRx1Count;
+	MV_U32 intTx1Count;
+	MV_U32 intRx0Miss;
+	MV_U32 intTx0Miss;
+	MV_U32 intRx1Miss;
+	MV_U32 intTx1Miss;
+	MV_U32 pcmRestartCount;
+} MV_TDM_EXTENDED_STATS;
+#endif
+
 /* APIs */
 MV_STATUS mvTdmHalInit(MV_TDM_PARAMS *tdmParams, MV_TDM_HAL_DATA *halData);
 MV_STATUS mvTdmWinInit(MV_UNIT_WIN_INFO *addrWinMap);
 MV_VOID mvTdmRelease(MV_VOID);
-MV_VOID mvTdmIntLow(MV_TDM_INT_INFO *tdmIntInfo);
+MV_32 mvTdmIntLow(MV_TDM_INT_INFO *tdmIntInfo);
 MV_VOID mvTdmPcmStart(MV_VOID);
 MV_VOID mvTdmPcmStop(MV_VOID);
 MV_STATUS mvTdmTx(MV_U8 *tdmTxBuff);
@@ -180,4 +196,9 @@ MV_U8 currRxSampleGet(MV_U8 ch);
 MV_U8 currTxSampleGet(MV_U8 ch);
 MV_VOID mvTdmIntEnable(MV_VOID);
 MV_VOID mvTdmIntDisable(MV_VOID);
+MV_VOID mvTdmPcmIfReset(MV_VOID);
+#ifdef MV_TDM_EXT_STATS
+MV_VOID mvTdmExtStatsGet(MV_TDM_EXTENDED_STATS* tdmExtStats);
+#endif
+
 #endif /* __INCmvTdmh */

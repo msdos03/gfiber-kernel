@@ -898,8 +898,14 @@ int mvEponCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd,
       }
 
 	  spin_lock_irqsave(&onuPonIrqLock, flags);
-      if (ioctlState) status = mvP2PStart();
-      else            status = mvP2PStop();
+      if (ioctlState)
+      {
+        status = mvP2PStart();
+      }
+      else
+      {
+        status = mvP2PStop();
+      }
 	  spin_unlock_irqrestore(&onuPonIrqLock, flags);
 
       if (status != MV_OK)
@@ -908,6 +914,29 @@ int mvEponCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd,
       ret = 0;
       break;
 
+    /* ====== MVEPON_IOCTL_P2P_ FORCE_MODE_SET ==================== */
+    case MVEPON_IOCTL_P2P_FORCE_MODE_SET:
+        if (copy_from_user(&ioctlState, (MV_U32*)arg, sizeof(MV_U32)))
+        {
+            mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+                       "ERROR: (%s:%d) copy_from_user failed\n", __FILE_DESC__, __LINE__);
+            goto ioctlErr;
+        }
+
+        spin_lock_irqsave(&onuPonIrqLock, flags);
+        
+        onuEponDbP2PForceModeSet(ioctlState);
+        
+        spin_unlock_irqrestore(&onuPonIrqLock, flags);
+
+        if (status != MV_OK)
+        {
+            goto ioctlErr;
+        }
+
+        ret = 0;
+        break;
+        
     /* ====== MVEPON_IOCTL_TDM_QUE_CFG ==================== */
     case MVEPON_IOCTL_TDM_QUE_CFG:
       if(copy_from_user(&ioctlTdmQueue,  (S_EponIoctlTdmQueue*)arg, sizeof(S_EponIoctlTdmQueue)))

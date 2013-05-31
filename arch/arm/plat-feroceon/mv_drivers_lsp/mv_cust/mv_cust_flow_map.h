@@ -36,17 +36,19 @@
 /****************************************************************************** 
  *                        Data Enum and Structure                                                                                                                                  
  ******************************************************************************/
-#define MVCUST_TRACE_PRINT(format, ...)   printk("%s(%d):  "format,__FUNCTION__,__LINE__, ##__VA_ARGS__)
+#define MVCUST_TRACE_PRINT(level, format, ...)   printk(level "%s(%d):"format, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 #define MV_CUST_OK                        (0)
 #define MV_CUST_FAIL                      (1)
 
+#define CPH_MAX_TCONT_NUM                 (8)    /* Maximum T-CONT number    */
+#define CPH_INVALID_TRGT_QUEUE            (0xFF) /* Invalid target queue number  */
 
 #define MV_CUST_VID_NOT_CARE_VALUE        (4096) /* Does not care for VID    */
-#define MV_CUST_PBITS_NOT_CARE_VALUE      (8)     /* Does not care for P-bits */
-#define MV_CUST_DSCP_NOT_CARE_VALUE       (64)     /* Does not care for DSCP   */
+#define MV_CUST_PBITS_NOT_CARE_VALUE      (8)    /* Does not care for P-bits */
+#define MV_CUST_DSCP_NOT_CARE_VALUE       (64)   /* Does not care for DSCP   */
 
-#define MV_CUST_MAX_TRG_PORT_VALUE        (2+8-1)/* Maximum target port value, T-CONT7 */
+#define MV_CUST_MAX_TRG_PORT_VALUE        (8-1)  /* Maximum target port value, T-CONT7 */
 #define MV_CUST_MAX_TRG_QUEUE_VALUE       (7)    /* Maximum target queue value         */
 #define MV_CUST_MAX_GEM_PORT_VALUE        (4095) /* Maximum GEM port value             */
 
@@ -314,5 +316,44 @@ int mv_cust_map_table_print(void);
 *******************************************************************************/    
 int mv_cust_flow_map_init(void);
 
+/*******************************************************************************
+**
+** mv_cust_get_tcont_state
+** ___________________________________________________________________________
+**
+** DESCRIPTION: The function get T-CONT state
+**
+** INPUTS:
+**   tcont - T-CONT
+**
+** OUTPUTS:
+**   None. 
+**
+** RETURNS:     
+**   state - State of T-CONT, enabled or disabled.  
+**
+*******************************************************************************/
+bool mv_cust_get_tcont_state(uint32_t tcont);
+
+/*******************************************************************************
+**
+** mv_cust_set_tcont_state
+** ___________________________________________________________________________
+**
+** DESCRIPTION: The function sets T-CONT state in mv_cust
+**
+** INPUTS:
+**   tcont - T-CONT
+**   state - State of T-CONT, enabled or disabled.
+**
+** OUTPUTS:
+**   None. 
+**
+** RETURNS:     
+**  On success, the function returns (MV_OK). On error different types are 
+**  returned according to the case.  
+**
+*******************************************************************************/
+MV_STATUS mv_cust_set_tcont_state(uint32_t tcont, bool state);
 
 #endif /* __mv_cust_flow_map_h__ */

@@ -2551,7 +2551,7 @@ void sfs_tpm_cfg_set_ipv6_l4_key_rule(const char *buf, size_t len)
         else {
             if ((pentry = find_tpm_ipv6_l4_ports_key_entry_by_name(name)) == 0)
                 pentry = find_free_tpm_ipv6_l4_ports_key_entry();
-			
+
             if (pentry == 0)
                 printk(KERN_INFO "IPV6 L4 ports key DB full\n");
             else {

@@ -153,7 +153,7 @@ void mv_mac_learn_aging(unsigned long mac_learn_aging)
 	uint32_t i;
 	const uint32_t tpm_owner_id = TPM_MOD_OWNER_TPM;
 	uint32_t pnc_idx, read_count,hit_count = 0;
-	uint32_t fdb_valid_count;
+	uint32_t fdb_nonstatic_valid_count;
 	tpm_l2_acl_key_t del_mac_key;
 	mac_learn_db_entry_t mac_learn_db_entry;
 	tpm_db_pnc_range_conf_t range_conf;
@@ -197,9 +197,9 @@ void mv_mac_learn_aging(unsigned long mac_learn_aging)
 						} else {
 							/* dec non static entry count */
 							mac_learn_db_nonstatic_count_dec();
-							mac_learn_db_valid_count_get(&fdb_valid_count);
+							mac_learn_db_nonstatic_count_get(&fdb_nonstatic_valid_count);
 							/* start MAC learn again */
-							if ((mac_learn_age->mac_learn_max_count - fdb_valid_count == 1) &&
+							if ((mac_learn_age->mac_learn_max_count - fdb_nonstatic_valid_count == 1) &&
 							    (false == mac_learn_age->mac_learn_overwrite_enable)) {
 								/* Trap packet with new address to CPU again */
 								if (tpm_mac_learn_default_rule_act_set(tpm_owner_id, TPM_UNK_MAC_TRAP)) {
@@ -257,7 +257,16 @@ void mv_mac_learn_pnc_rule_add(struct work_struct *work)
 		return;
 	}
 
+	/* Check non-static max count, if 0 just return */
+	if (src_mac->mac_learn_max_count == 0) {
+		/* Read buffer, in order to clear it to avoid bad effection for following MAC learn */
+		mv_mac_learn_queue_read(src_mac_key.mac.mac_sa);
+		return;
+	}
+
 	if (tpm_db_pnc_rng_conf_get(TPM_PNC_MAC_LEARN, &range_conf)){
+		/* Read buffer, in order to clear it to avoid bad effection for following MAC learn */
+		mv_mac_learn_queue_read(src_mac_key.mac.mac_sa);
 		MVMACLEARN_ERR_PRINT("TPM PnC range info get failed\n");
 		return;
 	}
@@ -285,11 +294,6 @@ void mv_mac_learn_pnc_rule_add(struct work_struct *work)
 	/* Check non-static Full or not */
 	if (src_mac->mac_learn_max_count == nonstatic_count) {
 		if (true == src_mac->mac_learn_overwrite_enable) {
-			/* Interval less than 0.2s, overwrite is forbidden*/
-			if (time_after(jiffies, (unsigned long)src_mac->mac_learn_overwrite_time))
-				src_mac->mac_learn_overwrite_time  = jiffies + HZ / 5;/*update overwrite time*/
-			else
-				return;/*return from here, no any operation*/
 			/* Overwrite LU entry */
 			if (!mv_mac_learn_get_lu(&pnc_idx)) {
 				MVMACLEARN_DEBUG_PRINT("PnC index need to be overwritten: %d\n", pnc_idx);
@@ -409,27 +413,43 @@ int32_t mv_mac_learn_logic_static_add(char *static_mac_addr)
 	memset(src_mac_key.mac.mac_sa_mask, 0xff, sizeof(u8)*MV_MAC_ADDR_SIZE);
 	memcpy(src_mac_key.mac.mac_sa, static_mac_addr, sizeof(char) * MV_MAC_ADDR_SIZE);
 
-	/* Check the src mac exist in FDB or not*/
-	if (mac_learn_db_find_mac_addr(&src_mac_key, &fdb_addr_exist, NULL)) {
-		MVMACLEARN_ERR_PRINT("mac_learn_db_find_mac_addr failed\n");
-		return MAC_LEARN_FAIL;
-	}
-	/* If Addr exist in FDB, return OK*/
-	if (fdb_addr_exist == 1) {
-		MVMACLEARN_WARN_PRINT("Entry already exist\n");
-		return MAC_LEARN_OK;
-	}
 	/*Get MAC learn range info*/
 	if (tpm_db_pnc_rng_conf_get(TPM_PNC_MAC_LEARN, &range_conf)){
 		MVMACLEARN_ERR_PRINT("TPM PnC range info get failed\n");
 		return MAC_LEARN_FAIL;
 	}
-	/*check whether static free entry enough or not*/
+	/* get entry count info */
 	pnc_max_count = range_conf.api_end - range_conf.api_start + 1;
 	if (mac_learn_db_valid_count_get(&valid_count) ||
 	    mac_learn_db_nonstatic_count_get(&non_static_count) ||
 	    mv_mac_learn_op_max_count_get(&non_static_max))
 		return MAC_LEARN_FAIL;
+
+	/* Check the src mac exist in FDB or not*/
+	if (mac_learn_db_find_mac_addr(&src_mac_key, &fdb_addr_exist, &mac_learn_db_entry)) {
+		MVMACLEARN_ERR_PRINT("mac_learn_db_find_mac_addr failed\n");
+		return MAC_LEARN_FAIL;
+	}
+	/* If Addr exist in FDB, return OK*/
+	if (fdb_addr_exist == 1) {
+		if (MAC_LEARN_FDB_STATIC == mac_learn_db_entry.state) {
+			MVMACLEARN_WARN_PRINT("Entry already exist\n");
+		} else {
+			/*check whether static free entry enough or not*/
+			if ((valid_count - non_static_count) >= (pnc_max_count - non_static_max)) {
+				MVMACLEARN_ERR_PRINT("No free entry for static entry\n");
+				return MAC_LEARN_FAIL;
+			}
+			/* Update original entry state */
+			if (mac_learn_db_entry_state_update(mac_learn_db_entry.fdb_idx, MAC_LEARN_FDB_STATIC)) {
+				MVMACLEARN_ERR_PRINT("MAC learn FDB entry state update failed\n");
+				return MAC_LEARN_FAIL;
+			}
+			mac_learn_db_nonstatic_count_dec();
+		}
+		return MAC_LEARN_OK;
+	}
+	/*check whether static free entry enough or not*/
 	if ((valid_count - non_static_count) >= (pnc_max_count - non_static_max)) {
 		MVMACLEARN_ERR_PRINT("No free entry for static entry\n");
 		return MAC_LEARN_FAIL;

@@ -124,4 +124,12 @@ config MV_PHONE_USE_SLIC_LIBS
 	Unselect this option only if you have source code of SLIC drivers.
 	If unsure, say "y"
 
+config MV_TDM_EXT_STATS
+	bool "Enable legacy TDM extended statistics"
+	depends on MV_TDM_SUPPORT
+	default n
+	---help---
+	Choosing this option will export extended statistics to procfs.
+	This is relevant only for the legacy TDM unit.
+
 endmenu

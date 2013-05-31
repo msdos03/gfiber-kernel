@@ -147,7 +147,7 @@ MV_STATUS onuGponIsrInit(void)
 **  onuGponIsrXvrResetTimerHndl
 **  ____________________________________________________________________________
 ** 
-**  DESCRIPTION: The function is called by the GPON Iterrupt handler to execute 
+**  DESCRIPTION: The function is called by the GPON Interrupt handler to execute 
 **               XVR reset sequence in case of a problem with XVR signal detect
 **               
 **  PARAMETERS:  unsigned long data
@@ -256,6 +256,8 @@ void onuGponIsrLowRoutine(MV_U32 *interruptEvent, MV_U32 *interruptStatus)
   *interruptEvent  = (g_onuGponCurrentInterrupt >> ONU_GPON_EVENT_SHIFT) & ONU_GPON_INTERRUPTS;
   *interruptStatus = (g_onuGponCurrentInterrupt                        ) & ONU_GPON_INTERRUPTS;
 
+  onuGponSyncLog(ONU_GPON_LOG_INTERRUPT, g_onuGponCurrentInterrupt, 0, 0);
+
   g_onuGponCurrentInterrupt = 0;
 
 #ifdef MV_GPON_PERFORMANCE_CHECK
@@ -296,6 +298,41 @@ void onuGponIsrRoutine(MV_U32 event, MV_U32 status)
                __FILE_DESC__, __LINE__, interruptEvent, interruptStatus, timer); 
 #endif
 
+    if (interruptEvent & ONU_GPON_XVR_SIGNAL_DETECT_STATUS_MASK)
+    {
+        state = ponXvrFunc(interruptStatus, ONU_GPON_XVR_SIGNAL_DETECT_STATUS_MASK);
+
+	  if (state == MV_TRUE)
+	  {
+		onuGponPonMngIntrAlarmHandler(ONU_PON_MNGR_LOS_ALARM, MV_FALSE);
+		/* Set signal detect to ON */
+		onuGponDbOnuSignalDetectSet(1);
+
+#ifdef MV_GPON_DEBUG_PRINT
+		mvPonPrint(PON_PRINT_DEBUG, PON_ISR_MODULE,
+			   "DEBUG: (%s:%d) Set signal detect to ON = 1 \n", __FILE_DESC__, __LINE__);
+#endif /* MV_GPON_DEBUG_PRINT */
+#ifndef PON_FPGA
+		onuGponIsrXvrReset();
+		onuGponIsrXvrResetStateSet(MV_TRUE);
+		//onuGponPonMngIntrMessageHandler();
+#endif /* PON_FPGA */
+	  }
+	  else if (state == MV_FALSE)
+	  {
+		onuGponPonMngIntrAlarmHandler(ONU_PON_MNGR_LOS_ALARM, MV_TRUE);
+		/* Set signal detect to OFF */
+		onuGponDbOnuSignalDetectSet(0);
+
+#ifdef MV_GPON_DEBUG_PRINT
+		mvPonPrint(PON_PRINT_DEBUG, PON_ISR_MODULE,
+			   "DEBUG: (%s:%d) Set signal detect to OFF = 0\n", __FILE_DESC__, __LINE__);
+#endif /* MV_GPON_DEBUG_PRINT */
+	  }
+
+	  onuGponSyncLog(ONU_GPON_LOG_INTERRUPT_XVR_SD, state, 0, 0);
+    }
+    
     if (interruptEvent & ONU_GPON_LOS_ALARM_MASK)
     {
      // state = (interruptStatus & ONU_GPON_LOS_ALARM_MASK) ? MV_TRUE : MV_FALSE;
@@ -306,6 +343,8 @@ void onuGponIsrRoutine(MV_U32 event, MV_U32 status)
     {
       state = (interruptStatus & ONU_GPON_LOF_ALARM_MASK) ? MV_TRUE : MV_FALSE;
       onuGponPonMngIntrAlarmHandler(ONU_PON_MNGR_LOF_ALARM, state);
+
+      onuGponSyncLog(ONU_GPON_LOG_INTERRUPT_LOF, state, 0, 0);
 
 	 // if (state == MV_TRUE) 
 	 // {
@@ -380,41 +419,9 @@ void onuGponIsrRoutine(MV_U32 event, MV_U32 status)
     if (interruptEvent & ONU_GPON_PHY_SIGNAL_DETECT_STATUS_MASK)
     {
 #ifdef MV_GPON_DEBUG_PRINT
-      mvPonPrint(PON_PRINT_DEBUG, PON_ISR_MODULE, 
+      mvPonPrint(PON_PRINT_DEBUG, PON_ISR_MODULE,
                  "DEBUG: (%s:%d) Event 0x%x - Not supported\n", __FILE_DESC__, __LINE__, interruptEvent);
 #endif /* MV_GPON_DEBUG_PRINT */
-    }
-
-    if (interruptEvent & ONU_GPON_XVR_SIGNAL_DETECT_STATUS_MASK)
-    {
-  	  state = (interruptStatus & ONU_GPON_XVR_SIGNAL_DETECT_STATUS_MASK) ? MV_TRUE : MV_FALSE;
-
-	  if (state == MV_TRUE) 
-	  {
-		onuGponPonMngIntrAlarmHandler(ONU_PON_MNGR_LOS_ALARM, MV_FALSE);
-  	    /* Set signal detect to ON */
-		onuGponDbOnuSignalDetectSet(1);
-
-#ifdef MV_GPON_DEBUG_PRINT
-        mvPonPrint(PON_PRINT_DEBUG, PON_ISR_MODULE, 
-                   "DEBUG: (%s:%d) Set signal detect to ON = 1 \n", __FILE_DESC__, __LINE__);
-#endif /* MV_GPON_DEBUG_PRINT */
-#ifndef PON_FPGA
-        onuGponIsrXvrReset();
-        onuGponPonMngIntrMessageHandler();
-#endif /* PON_FPGA */
-	  }
-	  else if (state == MV_FALSE)
-	  {
-		onuGponPonMngIntrAlarmHandler(ONU_PON_MNGR_LOS_ALARM, MV_TRUE);
-	    /* Set signal detect to OFF */
-        onuGponDbOnuSignalDetectSet(0);
-
-#ifdef MV_GPON_DEBUG_PRINT
-        mvPonPrint(PON_PRINT_DEBUG, PON_ISR_MODULE, 
-                   "DEBUG: (%s:%d) Set signal detect to OFF = 0\n", __FILE_DESC__, __LINE__);
-#endif /* MV_GPON_DEBUG_PRINT */
-	  }
     }
   }
 }
@@ -477,12 +484,19 @@ MV_STATUS onuGponIsrXvrReset(void)
   MV_STATUS status;
   MV_U32    onuState;
   MV_U32    initDone;
+  MV_U32    durationStart = 0;
+  MV_U32    durationEnd   = 0;
+
 
   onuState = onuGponDbOnuStateGet();
   if ((onuState == ONU_GPON_01_INIT) ||
-     ((onuState == ONU_GPON_07_EMERGANCY_STOP) && (onuGponAsicAlarmStatusGet() == ONU_GPON_ALARM_ON)) || 
-	 ((onuState == ONU_GPON_06_POPUP)))
+     ((onuState == ONU_GPON_07_EMERGANCY_STOP) && (onuGponAsicAlarmStatusGet() == ONU_GPON_ALARM_ON)) ||
+     ((onuState == ONU_GPON_06_POPUP)          && ((onuGponAlarmGet(ONU_GPON_ALARM_LOS) == ONU_GPON_ALARM_OFF) &&
+                                                   (onuGponAlarmGet(ONU_GPON_ALARM_LOF) == ONU_GPON_ALARM_ON))))
   {
+    asicOntGlbRegReadNoCheck(mvAsicReg_GPON_GEN_MICRO_SEC_CNT, &durationStart, 0);
+    onuGponSyncLog(ONU_GPON_LOG_INTERRUPT_SERDES_START, 0, 0, 0);
+
     status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_RX_INIT, 0x1, 0);  
     if (status != MV_OK) 
       return(status);
@@ -493,11 +507,17 @@ MV_STATUS onuGponIsrXvrReset(void)
       if (status != MV_OK) 
         return(status);
 
+      asicOntGlbRegReadNoCheck(mvAsicReg_GPON_GEN_MICRO_SEC_CNT, &durationEnd, 0);
+      if (abs((durationEnd - durationStart)) >= 6000)
+	      return (MV_OK);
+
     } while (initDone == 0);
 
     status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_RX_INIT, 0x0, 0);  
     if (status != MV_OK) 
       return(status);
+
+    onuGponSyncLog(ONU_GPON_LOG_INTERRUPT_SERDES_STOP, 0, 0, 0);
   }
   else
   {

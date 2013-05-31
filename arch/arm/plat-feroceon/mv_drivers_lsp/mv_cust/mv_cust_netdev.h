@@ -48,21 +48,45 @@
 
 
 struct mv_udp_port_tx_spec {
-	__be16	udp_port;
-	struct mv_eth_tx_spec tx_spec;
+    __be16    udp_port;
+    struct mv_eth_tx_spec tx_spec;
 };
 
 struct mv_port_tx_spec {
-	struct mv_udp_port_tx_spec udp_src[MV_CUST_MAS_UDP_SRC_PORT];
-	struct mv_udp_port_tx_spec udp_dst[MV_CUST_MAS_UDP_DST_PORT];
+    struct mv_udp_port_tx_spec udp_src[MV_CUST_MAS_UDP_SRC_PORT];
+    struct mv_udp_port_tx_spec udp_dst[MV_CUST_MAS_UDP_DST_PORT];
 };
 
 
 struct mv_eoam_llid_spec {
-	uint8_t llid_mac_address[6];
-	struct  mv_eth_tx_spec tx_spec;
+    uint8_t llid_mac_address[6];
+    struct  mv_eth_tx_spec tx_spec;
 };
 
+typedef enum
+{
+    MV_CUST_APP_TYPE_IGMP = 0, /* For IGMP application               */
+    MV_CUST_APP_TYPE_MLD,      /* For MLD application                */
+    MV_CUST_APP_TYPE_LPBK,     /* For loopback detection application */
+    MV_CUST_APP_TYPE_OAM,      /* For eOAM application               */
+    MV_CUST_APP_TYPE_OMCI,     /* For OMCI application               */
+    MV_CUST_APP_TYPE_MAX       /* Max number of application          */ 
+} mv_cust_app_type_e;
+
+/*  Enum: enable or disable application*/
+typedef enum
+{
+    MV_CUST_APP_DISABLE  = 0,
+    MV_CUST_APP_ENABLE   = 1,
+} mv_cust_app_flag_e;
+
+typedef struct
+{
+    mv_cust_app_type_e app_type; /* Application type, such as IGMP, MLD                */
+    uint16_t           enable;   /* Flag indicates whether to enable application Rx/Tx */         
+    uint16_t           eth_type; /* Application Ethernet type used for socket/skb      */
+    char              *name;     /* The readable name of the application               */
+} mv_cust_app_config_t;
 
 
 /******************************************************
@@ -70,27 +94,19 @@ struct mv_eoam_llid_spec {
 *******************************************************/
 void        mv_cust_omci_hw_cmd_set(unsigned int hw_cmd);
 int         mv_cust_omci_tx_set(int tcont, int txq);
-//int         mv_cust_eoam_tx_set(int txp, int txq);
-MV_STATUS   mv_cust_omci_enable(int enable);
-MV_STATUS   mv_cust_eoam_enable(int enable);
-//MV_STATUS   mv_cust_eoam_tx_func_set(void (*tx_func) (uint8_t *data, int size, struct mv_eth_tx_spec *tx_spec));
+
 #ifdef  CONFIG_MV_CUST_UDP_SAMPLE_HANDLE
 MV_STATUS   mv_cust_udp_src_spec_set(int tx_port, uint16_t udp_src_port, uint8_t txp, uint8_t txq, uint16_t flags, uint32_t hw_cmd);
 MV_STATUS   mv_cust_udp_dest_spec_set(int tx_port, uint16_t udp_dest_port, uint8_t txp, uint8_t txq, uint16_t flags, uint32_t hw_cmd);
 #endif
-void        mv_cust_omci_type_set(unsigned short int type);
-void        mv_cust_xpon_oam_rx_gh_set(int val);
-void        mv_cust_epon_oam_type_set(unsigned short int type);
-#ifdef CONFIG_MV_CUST_IGMP_HANDLE
-void        mv_cust_igmp_type_set(unsigned short int type);
-#endif
-void        mv_cust_omci_gemport_set(int gemport);
-void        mv_cust_loopdet_type_set(unsigned short int type);
+
+void        mv_cust_oam_rx_gh_set(int val);
 int         mv_cust_omci_set(int tcont, int txq, int gemport, int keep_rx_mh);
 int         mv_cust_eoam_llid_set(int llid, uint8_t *llid_mac, int txq);
 
-
-
+void        mv_cust_app_flag_set(mv_cust_app_type_e app_type, uint16_t enable);
+void        mv_cust_app_etype_set(mv_cust_app_type_e app_type, uint16_t eth_type);
+void        mv_cust_print(int type);
 
 
 #endif /* __mv_cust_netdev_h__ */

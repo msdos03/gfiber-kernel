@@ -127,7 +127,7 @@ u32 mod_config = 0;
 u8	mvMacAddr[CONFIG_MV_ETH_PORTS_NUM][6];
 u16	mvMtu[CONFIG_MV_ETH_PORTS_NUM] = {0};
 #endif
-extern MV_U32 gBoardId; 
+extern MV_U32 gBoardId;
 extern unsigned int elf_hwcap;
 
 #ifdef CONFIG_MTD_NAND_LNC
@@ -145,14 +145,14 @@ __setup("noL2", noL2_setup);
 
 static int __init parse_tag_mv_uboot(const struct tag *tag)
 {
-    	unsigned int mvUbootVer = 0;
+	unsigned int mvUbootVer = 0;
 	int i = 0;
- 
+
 	mvUbootVer = tag->u.mv_uboot.uboot_version;
 	mvIsUsbHost = tag->u.mv_uboot.isUsbHost;
 
-        printk("Using UBoot passing parameters structure\n");
-  
+	printk("Using UBoot passing parameters structure\n");
+
 	gBoardId =  (mvUbootVer & 0xff);
 #ifdef CONFIG_MV_INCLUDE_GIG_ETH
 	for (i = 0; i < CONFIG_MV_ETH_PORTS_NUM; i++) {
@@ -166,11 +166,11 @@ static int __init parse_tag_mv_uboot(const struct tag *tag)
 	}
 #endif
 #ifdef CONFIG_MTD_NAND_LNC
-               /* get NAND ECC type(1-bit or 4-bit) */
-               if((mvUbootVer >> 8) >= 0x3040c)
-                       mv_nand_ecc = tag->u.mv_uboot.nand_ecc;
-               else
-                       mv_nand_ecc = 1; /* fallback to 1-bit ECC */
+	/* get NAND ECC type(1-bit or 4-bit) */
+	if((mvUbootVer >> 8) >= 0x3040c)
+		mv_nand_ecc = tag->u.mv_uboot.nand_ecc;
+	else
+		mv_nand_ecc = 1; /* fallback to 1-bit ECC */
 #endif
 
 	mod_config = tag->u.mv_uboot.mod_bitmask;
@@ -516,6 +516,19 @@ static void __init mv_init(void)
 {
 	MV_U32 boardId;
 
+#ifndef CONFIG_MV_DRAM_DEFAULT_ACCESS_CFG
+        /* Support DRAM access configuration for Avanta-MC only */
+        if (gBoardId == DB_88F6601_BP_ID || gBoardId == RD_88F6601_MC_ID ||
+	    gBoardId == RD_88F6601_MC2L_ID) {
+                printk("DRAM access: ");
+#ifdef CONFIG_MV_DRAM_XBAR_ACCESS_CFG
+                printk("XBAR\n");
+#else
+                printk("fast-path\n");
+#endif
+        }
+#endif
+
 #ifdef CONFIG_CACHE_FEROCEON_L2
 	if ((noL2 == 0) && (mvCpuL2Exists() == MV_TRUE))
 		kirkwood_l2_init();
@@ -523,27 +536,26 @@ static void __init mv_init(void)
 		printk("No L2-Cache.\n");
 #endif
 
-        /* init the Board environment */
-       	mvBoardEnvInit();
+	/* init the Board environment */
+	mvBoardEnvInit();
 
-        /* init the controller environment */
-        if( mvCtrlEnvInit() ) {
-            printk( "Controller env initialization failed.\n" );
-            return;
-        }
-
-	/* Init the CPU windows setting and the access protection windows. */
-	if( mvCpuIfInit(mv_sys_map()) ) {
-
-		printk( "Cpu Interface initialization failed.\n" );
+	/* init the controller environment */
+	if (mvCtrlEnvInit()) {
+		printk("Controller env initialization failed.\n");
 		return;
 	}
 
-    	/* Init Tclk & SysClk */
-    	mvTclk = mvBoardTclkGet();
-   	mvSysclk = mvBoardSysClkGet();
+	/* Init the CPU windows setting and the access protection windows. */
+	if (mvCpuIfInit(mv_sys_map())) {
+		printk("Cpu Interface initialization failed.\n");
+		return;
+	}
 
-        support_wait_for_interrupt = 1;
+	/* Init Tclk & SysClk */
+	mvTclk = mvBoardTclkGet();
+	mvSysclk = mvBoardSysClkGet();
+
+	support_wait_for_interrupt = 1;
 
 #ifdef CONFIG_JTAG_DEBUG
 	support_wait_for_interrupt = 0; /*  for Lauterbach */
@@ -562,7 +574,6 @@ static void __init mv_init(void)
 	mv_gpio_init();
 
 #ifdef CONFIG_MV_INCLUDE_SPI
-	/* SPI */
 	mvSysSpiInit(0, _16M);
 #endif
 
@@ -574,7 +585,7 @@ static void __init mv_init(void)
 
 #ifdef CONFIG_MV_PMU_PROC
 	mv_pm_proc_entry = proc_mkdir("mv_pm", NULL);
-#endif /* CONFIG_MV_PMU_PROC */
+#endif
 
 #if defined(CONFIG_MV_INCLUDE_SDIO)
 	if (mvCtrlSdioSupport()) {
@@ -599,17 +610,15 @@ static void __init mv_init(void)
 #endif
 
 #ifdef CONFIG_MV_ETHERNET
-	/* Ethernet */
 #if defined(CONFIG_MV_ETH_LEGACY)
 	platform_device_register(&mv88fx_eth);
 #elif defined(CONFIG_MV_ETH_NETA)
 	mv88fx_neta.dev.platform_data = NULL;
 	platform_device_register(&mv88fx_neta);
-#endif /* Ethernet mode: legacy or NETA */
-#endif /* CONFIG_MV_ETHERNET */
+#endif
+#endif
 
 #ifdef CONFIG_THERMAL_SENSOR_KW2
-	/* SoC hwmon Thermal Sensor */
 	platform_device_register_simple("KW2Thermal", 0, NULL, 0);
 #endif
 
@@ -618,17 +627,14 @@ static void __init mv_init(void)
 	platform_device_register(&kw2_nfc);
 #endif
 
-       /* WATCHDOG */
-       mv_wdt_init();
+	/* Watchdog */
+	mv_wdt_init();
 
-	/* CPU Idle driver. */
+	/* CPU idle driver */
 	boardId = mvBoardIdGet();
-	if ((boardId == DB_88F6535_BP_ID) || (boardId == RD_88F6560_GW_ID))
+	if (boardId == DB_88F6535_BP_ID || boardId == RD_88F6560_GW_ID)
 		platform_device_register_simple("kw_cpuidle", 0, NULL, 0);
-
-	return;
 }
-
 
 MACHINE_START(FEROCEON_KW2 ,"Feroceon-KW2")
 	/* MAINTAINER("MARVELL") */
@@ -640,4 +646,3 @@ MACHINE_START(FEROCEON_KW2 ,"Feroceon-KW2")
 	.timer = &mv_timer,
 	.init_machine = mv_init,
 MACHINE_END
-

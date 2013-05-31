@@ -3199,6 +3199,42 @@ GT_STATUS gprtSetDuplex
     IN  GT_BOOL  mode
 );
 
+/*******************************************************************************
+* gprtSetPortSpeedDuplexMode
+*
+* DESCRIPTION:
+* 		Sets speed and duplex mode for a specific logical port. This function
+*		will keep the loopback mode to the previous value, but disable others,
+*		such as Autonegotiation.
+*
+* INPUTS:
+*		port -	The logical port number, unless SERDES device is accessed
+*				The physical address, if SERDES device is accessed
+*		speed - port speed.
+*				PHY_SPEED_10_MBPS for 10Mbps
+*				PHY_SPEED_100_MBPS for 100Mbps
+*				PHY_SPEED_1000_MBPS for 1000Mbps
+*		dMode - Duplex mode
+*
+* OUTPUTS:
+* None.
+*
+* RETURNS:
+* GT_OK - on success
+* GT_FAIL - on error
+*
+* COMMENTS:
+* data sheet register 0.13 - Speed Selection (LSB)
+* data sheet register 0.6  - Speed Selection (MSB)
+* data sheet register 0.8  - Duplex mode
+*******************************************************************************/
+GT_STATUS gprtSetPortSpeedDuplexMode
+(
+IN GT_QD_DEV *dev,
+IN GT_LPORT  port,
+IN GT_PHY_SPEED speed,
+IN GT_BOOL dMode
+);
 
 /*******************************************************************************
 * gqosSetPortDefaultTc

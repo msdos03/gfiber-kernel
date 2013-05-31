@@ -19,7 +19,7 @@
 
 #include "../arch/arm/mach-feroceon-kw2/config/mvSysHwConfig.h"
 
-#define LSP_VERSION "KW2_LSP_3.3.1_p4_PQ"
+#define LSP_VERSION "KW2_LSP_3.3.1_p12_PQ"
 
 
 static inline void arch_idle(void)
@@ -31,7 +31,7 @@ static inline void arch_idle(void)
 	cpu_do_idle();
 }
 
-#define UPON_SDK_VERSION "uPON_2.6.25_RC1"
+#define UPON_SDK_VERSION "uPON_2.6.25_RC74"
 
 #ifdef __BIG_ENDIAN
 #define MV_ARM_32BIT_LE(X) ((((X)&0xff)<<24) |                       \

@@ -84,16 +84,17 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MVGPON_IOCTL_INIT               _IOW(MVPON_IOCTL_MAGIC, 1,  unsigned int)
 #define MVGPON_IOCTL_BEN_INIT           _IOW(MVPON_IOCTL_MAGIC, 2,  unsigned int)
 #define MVGPON_IOCTL_DATA_TCONT_CONFIG	_IOW(MVPON_IOCTL_MAGIC, 3,  unsigned int)
-#define MVGPON_IOCTL_DATA_TCONT_RESET	 _IO(MVPON_IOCTL_MAGIC, 4)
-#define MVGPON_IOCTL_INFO               _IOR(MVPON_IOCTL_MAGIC, 5,  unsigned int)
-#define MVGPON_IOCTL_ALARM              _IOR(MVPON_IOCTL_MAGIC, 6,  unsigned int)
-#define MVGPON_IOCTL_PM                 _IOR(MVPON_IOCTL_MAGIC, 7,  unsigned int)
-#define MVGPON_IOCTL_GEM                _IOW(MVPON_IOCTL_MAGIC, 8,  unsigned int)
-#define MVGPON_IOCTL_GEMPORT_PM_CONFIG  _IOW(MVPON_IOCTL_MAGIC, 9,  unsigned int)
-#define MVGPON_IOCTL_GEMPORT_PM_GET     _IOR(MVPON_IOCTL_MAGIC, 10, unsigned int)
-#define MVGPON_IOCTL_GEMPORT_PM_RESET   _IOW(MVPON_IOCTL_MAGIC, 11, unsigned int)
-#define MVGPON_IOCTL_GEMPORT_STATE_GET  _IOW(MVPON_IOCTL_MAGIC, 12, unsigned int)
-#define MVGPON_IOCTL_GEMPORT_STATE_SET  _IOW(MVPON_IOCTL_MAGIC, 13, unsigned int)
+#define MVGPON_IOCTL_DATA_TCONT_CLEAR   _IOR(MVPON_IOCTL_MAGIC, 4,  unsigned int)
+#define MVGPON_IOCTL_DATA_TCONT_RESET	 _IO(MVPON_IOCTL_MAGIC, 5)
+#define MVGPON_IOCTL_INFO               _IOR(MVPON_IOCTL_MAGIC, 6,  unsigned int)
+#define MVGPON_IOCTL_ALARM              _IOR(MVPON_IOCTL_MAGIC, 7,  unsigned int)
+#define MVGPON_IOCTL_PM                 _IOR(MVPON_IOCTL_MAGIC, 8,  unsigned int)
+#define MVGPON_IOCTL_GEM                _IOW(MVPON_IOCTL_MAGIC, 9,  unsigned int)
+#define MVGPON_IOCTL_GEMPORT_PM_CONFIG  _IOW(MVPON_IOCTL_MAGIC, 10, unsigned int)
+#define MVGPON_IOCTL_GEMPORT_PM_GET     _IOR(MVPON_IOCTL_MAGIC, 11, unsigned int)
+#define MVGPON_IOCTL_GEMPORT_PM_RESET   _IOW(MVPON_IOCTL_MAGIC, 12, unsigned int)
+#define MVGPON_IOCTL_GEMPORT_STATE_GET  _IOW(MVPON_IOCTL_MAGIC, 13, unsigned int)
+#define MVGPON_IOCTL_GEMPORT_STATE_SET  _IOW(MVPON_IOCTL_MAGIC, 14, unsigned int)
 
 #define ONU_GPON_DEBUG_STATE        (0xFF)
 
@@ -227,7 +228,12 @@ typedef struct
   MV_U32 clearTcont;
   MV_U32 restoreGem;
   MV_U32 dgPolarity;
-  MV_U32 xvrPolarity;
+  MV_U32 ponXvrBurstEnPolarity;
+  MV_U32 ponXvrPolarity;
+  MV_U32 p2pXvrBurstEnPolarity;
+  MV_U32 p2pXvrPolarity;
+  MV_U32 fecHyst;
+  MV_U32 couplingMode;    /* AC Coupling Mode */
 }S_GponIoctlInfo;  
                                                                                          
 typedef struct                                                                           

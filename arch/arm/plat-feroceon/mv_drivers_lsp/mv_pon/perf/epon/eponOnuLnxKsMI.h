@@ -94,9 +94,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MVEPON_IOCTL_HOLDOVER_RPRT _IOW(MVPON_IOCTL_MAGIC, 10, unsigned int)
 #define MVEPON_IOCTL_SILENCE       _IOW(MVPON_IOCTL_MAGIC, 11, unsigned int)
 #define MVEPON_IOCTL_P2P_SET       _IOW(MVPON_IOCTL_MAGIC, 12, unsigned int)
-#define MVEPON_IOCTL_TDM_QUE_CFG   _IOW(MVPON_IOCTL_MAGIC, 13, unsigned int)
-#define MVEPON_IOCTL_ALARM_GET     _IOR(MVPON_IOCTL_MAGIC, 14, unsigned int)
-#define MVEPON_IOCTL_ROGUE_ONU_SET _IOW(MVPON_IOCTL_MAGIC, 15, unsigned int)
+#define MVEPON_IOCTL_P2P_FORCE_MODE_SET _IOW(MVPON_IOCTL_MAGIC, 13, unsigned int)
+#define MVEPON_IOCTL_TDM_QUE_CFG   _IOW(MVPON_IOCTL_MAGIC, 14, unsigned int)
+#define MVEPON_IOCTL_ALARM_GET     _IOR(MVPON_IOCTL_MAGIC, 15, unsigned int)
+#define MVEPON_IOCTL_ROGUE_ONU_SET _IOW(MVPON_IOCTL_MAGIC, 16, unsigned int)
 
 #define EPON_MAX_NUM_OF_MAC          (8)
 #define EPON_MAX_NUM_OF_QUEUE        (8)
@@ -224,8 +225,12 @@ typedef struct
 /* Init */
 typedef struct
 {
-  MV_U32 xvrPolarity;
+  MV_U32 ponXvrBurstEnPolarity;
+  MV_U32 ponXvrPolarity;
+  MV_U32 p2pXvrBurstEnPolarity;
+  MV_U32 p2pXvrPolarity;
   MV_U32 dgPolarity;
+  MV_U32 pkt2kSupported;
   MV_U8  macAddr[EPON_MAX_NUM_OF_MAC][EPON_MAC_LEN];
 }S_EponIoctlInit;
 

@@ -125,11 +125,27 @@ typedef enum
   ACTIVE_LED_ON         = 3
 }E_OnuPonLedActivation;
 
+/* Struct
+------------------------------------------------------------------------------*/
+/* ONU P2P Database */
+typedef struct
+{
+    MV_U32 xvrBurstEnPolarity;
+    MV_U32 xvrPolarity;
+} S_OnuP2PGenTbl;
+
+typedef struct
+{
+  S_OnuP2PGenTbl onuP2PGenTbl_s;
+} S_OnuP2PDb;
+
 /* Typedefs
 ------------------------------------------------------------------------------*/
+typedef MV_STATUS (*t_ponXvrFuncPtr)(MV_U32, MV_U32);
 
 /* Global variables
 ------------------------------------------------------------------------------*/
+extern t_ponXvrFuncPtr ponXvrFunc;
 
 /* Global functions
 ------------------------------------------------------------------------------*/
@@ -147,6 +163,17 @@ void      onuPonPatternBurstTimerHndl(void);
 MV_STATUS onuPonTxPowerOn(MV_BOOL txOn);
 MV_STATUS onuPonTxPowerControlInit(void);
 MV_STATUS onuPonTxLaserOn(MV_BOOL txOn);
+MV_STATUS onuPonTxPowerTimerStateSet(MV_BOOL mode);
+
+MV_STATUS EponXvrSDPolarityHighStatus(MV_U32 interruptStatus, MV_U32 statusMask);
+MV_STATUS EponXvrSDPolarityLowStatus(MV_U32 interruptStatus, MV_U32 statusMask);
+MV_STATUS GponXvrSDPolarityHighStatus(MV_U32 interruptStatus, MV_U32 statusMask);
+MV_STATUS GponXvrSDPolarityLowStatus(MV_U32 interruptStatus, MV_U32 statusMask);
+t_ponXvrFuncPtr funcEponXvrSDStatus(MV_U32 polarity);
+t_ponXvrFuncPtr funcGponXvrSDStatus(MV_U32 polarity);
+
+MV_STATUS onuP2PDbXvrBurstEnablePolaritySet(MV_U32 val);
+MV_U32    onuP2PDbXvrBurstEnablePolarityGet(void);
 
 #endif /* PON_FPGA */
 
@@ -154,6 +181,3 @@ MV_STATUS onuPonTxLaserOn(MV_BOOL txOn);
 ------------------------------------------------------------------------------*/
 
 #endif /* _ONU_PON_BOARD_H */
-
-
-

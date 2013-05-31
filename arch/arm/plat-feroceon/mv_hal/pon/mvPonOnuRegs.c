@@ -256,7 +256,7 @@ S_asicGlobalRegDb asicGlbDb[] =
   [mvAsicReg_GPON_TX_STAT_GEM_IDLE]                 = {mvAsicReg_GPON_TX_STAT_GEM_IDLE,                 MV_ASIC_ONT_GLB_ADDR + 0x1034,   0x1034,   asicRO,     0xFFFFFFFF,     0,      0,     0,      0,     "Total num of trans idle gem frames"},
   [mvAsicReg_GPON_TX_STAT_TX_EN_CNT]                = {mvAsicReg_GPON_TX_STAT_TX_EN_CNT,                MV_ASIC_ONT_GLB_ADDR + 0x1038,   0x1038,   asicRO,     0xFFFFFFFF,     0,      0,     0,      0,     "Total num of cycles with tx enable indication asserted"},
   [mvAsicReg_GPON_TX_CONFIG_EN_THRESHOLD]           = {mvAsicReg_GPON_TX_CONFIG_EN_THRESHOLD,           MV_ASIC_ONT_GLB_ADDR + 0x103C,   0x103C,   asicRW,     0xFFFFFFFF,     0,      0,     0,      0,     "Saturation threshold for tx enable indication counter"},
-  [mvAsicReg_GPON_TX_GSE_TRANS_THRESHOLD]           = {mvAsicReg_GPON_TX_GSE_TRANS_THRESHOLD,           MV_ASIC_ONT_GLB_ADDR + 0x1040,   0x1040,   asicRO,     0x00FFFFFF,     0,      0,     0,      0,     "GSE threshold for starting forwarding data to the tx burst fifo"},
+  [mvAsicReg_GPON_TX_GSE_TRANS_THRESHOLD]           = {mvAsicReg_GPON_TX_GSE_TRANS_THRESHOLD,           MV_ASIC_ONT_GLB_ADDR + 0x1040,   0x1040,   asicRW,     0x00FFFFFF,     0,      0,     0,      0,     "GSE threshold for starting forwarding data to the tx burst fifo"},
   [mvAsicReg_GPON_TX_CFG_AC_COUPLING]               = {mvAsicReg_GPON_TX_CFG_AC_COUPLING,               MV_ASIC_ONT_GLB_ADDR + 0x104C,   0x104C,   asicRW,     0xFFFFFFFF,     0,      0,     0,      0,     "Transmit Configuration AC Coupling"},
   [mvAsicReg_GPON_TX_STAT_TCONT_i_ETH_FRAMES]       = {mvAsicReg_GPON_TX_STAT_TCONT_i_ETH_FRAMES,       MV_ASIC_ONT_GLB_ADDR + 0x10A0,   0x10A0,   asicRO,     0xFFFFFFFF,     0,      8,     1,      0,     "Num of ethernet frames trans via tcont i"},
   [mvAsicReg_GPON_TX_STAT_TCONT_i_ETH_BYTES]        = {mvAsicReg_GPON_TX_STAT_TCONT_i_ETH_BYTES,        MV_ASIC_ONT_GLB_ADDR + 0x10C8,   0x10C8,   asicRO,     0xFFFFFFFF,     0,      8,     1,      0,     "Num of ethernet payload bytes trans via tcont i"},
@@ -270,6 +270,8 @@ S_asicGlobalRegDb asicGlbDb[] =
   [mvAsicReg_GPON_UTM_CONFIG_OMCI_PORT_VALID]       = {mvAsicReg_GPON_UTM_CONFIG_OMCI_PORT_VALID,       MV_ASIC_ONT_GLB_ADDR + 0x1404,   0x1404,   asicRW,     0x00000001,     0,      0,     0,      0,     "Omci gem port valid - upstream direction"},
   [mvAsicReg_GPON_UTM_CONFIG_TC_PERIOD]             = {mvAsicReg_GPON_UTM_CONFIG_TC_PERIOD,             MV_ASIC_ONT_GLB_ADDR + 0x1408,   0x1408,   asicRW,     0xFFFFFFFF,     0,      0,     0,      0,     "Num of cycles to pause between two counter gathering sweeps"},
   [mvAsicReg_GPON_UTM_CONFIG_TC_PERIOD_VALID]       = {mvAsicReg_GPON_UTM_CONFIG_TC_PERIOD_VALID,       MV_ASIC_ONT_GLB_ADDR + 0x140C,   0x140C,   asicRW,     0x00000001,     0,      0,     0,      0,     "Tc period valid"},
+  [mvAsicReg_GPON_UTM_ACTIVE_TX_BITMAP]             = {mvAsicReg_GPON_UTM_ACTIVE_TX_BITMAP,             MV_ASIC_ONT_GLB_ADDR + 0x1410,   0x1410,   asicRW,     0x000000FF,     0,      0,     0,      0,     "Active TX bitmap"},
+  [mvAsicReg_GPON_UTM_ACTIVE_TX_BITMAP_VALID]       = {mvAsicReg_GPON_UTM_ACTIVE_TX_BITMAP_VALID,       MV_ASIC_ONT_GLB_ADDR + 0x1414,   0x1414,   asicRW,     0x00000001,     0,      0,     0,      0,     "Active TX bitmap valid"},
 
   /* =========================== */
   /*  SGL Registers              */
@@ -494,6 +496,8 @@ S_asicGlobalRegDb asicGlbDb[] =
   /*  EPON PCS Registers         */
   /* =========================== */
   [mvAsicReg_EPON_PCS_CONFIGURATION]                = {mvAsicReg_EPON_PCS_CONFIGURATION,                MV_ASIC_ONT_GLB_ADDR + 0x1414,   0x1414,   asicRW,     0x00000033,     0,      0,     0,      0,     "PCS configuration"},
+  [mvAsicReg_EPON_PCS_CONFIGURATION_RX_ENABLE]      = {mvAsicReg_EPON_PCS_CONFIGURATION_RX_ENABLE,      MV_ASIC_ONT_GLB_ADDR + 0x1414,   0x1414,   asicRW,     0x00000001,     0,      0,     0,      0,     "PCS configuration Rx enable"},
+  [mvAsicReg_EPON_PCS_CONFIGURATION_TX_ENABLE]      = {mvAsicReg_EPON_PCS_CONFIGURATION_TX_ENABLE,      MV_ASIC_ONT_GLB_ADDR + 0x1414,   0x1414,   asicRW,     0x00000001,     4,      0,     0,      0,     "PCS configuration Tx enable"},
   [mvAsicReg_EPON_PCS_DELAY_CONFIG]                 = {mvAsicReg_EPON_PCS_DELAY_CONFIG,                 MV_ASIC_ONT_GLB_ADDR + 0x1418,   0x1418,   asicRW,     0x00001FFF,     0,      0,     0,      0,     "PCS delay config"},
   [mvAsicReg_EPON_PCS_STATS_FEC_0]                  = {mvAsicReg_EPON_PCS_STATS_FEC_0,                  MV_ASIC_ONT_GLB_ADDR + 0x141C,   0x141C,   asicRW,     0xFFFFFFFF,     0,      0,     0,      0,     "PCS stats Fec 0"},
   [mvAsicReg_EPON_PCS_STATS_FEC_1]                  = {mvAsicReg_EPON_PCS_STATS_FEC_1,                  MV_ASIC_ONT_GLB_ADDR + 0x1420,   0x1420,   asicRW,     0xFFFFFFFF,     0,      0,     0,      0,     "PCS stats Fec 1"},

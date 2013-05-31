@@ -146,6 +146,7 @@ void tpm_print_busy_apis(void);
 void tpm_print_fc(unsigned int print_only);
 void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call);
 void tpm_print_mac_learn_entry_count(void);
+uint8_t *api_type_to_str(tpm_api_type_t api_type);
 
 
 #endif /* _TPM_PRINT_H_ */

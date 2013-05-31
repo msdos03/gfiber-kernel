@@ -78,6 +78,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* Include Files
 ------------------------------------------------------------------------------*/
 #include "gponOnuHeader.h"
+#include "tpm_api.h"
 
 /* Local Constant
 ------------------------------------------------------------------------------*/  
@@ -100,7 +101,20 @@ MV_U32  randomType = 0;
 
 /* Local Variables
 ------------------------------------------------------------------------------*/
-  
+S_OnuGponLogEntry onuGponLogDb[ONU_GPON_LOG_SIZE + 1];
+MV_32             onuGponLogDbEntryIndex = 0;
+MV_32             onuGponLogDbEntryCount = 0;
+MV_BOOL           onuGponLogEnable = MV_FALSE;
+
+MV_32             onuGponTcontFlushState[8] = {TCONT_FLUSH_READY_STATE,
+                                               TCONT_FLUSH_READY_STATE,
+                                               TCONT_FLUSH_READY_STATE,
+                                               TCONT_FLUSH_READY_STATE,
+                                               TCONT_FLUSH_READY_STATE,
+                                               TCONT_FLUSH_READY_STATE,
+                                               TCONT_FLUSH_READY_STATE,
+                                               TCONT_FLUSH_READY_STATE};
+
 /* Export Functions
 ------------------------------------------------------------------------------*/
 MV_STATUS     onuGponSrvcGenCrcTable(void);
@@ -1076,3 +1090,333 @@ MV_STATUS onuGponSrvcRangingRandomInit(void)
   return(MV_OK);
 }
 
+/*******************************************************************************
+**
+**                            SYNC LOG SECTION
+**
+********************************************************************************/
+
+/*******************************************************************************
+**
+**  onuGponSyncLogEnable
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function enable log mechanism to start record events
+**
+**  PARAMETERS:  MV_U32 enable
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+void onuGponSyncLogEnable(MV_U32 enable)
+{
+    if (enable == 0)
+    {
+        onuGponLogEnable = MV_FALSE;
+
+        onuGponLogDbEntryCount = 0;
+        onuGponLogDbEntryIndex = 0;
+    }
+    else
+    {
+        onuGponLogEnable = MV_TRUE;
+    }
+}
+
+/*******************************************************************************
+**
+**  onuGponSyncLog
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function logs records into the cyclic log buffer
+**
+**  PARAMETERS:  MV_U32 event, MV_U32 data1, MV_U32 data2, MV_U32 data3
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+void onuGponSyncLog(MV_U32 event, MV_U32 data1, MV_U32 data2, MV_U32 data3)
+{
+    MV_U32 currentState;
+    MV_U32 timeStamp;
+
+	if (onuGponLogEnable != MV_TRUE)
+    {
+        return;
+	}
+
+    currentState = onuGponDbOnuStateGet();
+    asicOntGlbRegReadNoCheck(mvAsicReg_GPON_GEN_MICRO_SEC_CNT, &timeStamp, 0);
+
+    if (onuGponLogDbEntryIndex == ONU_GPON_LOG_SIZE)
+    {
+        onuGponLogDbEntryIndex = 0;
+    }
+
+	/* save log information */
+	onuGponLogDb[onuGponLogDbEntryIndex].event    = event;
+	onuGponLogDb[onuGponLogDbEntryIndex].state    = currentState;
+	onuGponLogDb[onuGponLogDbEntryIndex].time     = timeStamp;
+	onuGponLogDb[onuGponLogDbEntryIndex].dataVal1 = data1;
+	onuGponLogDb[onuGponLogDbEntryIndex].dataVal2 = data2;
+	onuGponLogDb[onuGponLogDbEntryIndex].dataVal3 = data3;
+
+    onuGponLogDbEntryIndex++;
+
+    /* The max number of counter is 512 */
+    if (onuGponLogDbEntryCount < ONU_GPON_LOG_SIZE)
+    {
+        onuGponLogDbEntryCount++;
+    }
+}
+
+/*******************************************************************************
+**
+**  onuGponSyncLogPrint
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function print the records placed in the log
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+void onuGponSyncLogPrint(void)
+{
+    MV_32 index;
+	MV_U32 printEntry;
+    MV_BOOL logEnabled;
+
+    logEnabled = onuGponLogEnable;
+	onuGponLogEnable = MV_FALSE;
+
+	printk("=======GPON LOG has %d items=======\r\n", onuGponLogDbEntryCount);
+
+	for (index = 0; index < onuGponLogDbEntryCount; index++)
+	{
+		if ((onuGponLogDbEntryIndex - index) > 0)
+		{
+			printEntry = onuGponLogDbEntryIndex - index - 1;
+		}
+		else
+		{
+			printEntry = ((MV_U32)ONU_GPON_LOG_SIZE - 1) - (index - onuGponLogDbEntryIndex);
+		}
+
+        switch(onuGponLogDb[printEntry].event)
+        {
+        case ONU_GPON_LOG_MSG:
+            printk("[%03d] PLOAM message, state=%d, time=%08x, onuId=%d, msgId=%d\n", printEntry,
+                    onuGponLogDb[printEntry].state,
+                    onuGponLogDb[printEntry].time,
+                    onuGponLogDb[printEntry].dataVal1,
+                    onuGponLogDb[printEntry].dataVal2);
+            break;
+
+        case ONU_GPON_LOG_MSG_CONTENT:
+            printk("[%03d] PLOAM message, data=0x%08x%08x%08x\n", printEntry,
+                    onuGponLogDb[printEntry].dataVal1,
+                    onuGponLogDb[printEntry].dataVal2,
+                    onuGponLogDb[printEntry].dataVal3);
+            break;
+
+        case ONU_GPON_LOG_INTERRUPT:
+            printk("[%03d] Interrupt, state=%d, time=%08x, event&status=0x%08x\n", printEntry,
+                    onuGponLogDb[printEntry].state,
+                    onuGponLogDb[printEntry].time,
+                    onuGponLogDb[printEntry].dataVal1);
+            break;
+
+        case ONU_GPON_LOG_INTERRUPT_XVR_SD:
+            printk("[%03d] LOS Interrupt, state=%d, time=%08x, status=%d\n", printEntry,
+                    onuGponLogDb[printEntry].state,
+                    onuGponLogDb[printEntry].time,
+                    onuGponLogDb[printEntry].dataVal1);
+            break;
+
+        case ONU_GPON_LOG_INTERRUPT_LOF:
+            printk("[%03d] LOF Interrupt, state=%d, time=%08x, status=%d\n", printEntry,
+                    onuGponLogDb[printEntry].state,
+                    onuGponLogDb[printEntry].time,
+                    onuGponLogDb[printEntry].dataVal1);
+            break;
+
+        case ONU_GPON_LOG_INTERRUPT_SERDES_START:
+            printk("[%03d] SERDES Start, state=%d, time=%08x\n", printEntry,
+                    onuGponLogDb[printEntry].state,
+                    onuGponLogDb[printEntry].time);
+            break;
+
+        case ONU_GPON_LOG_INTERRUPT_SERDES_STOP:
+            printk("[%03d] Interrupt, state=%d, time=%08x\n", printEntry,
+                    onuGponLogDb[printEntry].state,
+                    onuGponLogDb[printEntry].time);
+            break;
+
+        case ONU_GPON_LOG_STATE:
+            printk("[%03d] State, state=%d, time=%08x\n", printEntry,
+                    onuGponLogDb[printEntry].dataVal1,
+                    onuGponLogDb[printEntry].time);
+            break;
+
+        default:
+            printk("[%03d] Other\r\n", printEntry);
+            break;
+        }
+    }
+
+    onuGponLogDbEntryCount = 0;
+    onuGponLogDbEntryIndex = 0;
+
+    onuGponLogEnable = logEnabled;
+}
+
+/*******************************************************************************
+**
+**                            T-CONT FLUSH SECTION
+**
+********************************************************************************/
+
+/*******************************************************************************
+**
+**  onuGponWqTcontFlush
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function schedule T-Cont queue flush work to the T-Cont
+**               work queue
+**
+**  PARAMETERS:  MV_U32 tcont
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuGponWqTcontFlush(MV_U32 tcont)
+{
+    MV_STATUS rcode;
+
+    if (tcont != 0xFF)
+	rcode = queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontCleanWork[tcont]);
+    else
+        rcode = queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontCleanAllWork);
+
+    if(rcode == 0)
+	return(MV_ERROR);
+
+    return(MV_OK);
+}
+
+/*******************************************************************************
+**
+**  onuGponWqTcontActivate
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function schedule T-Cont queue activate work to the T-Cont
+**               work queue
+**
+**  PARAMETERS:  MV_U32 tcont
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuGponWqTcontActivate(MV_U32 tcont)
+{
+    MV_STATUS rcode;
+
+    rcode = queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontActiveWork[tcont]);
+    if(rcode == 0)
+        return(MV_ERROR);
+
+    return(MV_OK);
+}
+
+/*******************************************************************************
+**
+**  onuGponWqTcontFunc
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function process incoming work to the T-Cont work queue
+**
+**  PARAMETERS:  struct work_struct *work
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+void onuGponWqTcontFunc(struct work_struct *work)
+{
+    S_onuPonWork *currentWork = (S_onuPonWork *)work;
+    MV_U32 tcont = currentWork->param;
+    MV_U32 index = 0;
+
+    MV_U8 *stateText[] = {"",
+                          "Ready State   ",
+                          "Running State ",
+                          "Blocking State"};
+
+    /* Handle T-Cont Clear */
+    /* =================== */
+    if (currentWork->action == TCONT_CLEAN_EVENT)
+    {
+	if (onuGponTcontFlushState[tcont] == TCONT_FLUSH_RUNNING_STATE)
+	{
+	   onuGponTcontFlushState[tcont] = TCONT_FLUSH_BLOCKING_STATE;
+	   tpm_deactive_tcont(tcont);
+	   printk("TCONT (%d) CLEAN_EVENT\n", tcont);
+	   onuGponTcontFlushState[tcont] = TCONT_FLUSH_READY_STATE;
+	}
+	else
+	{
+	   printk("Received TCONT_CLEAN_EVENT while in T-CONT(%d) state(%s)\n", tcont, stateText[onuGponTcontFlushState[tcont]]);
+	}
+    }
+
+    /* Handle All T-Cont Clear */
+    /* ======================= */
+    else if (currentWork->action == TCONT_CLEAN_ALL_EVENT)
+    {
+	for (tcont = 0; tcont < 8; tcont++)
+	{
+	    if (onuGponTcontFlushState[tcont] == TCONT_FLUSH_RUNNING_STATE)
+	    {
+	       onuGponTcontFlushState[tcont] = TCONT_FLUSH_BLOCKING_STATE;
+	       tpm_deactive_tcont(tcont);
+	       printk("TCONT (%d) CLEAN_EVENT\n", tcont);
+	       onuGponTcontFlushState[tcont] = TCONT_FLUSH_READY_STATE;
+	    }
+	    else
+	    {
+	       printk("Received TCONT_CLEAN_EVENT while in T-CONT(%d) state(%s)\n", tcont, stateText[onuGponTcontFlushState[tcont]]);
+	    }
+	}
+    }
+
+    /* Handle T-Cont Activate */
+    /* ====================== */
+    else if (currentWork->action == TCONT_ACTIVE_EVENT)
+    {
+       if (onuGponTcontFlushState[tcont] == TCONT_FLUSH_READY_STATE)
+       {
+          onuGponTcontFlushState[tcont] = TCONT_FLUSH_RUNNING_STATE;
+          tpm_active_tcont(tcont);
+          printk("TCONT (%d) ACTIVE_EVENT\n", tcont);
+       }
+       else
+       {
+           printk("Received TCONT_ACTIVE_EVENT while in T-CONT state(%s)\n", stateText[onuGponTcontFlushState[tcont]]);
+       }
+    }
+
+    return;
+}

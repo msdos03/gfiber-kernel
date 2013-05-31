@@ -114,16 +114,17 @@ typedef enum tpm_api_ownership_error {
 typedef enum {
 	TPM_API_MGMT,
 	TPM_API_MAC_LEARN,
+	TPM_API_DS_LOAD_BALANCE,
 	TPM_API_CPU_LOOPBACK,
 	TPM_API_L2_PRIM,
 	TPM_API_L3_TYPE,
 	TPM_API_IPV4,
 	TPM_API_IPV4_MC,
+	TPM_API_IPV6_NH,
+	TPM_API_IPV6_L4,
 	TPM_API_IPV6_GEN,
 	TPM_API_IPV6_DIP,
 	TPM_API_IPV6_MC,
-	TPM_API_IPV6_NH,
-	TPM_API_IPV6_L4,
 	TPM_API_CNM,
 	TPM_API_TYPE_ILLEGAL,
 	TPM_MAX_API_TYPES = TPM_API_TYPE_ILLEGAL
@@ -247,10 +248,19 @@ typedef enum {
 #define	TPM_TRG_PORT_CPU		(0x00020000)	/* upstream / downstream - CPU port */
 #define	TPM_TRG_PORT_UNI_ANY		(0x00040000)	/* downstream - all UNI ports */
 #define	TPM_TRG_PORT_UNI_CPU_LOOP	(0x00080000)	/* downstream - loop to the CPU port */
+
+#define TPM_TRG_LOAD_BAL                (0x80000000)    /* for 2G DS Load-Balancing,
+							   set target_gmac to GMAC1 */
+
 #define	TPM_TRG_PORT_ILLEGAL		(0xFFFFFFFF)	/* illegal port number value */
 #define	TPM_TRG_UNI_OFFSET		8
 #define	TPM_TRG_UNI_MASK		0x1FF
 
+typedef enum {
+	TPM_DS_TGRT_G0,
+	TPM_DS_TGRT_G1,
+	TPM_DS_TGRT_CPU,
+} tpm_ds_load_balance_tgrt_t;
 
 /* target port type - bitmap */
 typedef uint32_t tpm_trg_port_type_t;	/*ex: TPM_TRG_PORT_WAN or TPM_TRG_TCONT_0 */
@@ -448,6 +458,20 @@ typedef struct tpm_l4_ports_key {
 /****************************************************************/
 /*          IPV4 Multicast definitions                          */
 /****************************************************************/
+typedef enum {
+	TPM_MC_ALL_CPU_FRWD,
+	TPM_MC_MAC_ONLY_FILTER,
+	TPM_MC_COMBINED_IP_MAC_FILTER,
+	TPM_MC_IP_ONLY_FILTER,
+	TPM_MC_FILTER_MODE_MAX,
+} tpm_mc_filter_mode_t;
+
+typedef enum {
+	TPM_MC_IGMP_SNOOPING,
+	TPM_MC_IGMP_PROXY,
+	TPM_MC_IGMP_MODE_MAX,
+} tpm_mc_igmp_mode_t;
+
 typedef enum tpm_mc_port_mode {
 	TPM_MC_UNI_MODE_EXCLUDE,
 	TPM_MC_UNI_MODE_TRANSPARENT,
@@ -586,16 +610,26 @@ typedef struct tpm_rule_ipv4_key {
 } tpm_rule_ipv4_key_t;
 
 typedef struct tpm_rule_ipv4_mc_key {
+	uint32_t stream_num;
+	tpm_mc_igmp_mode_t igmp_mode;
+	uint8_t mc_stream_pppoe;
 	uint16_t vid;
 	uint8_t ipv4_src_add[4];
 	uint8_t ipv4_dest_add[4];
 	uint8_t ignore_ipv4_src;
+	uint16_t dest_queue;
 	tpm_trg_port_type_t dest_port_bm;
 } tpm_rule_ipv4_mc_key_t;
 
 typedef struct tpm_rule_ipv6_mc_key {
+	uint32_t stream_num;
+	tpm_mc_igmp_mode_t igmp_mode;
+	uint8_t mc_stream_pppoe;
 	uint16_t vid;
+	uint8_t ipv6_src_add[16];
 	uint8_t ipv6_dest_add[16];
+	uint8_t ignore_ipv6_src;
+	uint16_t dest_queue;
 	tpm_trg_port_type_t dest_port_bm;
 } tpm_rule_ipv6_mc_key_t;
 
@@ -836,6 +870,14 @@ typedef struct {
 	uint16_t dummy2;
 } tpm_sw_mirror_t;
 
+/* Switch trunk type */
+typedef struct {
+	uint32_t trunk_id;
+	uint32_t port_mask;
+	uint32_t mask_num;
+	uint32_t trunk_mask;
+} tpm_sw_trunk_t;
+
 /*  typedef: struct tpm_sw_pirl_customer_t*/
 typedef struct {
 	uint32_t ebsLimit;
@@ -891,6 +933,46 @@ typedef struct {
 	uint32_t packets_1024_1518Octets;
 } tpm_swport_pm_3_t;
 
+/*
+  All counter set 3 is used by 88E6093 and 88E6065
+*/
+typedef struct {
+	uint32_t  dropEvents;
+	uint32_t  InGoodOctetsLo;
+	uint32_t  InGoodOctetsHi;
+	uint32_t  InBadOctets;
+	uint32_t  OutFCSErr;
+	uint32_t  InUnicasts;
+	uint32_t  Deferred;
+	uint32_t  InBroadcasts;
+	uint32_t  InMulticasts;
+	uint32_t  Octets64;
+	uint32_t  Octets127;
+	uint32_t  Octets255;
+	uint32_t  Octets511;
+	uint32_t  Octets1023;
+	uint32_t  OctetsMax;
+	uint32_t  OutOctetsLo;
+	uint32_t  OutOctetsHi;
+	uint32_t  OutUnicasts;
+	uint32_t  Excessive;
+	uint32_t  OutMulticasts;
+	uint32_t  OutBroadcasts;
+	uint32_t  Single;
+	uint32_t  OutPause;
+	uint32_t  InPause;
+	uint32_t  Multiple;
+	uint32_t  Undersize;
+	uint32_t  Fragments;
+	uint32_t  Oversize;
+	uint32_t  Jabber;
+	uint32_t  InMACRcvErr;
+	uint32_t  InFCSErr;
+	uint32_t  Collisions;
+	uint32_t  Late;
+
+} tpm_swport_pm_3_all_t;
+
 /******************************************************************************/
 /********************************** Initialisation defs ***********************/
 /******************************************************************************/
@@ -930,7 +1012,8 @@ typedef enum {
 	TPM_PON_WAN_G1_SINGLE_PORT,
 	TPM_PON_G1_WAN_G0_SINGLE_PORT,
 	TPM_PON_G0_WAN_G1_SINGLE_PORT,
-	TPM_PON_WAN_G0_G1_LPBK
+	TPM_PON_WAN_G0_G1_LPBK,
+	TPM_PON_WAN_G0_G1_DUAL_LAN
 } tpm_eth_complex_profile_t;
 
 typedef enum {
@@ -1023,26 +1106,6 @@ typedef enum {
 	TPM_MAX_NUM_TX_PORTS
 } tpm_init_tx_mod_t;
 
-typedef struct {
-	uint32_t omci_etype;
-
-	uint32_t oam_channel_configured;	/* omci or oam channel configured */
-	uint16_t omci_gemport;
-	uint32_t oam_cpu_rx_q;	/* omci cpu rx q or oam cpu rx q */
-	uint32_t oam_cpu_tx_q;	/* omci cpu tx q or oam cpu tx q */
-	uint32_t oam_cpu_tx_port;	/* omci tcount or oam llid */
-	uint32_t pnc_init_debug_port;
-	tpm_init_pon_type_t pon_type;
-
-} tpm_init_misc_t;
-
-/* Structure holds the IGMP/MLD settings */
-typedef struct {
-	uint32_t valid;
-	uint32_t igmp_snoop;
-	uint32_t igmp_cpu_queue;
-} tpm_init_igmp_t;
-
 /* Structure holds the physical connections of all external Ethernet ports */
 typedef struct {
 	uint32_t		valid;
@@ -1099,6 +1162,7 @@ typedef enum {
 	TPM_PNC_MAC_LEARN,
 	TPM_PNC_CPU_WAN_LPBK_US,
 	TPM_PNC_NUM_VLAN_TAGS,
+	TPM_PNC_DS_LOAD_BALANCE,
 	TPM_PNC_MULTI_LPBK,
 	TPM_PNC_VIRT_UNI,
 	TPM_PNC_LOOP_DET_US,
@@ -1107,13 +1171,14 @@ typedef enum {
 	TPM_PNC_IGMP,
 	TPM_PNC_IPV4_MC_DS,
 	TPM_PNC_IPV4_MAIN,
-	TPM_PNC_TCP_FLAG,
+	TPM_PNC_IPV4_TCP_FLAG,
 	TPM_PNC_TTL,
 	TPM_PNC_IPV4_PROTO,
 	TPM_PNC_IPV4_FRAG,
 	TPM_PNC_IPV4_LEN,
 	TPM_PNC_IPV6_NH,
 	TPM_PNC_IPV6_L4_MC_DS,
+	TPM_PNC_IPV6_TCP_FLAG,
 	TPM_PNC_IPV6_L4,
 	TPM_PNC_IPV6_HOPL,
 	TPM_PNC_IPV6_MC_SIP,
@@ -1152,6 +1217,10 @@ typedef enum {
 	TPM_IPV6_5T_DISABLED = 0,
 	TPM_IPV6_5T_ENABLED,
 } tpm_init_ipv6_5t_enable_t;
+typedef enum {
+	TPM_DS_MAC_BASED_TRUNK_DISABLED = 0,
+	TPM_DS_MAC_BASED_TRUNK_ENABLED,
+} tpm_init_ds_mac_based_trunk_enable_t;
 
 typedef enum {
 	TPM_CTC_CM_DISABLED = 0,
@@ -1277,20 +1346,6 @@ typedef enum {
 } tpm_init_split_mod_enable_t;
 
 typedef enum {
-	TPM_MC_ALL_CPU_FRWD,
-	TPM_MC_MAC_ONLY_FILTER,
-	TPM_MC_COMBINED_IP_MAC_FILTER,
-	TPM_MC_IP_ONLY_FILTER,
-	TPM_MC_FILTER_MODE_MAX,
-} tpm_mc_filter_mode_t;
-
-typedef enum {
-	TPM_MC_IGMP_SNOOPING,
-	TPM_MC_IGMP_PROXY,
-	TPM_MC_IGMP_MODE_MAX,
-} tpm_mc_igmp_mode_t;
-
-typedef enum {
 	TPM_MTU_IPV4,	/* IPV4 */
 	TPM_MTU_IPV6,	/* IPV6 */
 } tpm_mtu_ethertype_t;
@@ -1337,6 +1392,16 @@ typedef struct {
 	uint32_t ipv6_mc_support;
 } tpm_init_mc_setting_t;
 
+typedef enum {
+	TPM_INVALID_GMAC = -1,
+	TPM_ENUM_GMAC_0,
+	TPM_ENUM_GMAC_1,
+	TPM_ENUM_PMAC,
+	TPM_MAX_GMAC = TPM_ENUM_PMAC,
+	TPM_MAX_NUM_GMACS
+} tpm_gmacs_enum_t;
+
+
 typedef struct {
 	tpm_init_split_mod_enable_t split_mod_enable;
 	uint8_t p_bit[8];
@@ -1370,7 +1435,8 @@ typedef struct {
 	tpm_eth_complex_profile_t	eth_cmplx_profile;
 	tpm_init_eth_port_conf_t	eth_port_conf[TPM_MAX_NUM_ETH_PORTS];
 	tpm_init_gmac_conn_conf_t	gmac_port_conf[TPM_NUM_GMACS];
-	uint32_t			backup_wan;
+	uint32_t			active_wan;
+	tpm_init_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
 
 	tpm_init_gmac_tx_t gmac_tx[TPM_MAX_NUM_TX_PORTS];
 	tpm_init_gmac_rx_t gmac_rx[TPM_NUM_GMACS];
@@ -1436,6 +1502,7 @@ typedef enum tpm_error_code {
 	ERR_MC_STREAM_INVALID,	/*Illegal stream number. */
 	ERR_MC_STREAM_EXISTS,	/*Stream number already exists. */
 	ERR_MC_DST_PORT_INVALID,	/*Destination port bitmap does not match the UNI ports. */
+	ERR_MC_DST_QUEUE_INVALID,	/*Destination queue number invalid. */
 	ERR_IPV4_MC_DST_IP_INVALID,	/*Destination IP address is not in the MC range. */
 	ERR_IPV6_MC_DST_IP_INVALID,	/*Destination IPv6 address is not in the MC range. */
 	ERR_IPV6_MC_SRC_IP_INVALID,	/*SRC IPv6 address is not in the MC_SIP range. */
@@ -1489,6 +1556,8 @@ typedef enum tpm_error_code {
 	ERR_TPMCHECK_PMT_DB_MISMATCH,/*DB PMT check FAIL */
 	ERR_TPMCHECK_PMT_HW_MISMATCH,/*HW PMT check FAIL */
 	ERR_UNKNOWN_MAC_CONF_INVALID,/*Illegal MAC learn default conf*/
+	ERR_PHY_SRC_PORT_CONN_INVALID,/*PHY and source port connection invalid*/
+	ERR_PHY_STATUS_UNKNOWN,/*PHY status info is unknown*/
 } tpm_error_code_t;
 
 #ifdef __cplusplus

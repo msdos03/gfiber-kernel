@@ -115,9 +115,11 @@ static store_sysfs_name_func_t store_sysfs_name_func_ara[] =
     {"ipv4_rule_add",                      sfs_tpm_cfg_set_ipv4_rule_add},
     {"ipv6_gen_rule_add",                  sfs_tpm_cfg_set_ipv6_gen_rule_add},
     {"mc_ipv4_stream_add",                 sfs_tpm_cfg_set_mc_ipv4_stream_add},
+    {"mc_ipv4_stream_set_queue_add",	   sfs_tpm_cfg_set_mc_ipv4_stream_set_queue_add},
     {"mc_ipv4_stream_update",              sfs_tpm_cfg_set_mc_ipv4_stream_update},
-	{"mc_ipv6_stream_add",				   sfs_tpm_cfg_set_mc_ipv6_stream_add},
-	{"mc_ipv6_stream_update",			   sfs_tpm_cfg_set_mc_ipv6_stream_update},
+    {"mc_ipv6_stream_add",		   sfs_tpm_cfg_set_mc_ipv6_stream_add},
+    {"mc_ipv6_stream_set_queue_add",	   sfs_tpm_cfg_set_mc_ipv6_stream_set_queue_add},
+    {"mc_ipv6_stream_update",		   sfs_tpm_cfg_set_mc_ipv6_stream_update},
     {"igmp_port_forward_mode_cfg",         sfs_tpm_cfg_set_igmp_port_forward_mode_cfg},
     {"mc_vid_key_reset",                   sfs_tpm_cfg_set_mc_vid_key_reset},
     {"mc_vid_key_set",                     sfs_tpm_cfg_set_mc_vid_key_set},
@@ -135,6 +137,9 @@ static store_sysfs_name_func_t store_sysfs_name_func_ara[] =
     {"no_omci_channel",                    sfs_tpm_cfg_set_no_omci_channel},
     {"tpm_setup",                          sfs_tpm_cfg_setup},
     {"mib_reset",                          sfs_tpm_cfg_set_mib_reset},
+    {"set_active_wan",                     sfs_tpm_cfg_set_active_wan},
+    {"hot_swap_profile",		   sfs_tpm_cfg_hot_swap_profile},
+    {"set_port_hwf_admin",		   sfs_tpm_cfg_set_port_hwf_admin},
     {"erase_section",                      sfs_tpm_cfg_set_erase_section},
     {"add_cpu_lpbk",                       sfs_tpm_cfg_add_cpu_lpbk},
     {"del_cpu_lpbk",                       sfs_tpm_cfg_del_cpu_lpbk},
@@ -176,6 +181,8 @@ static store_sysfs_name_func_t store_sysfs_name_func_ara[] =
     {"no_rule_add_ipv6_dip_5t",            sfs_tpm_cfg_set_no_rule_add_ipv6_dip_5t},
     {"ipv6_l4_ports_5t_rule_add",          sfs_tpm_cfg_set_ipv6_l4_ports_5t_rule_add},
     {"no_rule_add_ipv6_l4_ports_5t",       sfs_tpm_cfg_set_no_rule_add_ipv6_l4_ports_5t},
+    {"add_ds_load_balance",	           sfs_tpm_cfg_set_ds_load_balance_rule_add},
+    {"del_ds_load_balance",		   sfs_tpm_cfg_set_no_rule_add_ds_load_balance},
 
     // zeev
     {"ipv6_nh_acl_rule_add",               sfs_tpm_cfg_set_ipv6_nh_acl_rule_add},
@@ -280,7 +287,11 @@ static show_sysfs_name_func_t show_sysfs_name_func_ara[] =
     {"help_no_oam_omci_channel",     sfs_help_no_oam_omci_channel},
     {"help_tpm_setup",               sfs_help_setup},
     {"help_mib_reset",               sfs_help_mib_reset},
+    {"help_set_active_wan",          sfs_help_set_active_wan},
+    {"help_hot_swap_profile",	     sfs_help_hot_swap_profile},
+    {"help_set_port_hwf_admin",	     sfs_help_set_port_hwf_admin},
     {"help_cfg_cpu_lpbk",            sfs_help_cfg_cpu_lpbk},
+    {"help_ds_load_balance_rule",    sfs_help_ds_load_balance_rule},
     {"help_cfg_age_count",           sfs_help_cfg_age_count},
     {"help_rate_limit",              sfs_help_rate_limit},
     {"help_pkt_mod_add",             sfs_help_pkt_mod_add},
@@ -397,7 +408,11 @@ static DEVICE_ATTR(help_oam_omci_channel,                           S_IRUSR, tpm
 static DEVICE_ATTR(help_no_oam_omci_channel,                        S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(help_tpm_setup,                                  S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(help_mib_reset,                                  S_IRUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(help_set_active_wan,                             S_IRUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(help_hot_swap_profile,                           S_IRUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(help_set_port_hwf_admin,                         S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(help_cfg_cpu_lpbk,                               S_IRUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(help_ds_load_balance_rule,                       S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(help_cfg_age_count,                              S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(help_rate_limit,                                 S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(help_pkt_mod_add,                                S_IRUSR, tpm_cfg_show, tpm_cfg_store);
@@ -473,8 +488,10 @@ static DEVICE_ATTR(ipv4_rule_add,                                   S_IWUSR, tpm
 static DEVICE_ATTR(ipv6_gen_rule_add,                               S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(ipv6_dip_rule_add,                               S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(mc_ipv4_stream_add,                              S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(mc_ipv4_stream_set_queue_add,                      S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(mc_ipv4_stream_update,                           S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(mc_ipv6_stream_add,                              S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(mc_ipv6_stream_set_queue_add,                      S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(mc_ipv6_stream_update,                           S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(ipv6_nh_acl_rule_add,                            S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(ipv6_l4_ports_acl_rule_add,                      S_IWUSR, tpm_cfg_show, tpm_cfg_store);
@@ -518,6 +535,9 @@ static DEVICE_ATTR(no_oam_channel,                                  S_IWUSR, tpm
 static DEVICE_ATTR(no_omci_channel,                                 S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(tpm_setup,                                       S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(mib_reset,                                       S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(set_active_wan,                                  S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(hot_swap_profile,                                S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(set_port_hwf_admin,                              S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(add_cpu_lpbk,                                    S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(del_cpu_lpbk,                                    S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(dump_cpu_lpbk,                                   S_IWUSR, tpm_cfg_show, tpm_cfg_store);
@@ -544,6 +564,8 @@ static DEVICE_ATTR(erase_section,                                   S_IWUSR, tpm
 static DEVICE_ATTR(tpm_self_check,                                  S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(flush_atu,                                       S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(flush_vtu,                                       S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(add_ds_load_balance,                             S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(del_ds_load_balance,                             S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 
 static DEVICE_ATTR(fc_config_set,                                   S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(fc_us_period_set,                                S_IWUSR, tpm_cfg_show, tpm_cfg_store);
@@ -919,6 +941,7 @@ static struct attribute *tpm_cfg_mc_sw_attrs[] =
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
 
     &dev_attr_mc_ipv4_stream_add.attr,
+    &dev_attr_mc_ipv4_stream_set_queue_add.attr,
     &dev_attr_igmp_port_forward_mode_cfg.attr,
     &dev_attr_igmp_cpu_queue_cfg.attr,
     &dev_attr_igmp_proxy_sa_mac.attr,
@@ -930,6 +953,7 @@ static struct attribute *tpm_cfg_mc_sw_attrs[] =
     &dev_attr_mc_vid_cfg_set.attr,
 
     &dev_attr_mc_ipv6_stream_add.attr,
+    &dev_attr_mc_ipv6_stream_set_queue_add.attr,
     &dev_attr_no_mc_stream_add_ipv6.attr,
     &dev_attr_mc_ipv6_stream_update.attr,
 
@@ -953,6 +977,9 @@ static struct attribute *tpm_cfg_misc_sw_attrs[] =
 #ifdef CONFIG_MV_TPM_SYSFS_HELP
     &dev_attr_help_tpm_setup.attr,
     &dev_attr_help_mib_reset.attr,
+    &dev_attr_help_set_active_wan.attr,
+    &dev_attr_help_hot_swap_profile.attr,
+    &dev_attr_help_set_port_hwf_admin.attr,
     &dev_attr_help_erase_section.attr,
     &dev_attr_help_send_genquery_to_uni.attr,
     &dev_attr_help_tpm_self_check.attr,
@@ -965,6 +992,9 @@ static struct attribute *tpm_cfg_misc_sw_attrs[] =
     &dev_attr_send_genquery_to_uni.attr,
 
     &dev_attr_mib_reset.attr,
+    &dev_attr_set_active_wan.attr,
+    &dev_attr_hot_swap_profile.attr,
+    &dev_attr_set_port_hwf_admin.attr,
     &dev_attr_erase_section.attr,
     &dev_attr_tpm_self_check.attr,
     &dev_attr_flush_vtu.attr,
@@ -1001,6 +1031,26 @@ static struct attribute_group tpm_cfg_cpu_lpbk_sw_group =
     .attrs = tpm_cfg_cpu_lpbk_sw_attrs
 };
 
+/******************************************************************************/
+/* ========================================================================== */
+/*             TPM cfg_ds_load_balance SYS FS STORE ROUTINE SWITCHER                     */
+/* ========================================================================== */
+
+static struct attribute *tpm_cfg_ds_load_balance_sw_attrs[] =
+{
+#ifdef CONFIG_MV_TPM_SYSFS_HELP
+    &dev_attr_help_ds_load_balance_rule.attr,
+#endif /* CONFIG_MV_TPM_SYSFS_HELP */
+    &dev_attr_add_ds_load_balance.attr,
+    &dev_attr_del_ds_load_balance.attr,
+    NULL
+};
+
+static struct attribute_group tpm_cfg_ds_load_balance_sw_group =
+{
+    .name = "cfg_ds_load_balance",
+    .attrs = tpm_cfg_ds_load_balance_sw_attrs
+};
 
 /******************************************************************************/
 /* ========================================================================== */
@@ -1097,6 +1147,10 @@ static struct attribute *tpm_cfg_flat_sw_attrs[] =
     &dev_attr_help_no_oam_omci_channel.attr,
     &dev_attr_help_tpm_setup.attr,
     &dev_attr_help_mib_reset.attr,
+    &dev_attr_help_set_active_wan.attr,
+    &dev_attr_help_hot_swap_profile.attr,
+    &dev_attr_help_set_port_hwf_admin.attr,
+    &dev_attr_help_ds_load_balance_rule.attr,
     &dev_attr_help_cfg_cpu_lpbk.attr,
     &dev_attr_help_rate_limit.attr,
     &dev_attr_help_pkt_mod_add.attr,
@@ -1146,8 +1200,10 @@ static struct attribute *tpm_cfg_flat_sw_attrs[] =
     &dev_attr_ipv6_gen_rule_add.attr,
     &dev_attr_ipv6_dip_rule_add.attr,
     &dev_attr_mc_ipv4_stream_add.attr,
+    &dev_attr_mc_ipv4_stream_set_queue_add.attr,
     &dev_attr_mc_ipv4_stream_update.attr,
     &dev_attr_mc_ipv6_stream_add.attr,
+    &dev_attr_mc_ipv6_stream_set_queue_add.attr,
     &dev_attr_mc_ipv6_stream_update.attr,
     &dev_attr_ipv6_nh_acl_rule_add.attr,
     &dev_attr_ipv6_l4_ports_acl_rule_add.attr,
@@ -1180,6 +1236,9 @@ static struct attribute *tpm_cfg_flat_sw_attrs[] =
 
     &dev_attr_tpm_setup.attr,
     &dev_attr_mib_reset.attr,
+    &dev_attr_set_active_wan.attr,
+    &dev_attr_hot_swap_profile.attr,
+    &dev_attr_set_port_hwf_admin.attr,
 
     &dev_attr_rate_limit_queue_set.attr,
     &dev_attr_scheduling_mode_queue_set.attr,
@@ -1188,7 +1247,6 @@ static struct attribute *tpm_cfg_flat_sw_attrs[] =
     &dev_attr_pkt_mod_eng_entry_show.attr,
     &dev_attr_pkt_mod_eng_entry_del.attr,
     &dev_attr_pkt_mod_eng_purge.attr,
-
 
     NULL
 };
@@ -1228,6 +1286,7 @@ static attr_group_pair_t attr_group_pair_ara[] =
     {"cfg_traffic",            &tpm_cfg_traffic_sw_group},
     {"cfg_misc",               &tpm_cfg_misc_sw_group},
     {"cfg_cpu_lpbk",           &tpm_cfg_cpu_lpbk_sw_group},
+    {"cfg_ds_load_balance",    &tpm_cfg_ds_load_balance_sw_group},
     {"cfg_age_count",          &tpm_cfg_age_count_sw_group},
     {"cfg_flat",               &tpm_cfg_flat_sw_group},
     {"cfg_mtu",                &tpm_cfg_mtu_sw_group},

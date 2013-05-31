@@ -139,6 +139,7 @@ MV_STATUS onuEponSetup(void)
     return(MV_ERROR);
   }
 
+  ponXvrFunc = EponXvrSDPolarityHighStatus;
   /* init onu database */
   rcode = onuEponDbInit();
   if (rcode != MV_OK)
@@ -416,8 +417,7 @@ MV_STATUS onuEponAsicInit(void)
 		return(MV_ERROR);
 	}
 
-	onuEponDbXvrPolaritySet(ONU_DEF_DDM_CFG_POLARITY_HIGH);
-	mvOnuPonMacBurstEnablePolarityInit(ONU_DEF_DDM_CFG_POLARITY_HIGH);
+    onuEponDbBurstEnablePolaritySet(ONU_DEF_DDM_CFG_POLARITY_HIGH);
 
 	status = mvOnuEponMacGpmDiscoveryGrantLengthSet(0x26,  /* grantLength */
 							0x06,  /* addOffsetForCalc */
@@ -854,7 +854,6 @@ MV_STATUS onuEponOperate(void)
     return(status);
   }
 
-
   /* Enable MAC */
   status = mvOnuEponMacOnuRxEnableSet(ONU_RX_EN);
   if (status != MV_OK)
@@ -940,7 +939,7 @@ MV_STATUS onuEponInit(S_EponIoctlInit *ioctlInit)
   }
 
   /* re-set DDM polarity */
-  status = mvOnuEponMacDdmTxPolaritySet(ONU_DEF_DDM_CFG_TX_EN_OR, ioctlInit->xvrPolarity);
+  status = mvOnuEponMacDdmTxPolaritySet(ONU_DEF_DDM_CFG_TX_EN_OR, ioctlInit->ponXvrBurstEnPolarity);
   if (status != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
@@ -948,8 +947,9 @@ MV_STATUS onuEponInit(S_EponIoctlInit *ioctlInit)
     return(MV_ERROR);
   }
 
-  onuEponDbXvrPolaritySet(ioctlInit->xvrPolarity);
-  mvOnuPonMacBurstEnablePolarityInit(ioctlInit->xvrPolarity);
+    ponXvrFunc = funcEponXvrSDStatus(ioctlInit->ponXvrPolarity);
+
+    onuP2PDbXvrBurstEnablePolaritySet(ioctlInit->p2pXvrBurstEnPolarity);
 
 #ifndef PON_FPGA
   /* enable onu dying gasp interrupt mask */
@@ -961,6 +961,14 @@ MV_STATUS onuEponInit(S_EponIoctlInit *ioctlInit)
     return(status);
   }
 #endif /* PON_FPGA */
+
+    status = mvEponApi2kSupportedSet(ioctlInit->pkt2kSupported);
+    if (status != MV_OK)
+    {
+        mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
+                   "ERROR: (%s:%d) mvEponApi2kSupportedSet\r\n", __FILE_DESC__, __LINE__);
+        return(status);
+    }
 
   return(MV_OK);
 }

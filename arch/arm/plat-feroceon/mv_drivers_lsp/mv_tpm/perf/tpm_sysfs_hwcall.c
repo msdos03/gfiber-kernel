@@ -735,6 +735,287 @@ void sfs_tpm_cfg_set_mc_ipv4_stream_add  (const char *buf, size_t len)
     }
 }
 
+
+#ifdef CONFIG_MV_TPM_SFS_2_IOCTL
+tpm_error_code_t tpm_add_ipv4_mc_stream_set_queue_bounce(
+					      uint32_t                 owner_id,
+                                              uint32_t                  stream_num,
+                                              tpm_mc_igmp_mode_t        igmp_mode,
+                                              uint8_t                   mc_stream_pppoe,
+                                              uint16_t                  vid,
+                                              uint8_t                   ipv4_src_add[4],
+                                              uint8_t                   ipv4_dst_add[4],
+                                              uint8_t                   ignore_ipv4_src,
+                                              uint16_t                  dest_queue,
+                                              tpm_trg_port_type_t       dest_port_bm)
+{
+    tpm_ioctl_mc_rule_t *tpm_mc_rule = &tpm_sfs_2_ioctl_command.tpm_cmd_data.tpm_mc_rule;
+
+    tpm_sfs_2_ioctl_command.cmd             = MV_TPM_IOCTL_MC_STREAM_SECTION;
+    tpm_mc_rule->mc_cmd                     = MV_TPM_IOCTL_ADD_IPv4_MC_STREAM_SET_QUEUE;
+    tpm_mc_rule->stream_num                 = stream_num;
+    tpm_mc_rule->igmp_mode                  = igmp_mode;
+    tpm_mc_rule->mc_stream_pppoe            = mc_stream_pppoe;
+    tpm_mc_rule->vid                        = vid;
+    tpm_mc_rule->ipv4_mc.ignore_ipv4_src    = ignore_ipv4_src;
+    tpm_mc_rule->dest_queue                 = dest_queue;
+    tpm_mc_rule->dest_port_bm               = dest_port_bm;
+    memcpy(&(tpm_mc_rule->ipv4_mc.ipv4_src_add[0]), ipv4_src_add, sizeof(uint8_t)*4);
+    memcpy(&(tpm_mc_rule->ipv4_mc.ipv4_dst_add[0]), ipv4_dst_add, sizeof(uint8_t)*4);
+
+    up(&tpm_sfs_2_ioctl_sem);
+
+    return TPM_RC_OK;
+}
+ #define _tpm_add_ipv4_mc_stream_set_queue tpm_add_ipv4_mc_stream_set_queue_bounce
+#else
+ #define _tpm_add_ipv4_mc_stream_set_queue tpm_add_ipv4_mc_stream_set_queue
+#endif
+
+
+/*******************************************************************************
+* sfs_tpm_cfg_set_mc_ipv4_stream_set_queue_add
+*
+* DESCRIPTION:
+*           This function creates a multicast IPV4 rule
+* INPUTS:
+*       buf	- Shell parameters as char buffer
+*       len - Number of characters in buffer
+*
+*******************************************************************************/
+void sfs_tpm_cfg_set_mc_ipv4_stream_set_queue_add  (const char *buf, size_t len)
+{
+    typedef enum
+    {
+        mcipv4add_owner=0, mcipv4add_stream, mcipv4add_mode,   mcipv4add_pppoe,        mcipv4add_vid,
+        mcipv4add_src_ip,  mcipv4add_dst_ip, mcipv4add_ignore, mcipv4add_target_ports, mcipv4add_target_queue,
+        mcipv4add_max
+    } mcipv4add_parm_indx_t;
+    // shell line parsing
+    unsigned int             ownerid;
+    uint32_t                 stream;
+    uint32_t                 mode;
+    char                     mc_pppoe_str[20];
+    uint32_t                 mc_stream_pppoe;
+    uint32_t                 vid;
+    char                     srcip_str[30];
+    char                     dstip_str[30];
+    uint32_t                 temp_srcip[4];
+    uint32_t                 temp_dstip[4];
+    uint8_t                  srcip[4];
+    uint8_t                  dstip[4];
+    char                     ignore_str[20];
+    uint32_t                 ignore;
+    uint32_t                 target_queue;
+    uint32_t                 target_ports;
+    int                      parsedargs;
+    int                      numparms;
+    // Used in API call
+    tpm_error_code_t         rc;
+
+    numparms = count_parameters(buf);
+    if (numparms != mcipv4add_max)
+    {
+        parm_error_completion(numparms, mcipv4add_max, buf, sfs_help_mc_ipvx_stream_add);
+    }
+    else
+    {
+        // Get parameters
+        parsedargs = sscanf(buf, "%d %d %d %s %d %s %s %s %d 0x%x",
+                            &ownerid, &stream, &mode, mc_pppoe_str, &vid, srcip_str, dstip_str, ignore_str, &target_queue, &target_ports);
+//        printk(KERN_INFO "len=%d, parsedargs=%d. ownerid[%d], stream[%d], vid[%d], srcip_str[%s], dstip_str[%s], ignore_str[%s], target_ports[0x%x]\n",
+//               len, parsedargs, ownerid, stream, vid, srcip_str, dstip_str, ignore_str, target_ports);
+
+        if (parsedargs != numparms)
+        {
+            printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);
+        }
+        else if (get_bool_value(mc_pppoe_str, &mc_stream_pppoe) == GT_FALSE)
+        {
+            printk(KERN_INFO "Invalid ignore[%s]\n", ignore_str);
+        }
+        else if (parse_ipv4_address(srcip_str, temp_srcip) == GT_FALSE)
+        {
+            printk(KERN_INFO "Invalid src_ip [%s]\n", srcip_str);
+        }
+        else if (parse_ipv4_address(dstip_str, temp_dstip) == GT_FALSE)
+        {
+            printk(KERN_INFO "Invalid dst_ip [%s]\n", dstip_str);
+        }
+        else if (get_bool_value(ignore_str, &ignore) == GT_FALSE)
+        {
+            printk(KERN_INFO "Invalid ignore[%s]\n", ignore_str);
+        }
+        else
+        {
+            int indx;
+
+            for (indx = 0; indx < sizeof(srcip); indx++)
+            {
+                srcip[indx] = (uint8_t)temp_srcip[indx];
+                dstip[indx] = (uint8_t)temp_dstip[indx];
+            }
+
+            if ((rc = _tpm_add_ipv4_mc_stream_set_queue(ownerid,
+                                              stream,
+                                              mode,
+                                              (uint8_t)mc_stream_pppoe,
+                                              vid,
+                                              srcip,
+                                              dstip,
+                                              (uint8_t)ignore,
+                                              target_queue,
+                                              target_ports)) == TPM_RC_OK)
+            {
+                printk(KERN_INFO "OK\n");
+            }
+            else
+            {
+                printk(KERN_INFO "%s: tpm_add_ipv4_mc_stream_set_queue failed, rc[%d] - %s\n", __FUNCTION__, rc, get_tpm_err_str(rc));
+            }
+        }
+    }
+}
+
+#ifdef CONFIG_MV_TPM_SFS_2_IOCTL
+tpm_error_code_t tpm_add_ipv6_mc_stream_set_queue_bounce(uint32_t owner_id,
+						uint32_t stream_num,
+						tpm_mc_igmp_mode_t igmp_mode,
+						uint8_t mc_stream_pppoe,
+						uint16_t vid,
+						uint8_t ipv6_src_add[16],
+						uint8_t ipv6_dst_add[16],
+						uint8_t ignore_ipv6_src,
+						uint16_t dest_queue,
+						tpm_trg_port_type_t dest_port_bm)
+{
+    tpm_ioctl_mc_rule_t *tpm_mc_rule = &tpm_sfs_2_ioctl_command.tpm_cmd_data.tpm_mc_rule;
+
+    tpm_sfs_2_ioctl_command.cmd             = MV_TPM_IOCTL_MC_STREAM_SECTION;
+    tpm_mc_rule->mc_cmd                     = MV_TPM_IOCTL_ADD_IPv6_MC_STREAM_SET_QUEUE;
+    tpm_mc_rule->stream_num                 = stream_num;
+    tpm_mc_rule->igmp_mode                  = igmp_mode;
+    tpm_mc_rule->mc_stream_pppoe            = mc_stream_pppoe;
+    tpm_mc_rule->vid                        = vid;
+    tpm_mc_rule->dest_port_bm               = dest_port_bm;
+    tpm_mc_rule->dest_queue                 = dest_queue;
+    memcpy(&(tpm_mc_rule->ipv6_mc.ipv6_dst_add[0]), ipv6_dst_add, sizeof(uint8_t) * 16);
+    memcpy(&(tpm_mc_rule->ipv6_mc.ipv6_src_add[0]), ipv6_src_add, sizeof(uint8_t) * 16);
+    tpm_mc_rule->ipv6_mc.ignore_ipv6_src = ignore_ipv6_src;
+
+    up(&tpm_sfs_2_ioctl_sem);
+
+    return TPM_RC_OK;
+}
+ #define _tpm_add_ipv6_mc_stream_set_queue tpm_add_ipv6_mc_stream_set_queue_bounce
+#else
+ #define _tpm_add_ipv6_mc_stream_set_queue tpm_add_ipv6_mc_stream_set_queue
+#endif
+
+/*******************************************************************************
+* sfs_tpm_cfg_set_mc_ipv6_stream_add_set_queue
+*
+* DESCRIPTION:
+*           This function creates a multicast ipv6 rule with destination queue
+* INPUTS:
+*       buf	- Shell parameters as char buffer
+*       len - Number of characters in buffer
+*
+*******************************************************************************/
+void sfs_tpm_cfg_set_mc_ipv6_stream_set_queue_add  (const char *buf, size_t len)
+{
+    typedef enum
+    {
+        mcipv6add_owner=0, mcipv6add_stream, mcipv6add_mode,   mcipv6add_pppoe,        mcipv6add_vid,
+        mcipv6add_src_ip, mcipv6add_dst_ip, mcipv6add_ignor_src_ip, mcipv6add_target_queue, mcipv6add_target_ports, mcipv6add_max
+    } mcipv6add_parm_indx_t;
+    // shell line parsing
+    unsigned int             ownerid;
+    uint32_t                 stream;
+    uint32_t                 mode;
+    char                     mc_pppoe_str[20];
+    uint32_t                 mc_stream_pppoe;
+    uint32_t                 vid;
+    char                     dstip_str[60];
+    uint32_t                 temp_dstip[16];
+    char                     srcip_str[60];
+    uint32_t                 temp_srcip[16];
+    uint8_t                  dstip[16];
+    uint8_t                  srcip[16];
+    uint32_t                 ignor_srcip;
+    char                     ignore_str[20];
+    uint32_t                 target_ports;
+    uint32_t                 target_queue;
+    int                      parsedargs;
+    int                      numparms;
+    // Used in API call
+    tpm_error_code_t         rc;
+
+    numparms = count_parameters(buf);
+    if (numparms != mcipv6add_max)
+    {
+        parm_error_completion(numparms, mcipv6add_max, buf, sfs_help_mc_ipvx_stream_add);
+    }
+    else
+    {
+        // Get parameters
+        parsedargs = sscanf(buf, "%d %d %d %s %d %s %s %s %d 0x%x",
+                            &ownerid, &stream, &mode, mc_pppoe_str, &vid, srcip_str, dstip_str, ignore_str, &target_queue, &target_ports);
+        printk(KERN_INFO "len=%d, parsedargs=%d. ownerid[%d], stream[%d], vid[%d], srcip_str[%s],  "
+		"dstip_str[%s],  ignor_srcip[%s], target_queue[%d], target_ports[0x%x]\n",
+               len, parsedargs, ownerid, stream, vid, srcip_str, dstip_str, ignore_str, target_queue, target_ports);
+
+        if (parsedargs != numparms)
+        {
+            printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);
+        }
+        else if (get_bool_value(mc_pppoe_str, &mc_stream_pppoe) == GT_FALSE)
+        {
+            printk(KERN_INFO "Invalid mc_pppoe_str[%s]\n", mc_pppoe_str);
+        }
+        else if (parse_ipv6_address(dstip_str, temp_dstip) == GT_FALSE)
+        {
+            printk(KERN_INFO "Invalid dst_ip [%s]\n", dstip_str);
+        }
+        else if (parse_ipv6_address(srcip_str, temp_srcip) == GT_FALSE)
+        {
+            printk(KERN_INFO "Invalid srcip_str [%s]\n", srcip_str);
+	}
+	else if (get_bool_value(ignore_str, &ignor_srcip) == GT_FALSE)
+	{
+	    printk(KERN_INFO "Invalid ignore[%s]\n", ignore_str);
+        }
+        else
+        {
+            int indx;
+
+            for (indx = 0; indx < sizeof(dstip); indx++)
+            {
+                dstip[indx] = (uint8_t)temp_dstip[indx];
+                srcip[indx] = (uint8_t)temp_srcip[indx];
+            }
+
+            if ((rc = _tpm_add_ipv6_mc_stream_set_queue(ownerid,
+                                              stream,
+                                              mode,
+                                              (uint8_t)mc_stream_pppoe,
+                                              vid,
+                                              srcip,
+                                              dstip,
+                                              ignor_srcip,
+                                              target_queue,
+                                              target_ports)) == TPM_RC_OK)
+            {
+                printk(KERN_INFO "OK\n");
+            }
+            else
+            {
+                printk(KERN_INFO "%s: tpm_add_ipv6_mc_stream_set_queue failed, rc[%d] - %s\n", __FUNCTION__, rc, get_tpm_err_str(rc));
+            }
+        }
+    }
+}
+
 #ifdef CONFIG_MV_TPM_SFS_2_IOCTL
 tpm_error_code_t tpm_add_ipv6_mc_stream_bounce(uint32_t owner_id,
 						uint32_t stream_num,
@@ -2445,6 +2726,242 @@ void sfs_tpm_cfg_set_mib_reset  (const char *buf, size_t len)
                 printk(KERN_INFO "%s: tpm_mib_reset failed, rc[%d] - %s\n", __FUNCTION__, rc, get_tpm_err_str(rc));
             }
         }
+    }
+}
+
+#ifdef CONFIG_MV_TPM_SFS_2_IOCTL
+tpm_error_code_t tpm_set_active_wan_bounce(uint32_t     owner_id,
+                                           tpm_gmacs_enum_t active_wan)
+{
+    tpm_ioctl_set_active_wan_t *tpm_set_active_wan_param = &tpm_sfs_2_ioctl_command.tpm_cmd_data.tpm_set_active_wan_param;
+
+    tpm_sfs_2_ioctl_command.cmd              = MV_TPM_IOCTL_SET_ACTIVE_WAN_SECTION;
+    tpm_set_active_wan_param->owner_id       = owner_id;
+    tpm_set_active_wan_param->active_wan     = active_wan;
+
+    up(&tpm_sfs_2_ioctl_sem);
+
+    return TPM_RC_OK;
+}
+ #define _tpm_set_active_wan tpm_set_active_wan_bounce
+#else
+ #define _tpm_set_active_wan tpm_set_active_wan
+#endif
+
+
+/*******************************************************************************
+* sfs_tpm_cfg_set_set_active_wan
+*
+* DESCRIPTION:
+*           This function sets active wan port
+* INPUTS:
+*       buf	- Shell parameters as char buffer
+*       len - Number of characters in buffer
+*
+*******************************************************************************/
+void sfs_tpm_cfg_set_active_wan  (const char *buf, size_t len)
+{
+    typedef enum
+    {
+	activewan_owner=0, activewan_active_wan,  activewan_max
+    } activewan_parm_indx_t;
+    // shell line parsing
+    uint32_t		     ownerid;
+    int 		     parsedargs;
+    int 		     numparms;
+    //Used in API call
+    tpm_error_code_t	     rc;
+    tpm_gmacs_enum_t	     active_wan;
+
+    numparms = count_parameters(buf);
+    if (numparms != activewan_max)
+    {
+	parm_error_completion(numparms, activewan_max, buf, sfs_help_set_active_wan);
+    }
+    else
+    {
+	// Get parameters
+	parsedargs = sscanf(buf, "%d %d", &ownerid, &active_wan);
+//	  printk(KERN_INFO "len=%d, parsedargs=%d. ownerid[%d], active_wan_int[%d]\n",
+//			len, parsedargs, ownerid, active_wan);
+
+	if (parsedargs != numparms)
+	{
+	    printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);
+	}
+	else if (active_wan >= TPM_MAX_NUM_GMACS)
+	{
+	    printk(KERN_INFO "Invalid active_wan[%d]\n", active_wan);
+	}
+	else
+	{
+	    if ((rc = _tpm_set_active_wan(ownerid,
+					  active_wan)) == TPM_RC_OK)
+	    {
+		printk(KERN_INFO "OK\n");
+	    }
+	    else
+	    {
+		printk(KERN_INFO "%s: tpm_set_active_wan failed, rc[%d] - %s\n", __FUNCTION__, rc, get_tpm_err_str(rc));
+	    }
+	}
+    }
+}
+
+
+#ifdef CONFIG_MV_TPM_SFS_2_IOCTL
+tpm_error_code_t tpm_hot_swap_profile_bounce(uint32_t     owner_id,
+                                           tpm_eth_complex_profile_t profile_id)
+{
+    tpm_ioctl_hot_swap_profile_t *tpm_hot_swap_profile_param = &tpm_sfs_2_ioctl_command.tpm_cmd_data.tpm_hot_swap_profile_param;
+
+    tpm_sfs_2_ioctl_command.cmd              = MV_TPM_IOCTL_HOT_SWAP_PROFILE_SECTION;
+    tpm_hot_swap_profile_param->owner_id       = owner_id;
+    tpm_hot_swap_profile_param->profile_id     = profile_id;
+
+    up(&tpm_sfs_2_ioctl_sem);
+
+    return TPM_RC_OK;
+}
+ #define _tpm_hot_swap_profile tpm_hot_swap_profile_bounce
+#else
+ #define _tpm_hot_swap_profile tpm_hot_swap_profile
+#endif
+
+
+/*******************************************************************************
+* sfs_tpm_cfg_set_hot_swap_profile
+*
+* DESCRIPTION:
+*           This function swap profile in run time
+* INPUTS:
+*       buf	- Shell parameters as char buffer
+*       len - Number of characters in buffer
+*
+*******************************************************************************/
+void sfs_tpm_cfg_hot_swap_profile  (const char *buf, size_t len)
+{
+    typedef enum
+    {
+	hotswap_owner=0, hotswap_profile_id,  hotswap_max
+    } hotswap_parm_indx_t;
+    // shell line parsing
+    uint32_t		     ownerid;
+    int 		     parsedargs;
+    int 		     numparms;
+    //Used in API call
+    tpm_error_code_t	     rc;
+    uint32_t	     profile_id;
+
+    numparms = count_parameters(buf);
+    if (numparms != hotswap_max)
+    {
+	parm_error_completion(numparms, hotswap_max, buf, sfs_help_hot_swap_profile);
+    }
+    else
+    {
+	// Get parameters
+	parsedargs = sscanf(buf, "%d %d", &ownerid, &profile_id);
+//	  printk(KERN_INFO "len=%d, parsedargs=%d. ownerid[%d], profile_id_int[%d]\n",
+//			len, parsedargs, ownerid, profile_id);
+
+	if (parsedargs != numparms)
+	{
+	    printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);
+	}
+	else
+	{
+	    if ((rc = _tpm_hot_swap_profile(ownerid,
+					  profile_id)) == TPM_RC_OK)
+	    {
+		printk(KERN_INFO "OK\n");
+	    }
+	    else
+	    {
+		printk(KERN_INFO "%s: tpm_hot_swap_profile failed, rc[%d] - %s\n", __FUNCTION__, rc, get_tpm_err_str(rc));
+	    }
+	}
+    }
+}
+
+#ifdef CONFIG_MV_TPM_SFS_2_IOCTL
+tpm_error_code_t tpm_set_port_hwf_admin_bounce(uint32_t	   owner_id,
+							  tpm_gmacs_enum_t port,
+							  uint8_t	   txp,
+							  uint8_t	   enable)
+{
+    tpm_ioctl_set_port_hwf_admin_t *tpm_set_port_hwf_admin_param = &tpm_sfs_2_ioctl_command.tpm_cmd_data.tpm_set_port_hwf_admin_param;
+
+    tpm_sfs_2_ioctl_command.cmd              = MV_TPM_IOCTL_SET_PORT_HWF_ADMIN_SECTION;
+    tpm_set_port_hwf_admin_param->owner_id   = owner_id;
+    tpm_set_port_hwf_admin_param->port       = port;
+    tpm_set_port_hwf_admin_param->txp        = txp;
+    tpm_set_port_hwf_admin_param->enable     = enable;
+
+    up(&tpm_sfs_2_ioctl_sem);
+
+    return TPM_RC_OK;
+}
+ #define _tpm_set_port_hwf_admin tpm_set_port_hwf_admin_bounce
+#else
+ #define _tpm_set_port_hwf_admin tpm_proc_hwf_admin_set
+#endif
+
+
+/*******************************************************************************
+* sfs_tpm_cfg_set_set_port_hwf_admin
+*
+* DESCRIPTION:
+*           This function set port hwf enable/disable
+* INPUTS:
+*       buf	- Shell parameters as char buffer
+*       len - Number of characters in buffer
+*
+*******************************************************************************/
+void sfs_tpm_cfg_set_port_hwf_admin  (const char *buf, size_t len)
+{
+    typedef enum
+    {
+	setporthwfadmin_owner=0, setporthwfadmin_port, setporthwfadmin_txp,
+	setporthwfadmin_enable, setporthwfadmin_max
+    } setporthwfadmin_parm_indx_t;
+    // shell line parsing
+    int 		     parsedargs;
+    int 		     numparms;
+    //Used in API call
+    tpm_error_code_t	   rc;
+    uint32_t               ownerid;
+    tpm_gmacs_enum_t       port;
+    uint32_t               txp;
+    uint32_t               enable;
+
+    numparms = count_parameters(buf);
+    if (numparms != setporthwfadmin_max)
+    {
+	parm_error_completion(numparms, setporthwfadmin_max, buf, sfs_help_set_port_hwf_admin);
+    }
+    else
+    {
+	// Get parameters
+	parsedargs = sscanf(buf, "%d %d %d %d", &ownerid, &port, &txp, &enable);
+//	  printk(KERN_INFO "len=%d, parsedargs=%d. ownerid[%d], port[%d], txp[%d], enable[%d]\n",
+//			len, parsedargs, ownerid, port, txp, enable);
+
+	if (parsedargs != numparms)
+	{
+	    printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);
+	}
+	else
+	{
+	    if ((rc = _tpm_set_port_hwf_admin(port, txp, enable)) == TPM_RC_OK)
+	    {
+		printk(KERN_INFO "OK\n");
+	    }
+	    else
+	    {
+		printk(KERN_INFO "%s: tpm_set_port_hwf_admin failed, rc[%d] - %s\n", __FUNCTION__, rc, get_tpm_err_str(rc));
+	    }
+	}
     }
 }
 
@@ -6412,4 +6929,193 @@ void sfs_tpm_cfg_fc_enable(const char *buf, size_t len)
 		}
 	}
 }
+
+
+#ifdef CONFIG_MV_TPM_SFS_2_IOCTL
+tpm_error_code_t tpm_add_ds_load_balance_rule_bounce(uint32_t                owner_id,
+                                        uint32_t                rule_num,
+                                        uint32_t               *rule_idx,
+                                        tpm_parse_fields_t      parse_rule_bm,
+					tpm_parse_flags_t	parse_flags_bm,
+                                        tpm_l2_acl_key_t       *l2_key,
+                                        tpm_ds_load_balance_tgrt_t tgrt_port)
+{
+    tpm_ioctl_add_acl_rule_t *tpm_add_acl_rule = &tpm_sfs_2_ioctl_command.tpm_cmd_data.tpm_add_acl_rule;
+
+    tpm_sfs_2_ioctl_command.cmd                     = MV_TPM_IOCTL_ADD_ACL_SECTION;
+    tpm_add_acl_rule->add_acl_cmd                   = MV_TPM_IOCTL_ADD_DS_LOAD_BALANCE_RULE;
+    tpm_add_acl_rule->owner_id                      = owner_id;
+    tpm_add_acl_rule->rule_num                      = rule_num;
+    tpm_add_acl_rule->parse_rule_bm                 = parse_rule_bm;
+    tpm_add_acl_rule->ds_load_balance_acl_rule.parse_flags_bm = parse_flags_bm;
+    tpm_add_acl_rule->ds_load_balance_acl_rule.tgrt = tgrt_port;
+    memcpy(&(tpm_add_acl_rule->ds_load_balance_acl_rule.l2_key),         (void*)l2_key,      sizeof(tpm_l2_acl_key_t));
+
+    up(&tpm_sfs_2_ioctl_sem);
+
+    return TPM_RC_OK;
+}
+ #define _tpm_add_ds_load_balance_rule tpm_add_ds_load_balance_rule_bounce
+#else
+ #define _tpm_add_ds_load_balance_rule tpm_add_ds_load_balance_rule
+#endif
+
+
+/*******************************************************************************
+* sfs_tpm_cfg_set_ds_load_balance_rule_add
+*
+* DESCRIPTION:
+*           This function creates a ds_load_balance rule
+* INPUTS:
+*       buf	- Shell parameters as char buffer
+*       len - Number of characters in buffer
+*
+*******************************************************************************/
+void sfs_tpm_cfg_set_ds_load_balance_rule_add  (const char *buf, size_t len)
+{
+    typedef enum
+    {
+        ds_load_blnc_ruleadd_owner=0, ds_load_blnc_ruleadd_rulenum,
+	ds_load_blnc_ruleadd_parserulebm, ds_load_blnc_ruleadd_parseflagsbm,
+	ds_load_blnc_ruleadd_l2keyname,
+        ds_load_blnc_ruleadd_trgt, ds_load_blnc_ruleadd_max
+    } ds_load_blnc_ruleadd_parm_indx_t;
+    // shell line parsing
+    uint32_t                 ownerid;
+    uint32_t                 rulenum;
+    uint32_t                 parserulebm;
+    uint32_t                 parseflagsbm;
+    uint32_t                 trgt;
+    char                     l2keyname[20];
+    int                      parsedargs;
+    int                      numparms;
+    // DB
+    tpmcfg_l2_key_entry_t    *pdbl2keyentry = 0;
+    //Used in API call
+    tpm_l2_acl_key_t         l2_acl;
+    uint32_t                 rule_idx;
+    tpm_error_code_t         rc;
+
+    numparms = count_parameters(buf);
+    if (numparms != ds_load_blnc_ruleadd_max)
+    {
+        parm_error_completion(numparms, ds_load_blnc_ruleadd_max, buf, sfs_help_ds_load_balance_rule);
+    }
+    else
+    {
+        // Get parameters
+        parsedargs = sscanf(buf, "%d %d 0x%x 0x%x %s %d",  &ownerid, &rulenum, &parserulebm,
+                                 &parseflagsbm, l2keyname, &trgt);
+        printk(KERN_INFO "len=%d, parsedargs=%d. ownerid[%d], rulenum[%d], parserulebm[0x%x], parseflagsbm[0x%x], "
+			"l2keyname[%s], trgt[%d]\n",
+               len, parsedargs, ownerid, rulenum, parserulebm, parseflagsbm, l2keyname, trgt);
+
+        if (parsedargs != numparms)
+        {
+            printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);
+        }
+        else if (((pdbl2keyentry = find_tpm_l2_key_entry_by_name(l2keyname)) == 0) && strcmp(l2keyname, l2_key_empty_name) != 0)
+        {
+            printk(KERN_INFO "L2 key entry [%s] not found\n", l2keyname);
+        }
+        else
+        {
+
+            if (pdbl2keyentry != 0)  memcpy(&l2_acl, &pdbl2keyentry->l2_acl, sizeof(tpm_l2_acl_key_t));
+            else                     memset(&l2_acl, 0,                      sizeof(tpm_l2_acl_key_t));
+
+            if ((rc = _tpm_add_ds_load_balance_rule(ownerid,
+                                       rulenum,
+                                       &rule_idx,
+                                       parserulebm,
+                                       parseflagsbm,
+                                       &l2_acl,
+                                       trgt)) == TPM_RC_OK)
+                PR_RULE_IDX(rule_idx)
+            else
+            {
+                printk(KERN_INFO "%s: tpm_add_ds_load_balance_rule failed, rc[%d] - %s\n",
+			__FUNCTION__, rc, get_tpm_err_str(rc));
+            }
+        }
+    }
+}
+
+#ifdef CONFIG_MV_TPM_SFS_2_IOCTL
+tpm_error_code_t tpm_del_ds_load_balance_rule_bounce(uint32_t        owner_id,
+                                        uint32_t        rule_idx)
+{
+    tpm_ioctl_del_acl_rule_t *tpm_del_acl_rule = &tpm_sfs_2_ioctl_command.tpm_cmd_data.tpm_del_acl_rule;
+
+    tpm_sfs_2_ioctl_command.cmd     = MV_TPM_IOCTL_DEL_ACL_SECTION;
+    tpm_del_acl_rule->del_acl_cmd   = MV_TPM_IOCTL_DEL_DS_LOAD_BALANCE_RULE;
+    tpm_del_acl_rule->owner_id      = owner_id;
+    tpm_del_acl_rule->rule_idx      = rule_idx;
+
+    up(&tpm_sfs_2_ioctl_sem);
+
+    return TPM_RC_OK;
+}
+ #define _tpm_del_ds_load_balance_rule tpm_del_ds_load_balance_rule_bounce
+#else
+ #define _tpm_del_ds_load_balance_rule tpm_del_ds_load_balance_rule
+#endif
+
+
+/*******************************************************************************
+* sfs_tpm_cfg_set_no_rule_add_ds_load_balance
+*
+* DESCRIPTION:
+*           This function deletes a ds_load_balance HW rule (PNC)
+* INPUTS:
+*       buf	- Shell parameters as char buffer
+*       len - Number of characters in buffer
+*
+*******************************************************************************/
+void sfs_tpm_cfg_set_no_rule_add_ds_load_balance  (const char *buf, size_t len)
+{
+    typedef enum
+    {
+	noruleadd_owner=0,  noruleadd_ruleidx,	noruleadd_max
+    } noruleadd_parm_indx_t;
+    // shell line parsing
+    uint32_t		     ownerid;
+    uint32_t		     rule_idx;
+    int 		     parsedargs;
+    int 		     numparms;
+    //Used in API call
+    tpm_error_code_t	     rc;
+
+    numparms = count_parameters(buf);
+    if (numparms != noruleadd_max)
+    {
+	parm_error_completion(numparms, noruleadd_max, buf, sfs_help_no_rule_add);
+    }
+    else
+    {
+	// Get parameters
+	parsedargs = sscanf(buf, "%d %d", &ownerid, &rule_idx);
+	//printk(KERN_INFO "len=%d, parsedargs=%d. ownerid[%d], rule_idx[%d]\n",
+	//	 len, parsedargs, ownerid, rule_idx);
+
+
+	if (parsedargs != numparms)
+	{
+	    printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);
+	}
+	else
+	{
+	    if ((rc = _tpm_del_ds_load_balance_rule(ownerid, rule_idx)) == TPM_RC_OK)
+	    {
+		printk(KERN_INFO "OK\n");
+	    }
+	    else
+	    {
+		printk(KERN_INFO "%s: tpm_del_ds_load_balance_rule failed, rc[%d] - %s\n",
+			__FUNCTION__, rc, get_tpm_err_str(rc));
+	    }
+	}
+    }
+}
+
 

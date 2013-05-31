@@ -85,6 +85,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "tpm_header.h"
 
 /* Local definitions */
+extern MV_STATUS mv_cust_set_tcont_state(uint32_t tcont, bool state);
 
 typedef tpm_error_code_t (*tpm_proc_common_int_del_func_t) (uint32_t, uint32_t);
 
@@ -143,12 +144,31 @@ static uint8_t tpm_mld_gen_query_mac[6] = { 0x33, 0x33, 0x00, 0x00, 0x00, 0x01};
 /* Bitmap of PNC port_ids */
 static uint32_t gmac_pnc_bm[3] = { TPM_BM_GMAC_0, TPM_BM_GMAC_1, TPM_BM_PMAC};
 
+tpm_hot_swap_acl_recovery_t tpm_hot_swap_acl_recovery[] = {
+	{TPM_API_MAC_LEARN,        tpm_acl_rcvr_func_mac_learn},
+	{TPM_API_DS_LOAD_BALANCE,  tpm_acl_rcvr_func_ds_load_balance},
+	{TPM_API_CPU_LOOPBACK,     tpm_acl_rcvr_func_cpu_loopback},
+	{TPM_API_L2_PRIM,          tpm_acl_rcvr_func_l2_prim},
+	{TPM_API_L3_TYPE,          tpm_acl_rcvr_func_l3_type},
+	{TPM_API_IPV4,             tpm_acl_rcvr_func_ipv4},
+	{TPM_API_IPV4_MC,          tpm_acl_rcvr_func_ipv4_mc},
+	{TPM_API_IPV6_GEN,         tpm_acl_rcvr_func_ipv6_gen},
+	{TPM_API_IPV6_DIP,         tpm_acl_rcvr_func_ipv6_dip},
+	{TPM_API_IPV6_MC,          tpm_acl_rcvr_func_ipv6_mc},
+	{TPM_API_IPV6_NH,          tpm_acl_rcvr_func_ipv6_nh},
+	{TPM_API_IPV6_L4,          tpm_acl_rcvr_func_ipv6_l4},
+	{TPM_API_CNM,              tpm_acl_rcvr_func_cnm},
+
+};
 
 
 static tpm_api_sup_param_val_t api_sup_param_val[] = {
 	/* tpm_pnc_api_num		Supported parse field bits
 		Supported parse flag bits
 		Forbidden actions */
+	{TPM_ADD_DS_LOAD_BALANCE_RULE,	TPM_DS_LOAD_BALNC_PARSE_BM_MASK,
+		(TPM_PARSE_FLAG_TAG1_MASK | TPM_PARSE_FLAG_TAG2_MASK),
+		(0)},
 	{TPM_ADD_L2_PRIM_ACL_RULE,      TPM_L2_PARSE_BM_MASK,
 		(TPM_PARSE_FLAG_TAG1_MASK | TPM_PARSE_FLAG_TAG2_MASK),
 		(0)},
@@ -338,6 +358,7 @@ int32_t tpm_proc_src_port_gmac_bm_map(tpm_src_port_type_t src_port,
 	tpm_gmacs_enum_t gmac_i;
 	tpm_gmac_bm_t l_gmac_bm = 0;
 	tpm_db_gmac_func_t gmac_func;
+	tpm_init_gmac_conn_conf_t gmac_port_conf;
 
 	for (gmac_i = TPM_ENUM_GMAC_0; gmac_i <= TPM_MAX_GMAC; gmac_i++) {
 		if (!tpm_db_gmac_valid(gmac_i))
@@ -351,22 +372,27 @@ int32_t tpm_proc_src_port_gmac_bm_map(tpm_src_port_type_t src_port,
 
 		/* LAN possiblilties  (Note: can be from both WAN or LAN) */
 
-		/* From UNI_$, but not Virtual_Port */
-		if (src_port == TPM_SRC_PORT_UNI_VIRT) {
-			if (GMAC_IS_UNI_LAN(gmac_func)) {
-				l_gmac_bm = gmac_pnc_bm[gmac_i];
-				break;
-			}
-
-			if (GMAC_IS_LAN(gmac_func))
-				l_gmac_bm = gmac_pnc_bm[gmac_i];
-		/* Any other UNI */
-		} else if (FROM_SPEC_UNI(src_port) && GMAC_IS_LAN(gmac_func)) {
-			l_gmac_bm = gmac_pnc_bm[gmac_i];
-			break;
-		/* Any remaining LAN option (UNI_ANY or WAN_OR_LAN) */
-		} else if (FROM_LAN(src_port) && (GMAC_IS_UNI_LAN(gmac_func) || GMAC_IS_LAN(gmac_func)))
+		/* From UNI_$, include UNI_virt Port */
+		if (FROM_SPEC_UNI(src_port) && GMAC_IS_LAN(gmac_func)) {
 			l_gmac_bm |= gmac_pnc_bm[gmac_i];
+			//break;
+		/* Any remaining LAN option (UNI_ANY or WAN_OR_LAN) */
+		} else if (FROM_LAN(src_port) && (GMAC_IS_UNI_LAN(gmac_func) || GMAC_IS_LAN(gmac_func))) {
+			if (GMAC_IS_UNI_LAN(gmac_func)) {
+				if (tpm_db_gmac_conn_conf_get(gmac_i, &gmac_port_conf)) {
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "gmac(%d) connection info get fail\n", gmac_i);
+					return(TPM_FAIL);
+				}
+				if (src_port == gmac_port_conf.port_src) {
+					l_gmac_bm |= gmac_pnc_bm[gmac_i];
+					break;
+				} else if (src_port == TPM_SRC_PORT_UNI_ANY) {
+					l_gmac_bm |= gmac_pnc_bm[gmac_i];
+				}
+			} else {
+				l_gmac_bm |= gmac_pnc_bm[gmac_i];
+			}
+		}
 	}
 
 	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "gmac_bm(0x%x)\n", l_gmac_bm);
@@ -520,15 +546,12 @@ int32_t tpm_proc_trg_port_gmac_map(tpm_trg_port_type_t trg_port, tpm_gmacs_enum_
 {
 	tpm_gmacs_enum_t gmac_i;
 	tpm_db_gmac_func_t gmac_func;
-	tpm_eth_complex_profile_t profile;
+	tpm_init_gmac_conn_conf_t gmac_port_conf;
 
 	if (gmac_port == NULL) {
 		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Invalid pointer-NULL \n");
 		return(ERR_GENERAL);
 	}
-
-	/* get board profile */
-	profile = tpm_db_eth_cmplx_profile_get();
 
 	(*gmac_port) = -1;
 	for (gmac_i = TPM_ENUM_GMAC_0; gmac_i <= TPM_MAX_GMAC; gmac_i++) {
@@ -536,9 +559,24 @@ int32_t tpm_proc_trg_port_gmac_map(tpm_trg_port_type_t trg_port, tpm_gmacs_enum_
 			continue;
 
 		tpm_db_gmac_func_get(gmac_i, &gmac_func);
-
-		if (((TRG_WAN(trg_port)) && GMAC_IS_WAN(gmac_func))
-		    || ((TRG_UNI(trg_port)) && ((!tpm_db_gmac1_lpbk_en_get()) ? GMAC_IS_LAN(gmac_func) : GMAC_IS_UNI_LAN(gmac_func)))) {
+		if (tpm_db_gmac_conn_conf_get(gmac_i, &gmac_port_conf)) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "gmac(%d) connection info get fail\n", gmac_i);
+			return(TPM_FAIL);
+		}
+		/* TRG WAN */
+		if ((TRG_WAN(trg_port)) && GMAC_IS_WAN(gmac_func)) {
+			(*gmac_port) = gmac_i;
+			break;
+		/* TRG GMAC_UNI, such as MC lpk, dual gmac uni */
+		} else if (TRG_UNI(trg_port) && (GMAC_IS_UNI_LAN(gmac_func) || GMAC_IS_DS_UNI_LAN(gmac_func))) {
+			if ((gmac_port_conf.port_src != TPM_SRC_PORT_ILLEGAL) &&
+			    ((trg_port == (1 << (gmac_port_conf.port_src + TPM_TRG_UNI_OFFSET))) ||
+			     (trg_port == TPM_TRG_PORT_UNI_ANY))) {
+				(*gmac_port) = gmac_i;
+				break;
+			}
+		/* TRG UNI, such as KW2 */
+		} else if (TRG_UNI(trg_port) && GMAC_IS_LAN(gmac_func)) {
 			(*gmac_port) = gmac_i;
 			break;
 		}
@@ -590,23 +628,78 @@ uint32_t tpm_proc_all_gmac_bm(void)
 	return(l_gmac_bm);
 }
 
+int32_t tpm_proc_delete_mod(tpm_mod_owner_t owner, tpm_gmacs_enum_t gmac_port, uint32_t mod_entry)
+{
+	tpm_gmacs_enum_t  duplicate_gmac;
+	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
+	int32_t ret_code;
+
+	ret_code = tpm_mod2_entry_del(owner, gmac_port, mod_entry);
+	IF_ERROR(ret_code);
+
+	/* when ds load balance on G0 and G1 is enabled, need to duplicate DS PMT on G0/1 */
+	tpm_db_ds_mac_based_trunk_enable_get(&ds_mac_based_trunk_enable);
+	if (	(TPM_DS_MAC_BASED_TRUNK_DISABLED == ds_mac_based_trunk_enable)
+	     || ((gmac_port != TPM_ENUM_GMAC_0) && (gmac_port != TPM_ENUM_GMAC_1))) {
+		/* if this is US or DS_MAC_BASED_TRUNK is DISABLED, do nothing */
+		return(TPM_OK);
+	}
+
+	if (gmac_port == TPM_ENUM_GMAC_0)
+		duplicate_gmac = TPM_ENUM_GMAC_1;
+	else
+		duplicate_gmac = TPM_ENUM_GMAC_0;
+
+	ret_code = tpm_mod2_entry_del(owner, duplicate_gmac, mod_entry);
+	IF_ERROR(ret_code);
+
+	return(TPM_OK);
+}
+
 int32_t tpm_proc_create_mod(tpm_pkt_action_t pkt_act, tpm_trg_port_type_t trg_port, tpm_pkt_mod_t *pkt_mod,
 			    tpm_pkt_mod_bm_t pkt_mod_bm, tpm_pkt_mod_int_bm_t int_mod_bm, uint32_t *mod_entry,
 			    uint32_t *trg_gmac)
 {
 	int32_t ret_code;
+	tpm_gmacs_enum_t  duplicate_gmac;
+	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
 
 	if (SET_MOD(pkt_act)) {
 		/* Currently supporting Vlan operation only */
 		/* Get dest. gmac */
-		tpm_proc_trg_port_gmac_map(trg_port, trg_gmac);
-		if (*trg_gmac == -1) {
-			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "pkt modification not possible on this target gmac(%d) \n",
-				     *trg_gmac);
-			return(ERR_ACTION_INVALID);
+		if (TPM_TRG_LOAD_BAL & trg_port) {
+			/* DS load balance, set trg port to G1 */
+			*trg_gmac = TPM_ENUM_GMAC_1;
+		} else {
+			tpm_proc_trg_port_gmac_map(trg_port, trg_gmac);
+			if (*trg_gmac == -1) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "pkt modification not possible on this target gmac(%d) \n",
+					     *trg_gmac);
+				return(ERR_ACTION_INVALID);
+			}
+		}
+		ret_code = tpm_mod2_entry_set(TPM_MOD_OWNER_TPM, *trg_gmac, pkt_mod_bm, int_mod_bm, pkt_mod, mod_entry);
+		IF_ERROR(ret_code);
+
+		/* when ds load balance on G0 and G1 is enabled, need to duplicate DS PMT on G0/1 */
+		tpm_db_ds_mac_based_trunk_enable_get(&ds_mac_based_trunk_enable);
+		if (    (TPM_DS_MAC_BASED_TRUNK_DISABLED == ds_mac_based_trunk_enable)
+		     || (TRG_WAN(trg_port))) {
+		     /* if this is US or DS_MAC_BASED_TRUNK is DISABLED, do nothing */
+			return(TPM_OK);
 		}
 
-		ret_code = tpm_mod2_entry_set(TPM_MOD_OWNER_TPM, *trg_gmac, pkt_mod_bm, int_mod_bm, pkt_mod, mod_entry);
+		if (*trg_gmac == TPM_ENUM_GMAC_0)
+			duplicate_gmac = TPM_ENUM_GMAC_1;
+		else if (*trg_gmac == TPM_ENUM_GMAC_1)
+			duplicate_gmac = TPM_ENUM_GMAC_0;
+		else {
+			TPM_OS_INFO(TPM_TPM_LOG_MOD, "target gmac(%d) invalid\n", *trg_gmac);
+			return(TPM_OK);
+		}
+
+		ret_code = tpm_mod2_entry_set(TPM_MOD_OWNER_TPM, duplicate_gmac,
+						pkt_mod_bm, int_mod_bm, pkt_mod, mod_entry);
 		IF_ERROR(ret_code);
 	}
 	return(TPM_OK);
@@ -660,13 +753,21 @@ int32_t tpm_proc_check_missing_data(tpm_rule_action_t *rule_action,
 
 int32_t tpm_proc_check_valid_target(tpm_dir_t dir,
 				    tpm_db_pon_type_t pon_type,
+				    tpm_src_port_type_t src_port,
 				    tpm_trg_port_type_t trg_port,
 				    uint8_t trg_queue,
-				    tpm_pkt_action_t pkt_act)
+				    tpm_pkt_action_t pkt_act,
+				    uint8_t ds_load_bal_valid)
 {
 
 	tpm_init_virt_uni_t virt_uni_info;
 	int32_t ret_code;
+	uint32_t rx_queue_valid, rx_queue_size;
+	tpm_gmac_bm_t gmac_bm;
+	tpm_gmacs_enum_t gmac;
+	uint32_t tx_queue_valid, tx_queue_size;
+	tpm_db_txq_owner_t tx_owner;
+	tpm_db_tx_mod_t tx_port;
 	tpm_gmacs_enum_t act_wan= tpm_db_active_wan_get();
 
 	/* Check Valid Target */
@@ -678,6 +779,20 @@ int32_t tpm_proc_check_valid_target(tpm_dir_t dir,
 			/* check target uni port valid or not */
 			ret_code = tpm_proc_check_dst_uni_port(trg_port);
 			IF_ERROR(ret_code);
+
+			/* check ds load balance trg */
+			if (trg_port & TPM_TRG_LOAD_BAL) {
+				if (!ds_load_bal_valid) {
+					/* TPM_TRG_LOAD_BAL should not be set */
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "TPM_TRG_LOAD_BAL should not be set\n");
+					return(ERR_FRWD_INVALID);
+				}
+				if (!tpm_db_ds_load_bal_en_get()) {
+					/* profile dose not support TPM_TRG_LOAD_BAL */
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "profile dose not support TPM_TRG_LOAD_BAL\n");
+					return(ERR_FRWD_INVALID);
+				}
+			}
 		} else {
 			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "* dir=%d, trg_port=%d, pon_type=%d *\r\n", dir, trg_port,
 				     pon_type);
@@ -704,10 +819,100 @@ int32_t tpm_proc_check_valid_target(tpm_dir_t dir,
 	}
 
 	/* Check Valid Queue */
+	tpm_proc_src_port_gmac_bm_map(src_port, &gmac_bm);
 	/* TODO - Check Queue depending on actual queues in target or in Rx */
 	if (SET_TARGET_QUEUE(pkt_act) && (trg_queue >= TPM_MAX_NUM_TX_QUEUE)) {
 		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Target Queue Out of Range\n");
 		return(ERR_FRWD_INVALID);
+	}
+	/* Check Rx queue valid */
+	if (SET_TARGET_PORT(pkt_act) && TO_CPU(trg_port) && SET_TARGET_QUEUE(pkt_act)) {
+		for (gmac = TPM_ENUM_GMAC_0; gmac < TPM_MAX_NUM_GMACS; gmac++) {
+			if (((gmac_bm & TPM_BM_GMAC_0) && (gmac == TPM_ENUM_GMAC_0)) ||
+			    ((gmac_bm & TPM_BM_GMAC_1) && (gmac == TPM_ENUM_GMAC_1)) ||
+			    ((gmac_bm & TPM_BM_PMAC) && (gmac == TPM_ENUM_PMAC))) {
+				/* Get Rx queue info */
+				ret_code = tpm_db_gmac_rx_q_conf_get(gmac, trg_queue, &rx_queue_valid, &rx_queue_size);
+				if (ret_code != TPM_DB_OK) {
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, " rx queue recvd ret_code(%d)\n", ret_code);
+					return(ERR_FRWD_INVALID);
+				}
+
+				/* Check queue valid state */
+				if (TPM_FALSE == rx_queue_valid) {
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Target Queue Invalid\n");
+					return(ERR_FRWD_INVALID);
+				}
+
+				/* Check queue size */
+				if (0 == rx_queue_size) {
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Target Queue Size is Zero\n");
+					return(ERR_FRWD_INVALID);
+				}
+			}
+		}
+	}
+
+	/* Check Tx queue valid */
+	if (SET_TARGET_PORT(pkt_act) && (!TO_CPU(trg_port)) && SET_TARGET_QUEUE(pkt_act)) {
+		tpm_proc_trg_port_gmac_map(trg_port, &gmac);
+		for (tx_port = TPM_TX_MOD_GMAC0; tx_port < TPM_MAX_NUM_TX_PORTS; tx_port++) {
+			if (((trg_port & TPM_TRG_TCONT_0) && (act_wan == TPM_ENUM_PMAC) && (tx_port == TPM_TX_MOD_PMAC_0)) ||
+			    ((trg_port & TPM_TRG_TCONT_0) && (act_wan == TPM_ENUM_GMAC_0) && (tx_port == TPM_TX_MOD_GMAC0)) ||
+			    ((trg_port & TPM_TRG_TCONT_0) && (act_wan == TPM_ENUM_GMAC_1) && (tx_port == TPM_TX_MOD_GMAC1)) ||
+			    ((trg_port & TPM_TRG_TCONT_1) && (tx_port == TPM_TX_MOD_PMAC_1)) ||
+			    ((trg_port & TPM_TRG_TCONT_2) && (tx_port == TPM_TX_MOD_PMAC_2)) ||
+			    ((trg_port & TPM_TRG_TCONT_3) && (tx_port == TPM_TX_MOD_PMAC_3)) ||
+			    ((trg_port & TPM_TRG_TCONT_4) && (tx_port == TPM_TX_MOD_PMAC_4)) ||
+			    ((trg_port & TPM_TRG_TCONT_5) && (tx_port == TPM_TX_MOD_PMAC_5)) ||
+			    ((trg_port & TPM_TRG_TCONT_6) && (tx_port == TPM_TX_MOD_PMAC_6)) ||
+			    ((trg_port & TPM_TRG_TCONT_7) && (tx_port == TPM_TX_MOD_PMAC_7)) ||
+			    ((trg_port & (TPM_TRG_UNI_0 |
+			    		  TPM_TRG_UNI_1 |
+			    		  TPM_TRG_UNI_2 |
+			    		  TPM_TRG_UNI_3 |
+			    		  TPM_TRG_UNI_4 |
+			    		  TPM_TRG_UNI_5 |
+			    		  TPM_TRG_UNI_6 |
+			    		  TPM_TRG_UNI_7 |
+			    		  TPM_TRG_UNI_VIRT |
+			    		  TPM_TRG_PORT_UNI_ANY)) && (tx_port == (tpm_db_tx_mod_t)gmac))) {
+				/* Get Tx queue info */
+				ret_code = tpm_db_gmac_tx_q_conf_get(tx_port,
+								     trg_queue,
+								     &tx_queue_valid,
+								     NULL,
+								     &tx_owner,
+								     NULL,
+								     &tx_queue_size,
+								     NULL);
+				if (ret_code != TPM_DB_OK) {
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, " tx queue recvd ret_code(%d)\n", ret_code);
+					return(ERR_FRWD_INVALID);
+				}
+
+				/* Check queue valid state */
+				if (TPM_FALSE == tx_queue_valid) {
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Target Queue Invalid\n");
+					return(ERR_FRWD_INVALID);
+				}
+
+				/* Check queue owner */
+				if (((gmac_bm & TPM_BM_GMAC_0) && (tx_owner != TPM_Q_OWNER_GMAC0)) ||
+				    ((gmac_bm & TPM_BM_GMAC_1) && (tx_owner != TPM_Q_OWNER_GMAC1)) ||
+				    ((gmac_bm & TPM_BM_PMAC) && (tx_owner != TPM_Q_OWNER_PMAC))) {
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Target Queue Owner Invalid, gmac_bm: [%d], tx_owner: [%d]\n",
+									gmac_bm, tx_owner);
+					return(ERR_FRWD_INVALID);
+				}
+
+				/* check queue size */
+				if (0 == tx_queue_size) {
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Target Queue Size is Zero\n");
+					return(ERR_FRWD_INVALID);
+				}
+			}
+		}
 	}
 
 	return(TPM_OK);
@@ -779,6 +984,47 @@ int32_t tpm_proc_check_parse_flag_valid(tpm_parse_flags_t parse_flags_bm)
 	return(TPM_OK);
 }
 
+/* Get GMAC Lan UNI number and UNI port number */
+/*******************************************************************************
+* tpm_proc_gmaclanuni_uninum_get()
+*
+* DESCRIPTION:    The function Get GMAC Lan UNI number and UNI port number.
+*
+* INPUTS:
+* src_port         - None
+*
+* OUTPUTS:
+* gmac_is_uni_num  - number of GMAC which is LAN UNI
+* max_uni_port_num - number os UNI ports
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_proc_gmaclanuni_uninum_get(uint32_t *gmac_is_uni_num, uint32_t *max_uni_port_num)
+{
+	tpm_db_gmac_func_t gmac_func;
+	tpm_gmacs_enum_t gmac_i;
+	uint32_t temp1 = 0, temp2 = 0;
+
+	/* Cal number of GMAC LAN UNI */
+	for (gmac_i = TPM_ENUM_GMAC_0; gmac_i <= TPM_MAX_GMAC; gmac_i++) {
+		tpm_db_gmac_func_get(gmac_i, &gmac_func);
+		if (GMAC_IS_UNI_LAN(gmac_func))
+			temp1++;
+	}
+	/* Get Max UNI port number */
+	tpm_db_max_uni_port_nr_get(&temp2);
+
+	*gmac_is_uni_num = temp1;
+	*max_uni_port_num = temp2;
+
+	return (TPM_OK);
+}
+
 /*******************************************************************************
 * tpm_proc_src_port_check()
 *
@@ -804,6 +1050,7 @@ int32_t tpm_proc_src_port_check(tpm_src_port_type_t src_port)
 	tpm_db_int_conn_t dummy_int_conn;
 	uint32_t dummy_switch_port;
 	tpm_init_virt_uni_t virt_uni_info;
+	uint32_t gmac_is_uni_num = 0, max_uni_port_num = 0;
 
 	/* Check Port exists */
 	if (src_port == TPM_SRC_PORT_WAN) {
@@ -824,9 +1071,17 @@ int32_t tpm_proc_src_port_check(tpm_src_port_type_t src_port)
 			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Source UNI Port (%d) is not valid port \n", src_port);
 			return(TPM_FAIL);
 		}
-	} else if (src_port == TPM_SRC_PORT_UNI_ANY)
+	} else if (src_port == TPM_SRC_PORT_UNI_ANY) {
+		/* Check UNI_ANY is supported or not */
+		/* Get GMAC LAN_UNI and UNI ports number */
+		tpm_proc_gmaclanuni_uninum_get(&gmac_is_uni_num, &max_uni_port_num);
+		if (gmac_is_uni_num > TPM_SRC_PORT_UNI_1 ||
+		    (gmac_is_uni_num == TPM_SRC_PORT_UNI_1 && max_uni_port_num > TPM_SRC_PORT_UNI_1)) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Src port UNI_ANY is not supported\n");
+			return(ERR_SRC_PORT_INVALID);
+		}
 		return(TPM_OK);
-	else if (src_port == TPM_SRC_PORT_UNI_VIRT) {
+	} else if (src_port == TPM_SRC_PORT_UNI_VIRT) {
 		tpm_db_virt_info_get(&virt_uni_info);
 		if (TPM_VIRT_UNI_DISABLED == virt_uni_info.enabled) {
 			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "UNI_VIRT is not enabled\n");
@@ -972,6 +1227,7 @@ int32_t tpm_proc_set_trgt_queue(tpm_rule_action_t *rule_action,
 				tpm_pncl_sram_data_t *sram_data)
 {
 	uint32_t i;
+	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
 
 	if (SET_TARGET_PORT(rule_action->pkt_act)) {
 		tpm_gmacs_enum_t act_wan= tpm_db_active_wan_get();
@@ -999,13 +1255,22 @@ int32_t tpm_proc_set_trgt_queue(tpm_rule_action_t *rule_action,
 				return(TPM_FAIL);
 			}
 		} else if (TO_LAN(dir, pkt_frwd->trg_port)) {
-			tpm_trg_port_type_t pnc_target;
+			tpm_pnc_trg_t pnc_target;
 
-			if (tpm_db_to_lan_gmac_get(pkt_frwd->trg_port, &pnc_target) != TPM_DB_OK){
+			/* when ds load balance on G0 and G1 is enabled, trgt port can only
+			 * be set in the first range TPM_DS_MAC_BASED_TRUNKING.
+			 */
+			tpm_db_ds_mac_based_trunk_enable_get(&ds_mac_based_trunk_enable);
+			if (TPM_DS_MAC_BASED_TRUNK_ENABLED == ds_mac_based_trunk_enable) {
+				sram_data->sram_updt_bm &= (~TPM_PNCL_SET_TXP);
+ 			} else if (TPM_TRG_LOAD_BAL & pkt_frwd->trg_port) {
+				/* DS load balance, set trg port to G1 */
+				pnc_target = TPM_PNC_TRG_GMAC1;
+			} else if (tpm_db_to_lan_gmac_get(pkt_frwd->trg_port, &pnc_target) != TPM_DB_OK){
 				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "tpm_db_to_lan_gmac_get failed trg_port 0x%x\n",
 					     pkt_frwd->trg_port);
 				return(TPM_FAIL);
-       		}
+       			}
 			sram_data->flow_id_sub.pnc_target = pnc_target;
 		} else if (TO_CPU(pkt_frwd->trg_port)) {
 			sram_data->flow_id_sub.pnc_target = TPM_PNC_TRG_CPU;
@@ -1135,6 +1400,41 @@ int32_t tpm_proc_check_api_busy(tpm_api_type_t api_type, uint32_t rule_num)
 	return(rc_code);
 }
 
+int32_t tpm_proc_check_all_api_busy(void)
+{
+	uint32_t  db_ret_code;
+	int32_t rc_code = TPM_RC_OK;
+	int32_t rule_num;
+	int32_t rule_num_max;
+	tpm_api_sections_t api_section;
+	tpm_pnc_ranges_t range_id;
+	tpm_db_pnc_range_conf_t rangConf;
+	tpm_api_type_t api_type;
+
+	for (api_type = TPM_API_MAC_LEARN; api_type < TPM_MAX_API_TYPES; api_type++) {
+
+		/* Get api_section, range_Id, range configuration, to get range type */
+		db_ret_code = tpm_db_api_section_get_from_api_type(api_type, &api_section);
+		IF_ERROR(db_ret_code);
+		db_ret_code = tpm_db_api_section_main_pnc_get(api_section, &range_id);
+		if (TPM_DB_OK != db_ret_code)
+			continue;
+		db_ret_code = tpm_db_pnc_rng_conf_get(range_id, &rangConf);
+		IF_ERROR(db_ret_code);
+
+		if (rangConf.range_type == TPM_RANGE_TYPE_ACL)
+			rule_num_max = 1;
+		else
+			rule_num_max = TPM_MAX_PARALLEL_API_CALLS;
+
+		for (rule_num = 0; rule_num < rule_num_max; rule_num++) {
+			rc_code = tpm_proc_check_api_busy(api_type, rule_num);
+				IF_ERROR(rc_code);
+		}
+	}
+
+	return(TPM_OK);
+}
 
 int32_t tpm_proc_api_busy_done(tpm_api_type_t api_type, uint32_t rule_num)
 {
@@ -1149,6 +1449,42 @@ int32_t tpm_proc_api_busy_done(tpm_api_type_t api_type, uint32_t rule_num)
 	}
 	spin_unlock_bh(&tpm_proc_api_call_lock);
 	return(rc_code);
+}
+
+int32_t tpm_proc_all_api_busy_done(void)
+{
+	uint32_t  db_ret_code;
+	int32_t rc_code = TPM_RC_OK;
+	int32_t rule_num;
+	int32_t rule_num_max;
+	tpm_api_sections_t api_section;
+	tpm_pnc_ranges_t range_id;
+	tpm_db_pnc_range_conf_t rangConf;
+	tpm_api_type_t api_type;
+
+	for (api_type = TPM_API_MAC_LEARN; api_type < TPM_MAX_API_TYPES; api_type++) {
+
+		/* Get api_section, range_Id, range configuration, to get range type */
+		db_ret_code = tpm_db_api_section_get_from_api_type(api_type, &api_section);
+		IF_ERROR(db_ret_code);
+		db_ret_code = tpm_db_api_section_main_pnc_get(api_section, &range_id);
+		if (TPM_DB_OK != db_ret_code)
+			continue;
+		db_ret_code = tpm_db_pnc_rng_conf_get(range_id, &rangConf);
+		IF_ERROR(db_ret_code);
+
+		if (rangConf.range_type == TPM_RANGE_TYPE_ACL)
+			rule_num_max = 1;
+		else
+			rule_num_max = TPM_MAX_PARALLEL_API_CALLS;
+
+		for (rule_num = 0; rule_num < rule_num_max; rule_num++) {
+			rc_code = tpm_proc_api_busy_done(api_type, rule_num);
+			IF_ERROR(rc_code);
+		}
+	}
+
+	return(TPM_OK);
 }
 
 
@@ -1281,6 +1617,11 @@ int32_t tpm_proc_parse_flag_ai_tcam_build(tpm_ai_vectors_t *ai_fields,
 		*ai_mask |= TPM_AI_SPLIT_MOD_MASK;
 	}
 
+	if (parse_int_flags & TPM_PARSE_FLAG_DNRT_DS_TRUNK) {
+		*ai_data &= ~(TPM_AI_DNRT_DS_TRUNK_MASK);
+		*ai_mask |= TPM_AI_DNRT_DS_TRUNK_MASK;
+	}
+
 	/*BIT_4 */
 	if (parse_int_flags & TPM_PARSE_FLAG_UNI_PORT_PARSE) {
 		if (ai_fields == NULL) {
@@ -1359,6 +1700,10 @@ int32_t tpm_proc_static_ai_sram_build(tpm_ai_vectors_t *ai_fields,
 	if (int_pkt_action & TPM_ACTION_UNSET_DNRT) {
 		*ai_data &= ~(TPM_AI_DNRT_MASK);
 		*ai_mask |= TPM_AI_DNRT_MASK;
+	}
+	if (int_pkt_action & TPM_ACTION_UNSET_DNRT_DS_TRUNK) {
+		*ai_data &= ~(TPM_AI_DNRT_DS_TRUNK_MASK);
+		*ai_mask |= TPM_AI_DNRT_DS_TRUNK_MASK;
 	}
 
 	if (int_pkt_action & TPM_ACTION_UNSET_UNI_PORT) {
@@ -1556,6 +1901,8 @@ int32_t tpm_proc_static_ai_sram_build(tpm_ai_vectors_t *ai_fields,
 *******************************************************************************/
 int32_t tpm_proc_virt_uni_trg_port_validation(tpm_trg_port_type_t trg_port)
 {
+	/* unset TPM_TRG_LOAD_BAL first, since it can be mixed with UNI port */
+	trg_port &= (~TPM_TRG_LOAD_BAL);
 
 	if ((trg_port == TPM_TRG_UNI_0) ||
 	    (trg_port == TPM_TRG_UNI_1) ||
@@ -1779,7 +2126,8 @@ tpm_error_code_t tpm_proc_add_l2_check(uint32_t owner_id,
 
 	/* Check Target_port and Queue are valid */
 	ret_code =
-	tpm_proc_check_valid_target(dir, pon_type, pkt_frwd->trg_port, pkt_frwd->trg_queue, rule_action->pkt_act);
+	tpm_proc_check_valid_target(dir, pon_type, src_port, pkt_frwd->trg_port,
+				pkt_frwd->trg_queue, rule_action->pkt_act, TPM_FALSE);
 	IF_ERROR(ret_code);
 
 	/* Check parse_bm */
@@ -1927,6 +2275,105 @@ tpm_error_code_t tpm_proc_add_l2_check(uint32_t owner_id,
 
 	return(TPM_RC_OK);
 }
+/*******************************************************************************
+* tpm_proc_add_ds_load_balance_check()
+*
+* DESCRIPTION:    The function checks consistency of the tpm_proc_add_ds_load_balance_acl_rule params.
+*
+* INPUTS:
+* owner_id         - See tpm_proc_add_ds_load_balance_acl_rule
+* rule_num         - See tpm_proc_add_ds_load_balance_acl_rule
+* parse_rule_bm    - See tpm_proc_add_ds_load_balance_acl_rule
+* l2_key           - See tpm_proc_add_ds_load_balance_acl_rule
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_add_ds_load_balance_check(uint32_t owner_id,
+						uint32_t rule_num,
+						tpm_parse_fields_t parse_rule_bm,
+						tpm_parse_flags_t parse_flags_bm,
+						tpm_l2_acl_key_t *l2_key)
+{
+	int32_t ret_code;
+	tpm_pnc_ranges_t range_id = 0;
+	tpm_db_pnc_range_conf_t rangConf;
+
+	/* Check TPM was successfully initialized */
+	if (!tpm_db_init_done_get())
+		IF_ERROR(ERR_SW_NOT_INIT);
+
+	/* Get Range_Id, rang configuration, to get range type */
+	ret_code = tpm_db_api_section_main_pnc_get(TPM_DS_LOAD_BALANCE_ACL, &range_id);
+	IF_ERROR(ret_code);
+	ret_code = tpm_db_pnc_rng_conf_get(range_id, &rangConf);
+	IF_ERROR(ret_code);
+
+	/* Check necessary pointers are valid */
+	if ((l2_key == NULL) && (parse_rule_bm != 0)) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Parsing requested with NULL pointer\n");
+		return(ERR_FRWD_INVALID);
+	}
+	IF_ERROR(ret_code);
+
+	/* Check parse_rule_bm */
+	if (parse_rule_bm & (~(api_sup_param_val[TPM_ADD_DS_LOAD_BALANCE_RULE].sup_parse_fields))) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Invalid parse_rule_bm(0x%x) \n", parse_rule_bm);
+		return(ERR_PARSE_MAP_INVALID);
+	}
+
+	/* Check parse_flag_bm */
+	if (parse_flags_bm & (~(api_sup_param_val[TPM_ADD_DS_LOAD_BALANCE_RULE].sup_parse_flags))) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Invalid parse_flags_bm(0x%x) \n", parse_flags_bm);
+		return(ERR_PARSE_MAP_INVALID);
+	}
+
+	/* Check Vlan Tag TPID mask */
+	if (parse_rule_bm & (TPM_L2_PARSE_TWO_VLAN_TAG | TPM_L2_PARSE_ONE_VLAN_TAG)) {
+		if ((l2_key->vlan1.tpid_mask != 0) && (l2_key->vlan1.tpid_mask != 0xffff)) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Invalid vlan1 tpid mask(0x%x) \n", l2_key->vlan1.tpid_mask);
+			return(ERR_L2_KEY_INVALID);
+		}
+
+		if (parse_rule_bm & TPM_L2_PARSE_ONE_VLAN_TAG) {
+			if ((l2_key->vlan2.tpid_mask != 0) && (l2_key->vlan2.tpid_mask != 0xffff)) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Invalid vlan2 tpid mask(0x%x) \n", l2_key->vlan2.tpid_mask);
+				return(ERR_L2_KEY_INVALID);
+			}
+		}
+	}
+
+	/* Cannot do Double Vlan Tag with looking into PPPoE (up to 24Bytes) with MH */
+	if ((parse_rule_bm & TPM_L2_PARSE_TWO_VLAN_TAG) &&
+	    ((parse_rule_bm & TPM_L2_PARSE_PPP_PROT) || (parse_rule_bm & TPM_L2_PARSE_PPPOE_SES))) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Parse map of Double Vlan Tag + PPPoE not supported\n");
+		return(ERR_PARSE_MAP_INVALID);
+	}
+
+	/* Cannot do Single or Double Vlan Tag with checking   PPP protocol (up to 24Bytes) with MH */
+	if (((parse_rule_bm & TPM_L2_PARSE_TWO_VLAN_TAG) || (parse_rule_bm & TPM_L2_PARSE_ONE_VLAN_TAG))
+	    && (parse_rule_bm & TPM_L2_PARSE_PPP_PROT)) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Parse map of Single Vlan Tag + PPPoE proto not supported\n");
+		return(ERR_PARSE_MAP_INVALID);
+	}
+
+	/* Check owner_id */
+	ret_code = tpm_owner_id_check(TPM_API_DS_LOAD_BALANCE, owner_id);
+	if (ret_code != TPM_OK)
+		IF_ERROR(ERR_OWNER_INVALID);
+
+	/* Check rule_num, and api_section is active */
+	ret_code = tpm_proc_add_api_ent_check(TPM_DS_LOAD_BALANCE_ACL, rangConf.range_type, rule_num);
+	if (ret_code != TPM_OK)
+		IF_ERROR(ERR_RULE_NUM_INVALID);
+
+	return(TPM_RC_OK);
+}
+
 
 tpm_error_code_t tpm_proc_add_ipv6_gen_check(uint32_t owner_id,
 					       tpm_src_port_type_t src_port,
@@ -1971,7 +2418,8 @@ tpm_error_code_t tpm_proc_add_ipv6_gen_check(uint32_t owner_id,
 
 	/* Check Target_port and Queue are valid */
 	ret_code =
-	tpm_proc_check_valid_target(dir, pon_type, pkt_frwd->trg_port, pkt_frwd->trg_queue, rule_action->pkt_act);
+	tpm_proc_check_valid_target(dir, pon_type, src_port, pkt_frwd->trg_port,
+				pkt_frwd->trg_queue, rule_action->pkt_act, TPM_FALSE);
 	IF_ERROR(ret_code);
 
 	/* Check parse_bm */
@@ -2074,7 +2522,8 @@ tpm_error_code_t tpm_proc_add_ipv6_dip_check(uint32_t owner_id,
 
 	/* Check Target_port and Queue are valid */
 	ret_code =
-	tpm_proc_check_valid_target(dir, pon_type, pkt_frwd->trg_port, pkt_frwd->trg_queue, rule_action->pkt_act);
+	tpm_proc_check_valid_target(dir, pon_type, src_port, pkt_frwd->trg_port,
+				pkt_frwd->trg_queue, rule_action->pkt_act, TPM_FALSE);
 	IF_ERROR(ret_code);
 
 	/* Check parse_rule_bm */
@@ -2117,7 +2566,7 @@ tpm_error_code_t tpm_proc_add_ipv6_dip_check(uint32_t owner_id,
 	}
 
 	/* Check forwarding rule, currently only support STAGE_DONE */
-	if (rule_action->next_phase != STAGE_IPv6_NH && rule_action->next_phase != STAGE_DONE) {
+	if (rule_action->next_phase != STAGE_DONE) {
 		TPM_OS_ERROR(TPM_TPM_LOG_MOD, " Next Phase (%d) is not supported \n", rule_action->next_phase);
 		return(ERR_NEXT_PHASE_INVALID);
 	}
@@ -2176,7 +2625,8 @@ tpm_error_code_t tpm_proc_add_ipv6_l4ports_check(uint32_t owner_id,
 
 	/* Check Target_port and Queue are valid */
 	ret_code =
-	tpm_proc_check_valid_target(dir, pon_type, pkt_frwd->trg_port, pkt_frwd->trg_queue, rule_action->pkt_act);
+	tpm_proc_check_valid_target(dir, pon_type, src_port, pkt_frwd->trg_port,
+				pkt_frwd->trg_queue, rule_action->pkt_act, TPM_FALSE);
 	IF_ERROR(ret_code);
 
 	/* Check parse_rule_bm */
@@ -2254,6 +2704,7 @@ tpm_error_code_t tpm_proc_add_ipv6_nh_check(uint32_t owner_id,
 	tpm_db_pnc_range_t range_data;
 	tpm_pkt_mod_t pkt_mod;
 	tpm_pkt_mod_bm_t pkt_mod_bm = 0;
+	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
 
 	/* Check TPM was successfully initialized */
 	if (!tpm_db_init_done_get())
@@ -2345,6 +2796,15 @@ tpm_error_code_t tpm_proc_add_ipv6_nh_check(uint32_t owner_id,
 		return(ERR_ACTION_INVALID);
 	}
 
+	/* when ds load balance on G0 and G1 is enabled, no 2 NH rule can be added */
+	tpm_db_ds_mac_based_trunk_enable_get(&ds_mac_based_trunk_enable);
+	if (	(TPM_DS_MAC_BASED_TRUNK_ENABLED == ds_mac_based_trunk_enable)
+	     && (NH_ITER_1 == nh_iter)) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "when ds load balance on G0 and G1 is enabled, "
+			"no 2 NH rule can be added\n");
+		return(ERR_FEAT_UNSUPPORT);
+	}
+
 	return(TPM_RC_OK);
 }
 
@@ -2407,7 +2867,8 @@ tpm_error_code_t tpm_proc_add_ipv4_check(uint32_t owner_id,
 
 	/* Check Target_port and Queue are valid */
 	ret_code =
-	tpm_proc_check_valid_target(dir, pon_type, pkt_frwd->trg_port, pkt_frwd->trg_queue, rule_action->pkt_act);
+	tpm_proc_check_valid_target(dir, pon_type, src_port, pkt_frwd->trg_port,
+				pkt_frwd->trg_queue, rule_action->pkt_act, TPM_TRUE);
 	IF_ERROR(ret_code);
 
 	/* Check Packet Modification */
@@ -2565,7 +3026,8 @@ int32_t tpm_proc_common_pncl_info_get(tpm_pnc_ranges_t range_id, uint32_t *lu_id
 	*lu_id = range_conf.base_lu_id;
 	start_offset->range_id = range_id;
 
-	if (range_id == TPM_PNC_L2_MAIN || range_id == TPM_PNC_MAC_LEARN) {
+	if (    range_id == TPM_PNC_L2_MAIN || range_id == TPM_PNC_MAC_LEARN
+	     || range_id == TPM_PNC_DS_LOAD_BALANCE) {
 		start_offset->offset_base = TPM_PNCL_ZERO_OFFSET;
 		start_offset->offset_sub.subf = TPM_L2_PARSE_MH;
 	} else if (range_id == TPM_PNC_ETH_TYPE) {
@@ -2681,6 +3143,9 @@ bool tpm_split_mod_stage1_check(tpm_pkt_mod_bm_t pkt_mod_bm,
 		return false;
 
 	if (rule_action->pkt_act & TPM_ACTION_SPEC_MC_VID)
+		return false;
+
+	if (!SET_MOD(rule_action->pkt_act))
 		return false;
 
 	if (STAGE_DONE == rule_action->next_phase)
@@ -2842,7 +3307,7 @@ int32_t tpm_proc_l2_sram_build(tpm_src_port_type_t src_port,
 	}
 
 	/* Unset DNRT bit (Do not Repeat Tags Phase), the bit is leftover from previous hardcoded Vlan_tags phase */
-	int_pkt_act |= TPM_ACTION_UNSET_DNRT;
+	int_pkt_act |= (TPM_ACTION_UNSET_DNRT | TPM_ACTION_UNSET_DNRT_DS_TRUNK);
 
 	/* Set UNI Port */
 	if (FROM_SPEC_UNI(src_port)) {
@@ -2913,6 +3378,136 @@ int32_t tpm_proc_l2_sram_build(tpm_src_port_type_t src_port,
 	/* Set Customization flag */
 	tpm_proc_set_cust_cpu_packet_parse(rule_action, sram_data);
 
+	return(TPM_OK);
+}
+
+/*******************************************************************************
+* tpm_proc_ds_load_balance_tcam_build()
+*
+* DESCRIPTION:     Function builds a logical TCAM entry from the API data
+*
+* INPUTS:
+* rule_num          - API rule number
+* l2_key            - layer2 key data
+* parse_rule_bm     - Parse rules bitmap
+*
+* OUTPUTS:
+* tcam_data         - Logical TCAM Structure
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_proc_ds_load_balance_tcam_build(uint32_t rule_num,
+				       tpm_l2_acl_key_t *l2_key,
+				       tpm_parse_fields_t parse_rule_bm,
+				       tpm_parse_flags_t parse_flags_bm,
+				       tpm_pncl_tcam_data_t *tcam_data)
+{
+	tpm_gmac_bm_t gmac_bm;
+	uint32_t lu_id;
+	tpm_pncl_offset_t start_offset;
+	int32_t ret_code;
+	long long parse_int_flags = 0;
+
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " rule_num(%d) parse_rule_bm(%x)  \n", rule_num, parse_rule_bm);
+
+	/* L2 Parsing, according to bm in param */
+	tcam_data->l2_parse_bm = parse_rule_bm;
+
+	/* do not repeat this section again */
+	parse_int_flags |= TPM_PARSE_FLAG_DNRT_DS_TRUNK;
+
+	tpm_proc_parse_flag_ai_tcam_build(NULL, parse_flags_bm, parse_int_flags,
+				&(tcam_data->add_info_data), &(tcam_data->add_info_mask));
+
+	/*Parse MH for specific src_port or for gemport_parse request */
+	if (parse_rule_bm & TPM_L2_PARSE_GEMPORT)
+		tcam_data->l2_parse_bm |= TPM_L2_PARSE_MH;
+
+	/* Get GMAC(s) */
+	tpm_proc_src_port_gmac_bm_map(TPM_SRC_PORT_WAN, &gmac_bm);
+	tcam_data->port_ids = gmac_bm;
+
+	/* Copy in logical PnC Key */
+	tcam_data->pkt_key.src_port = TPM_SRC_PORT_WAN;
+	if (l2_key)
+		memcpy(&(tcam_data->pkt_key.l2_key), l2_key, sizeof(tpm_l2_acl_key_t));
+
+	/* Get PNC Range information */
+	ret_code = tpm_proc_common_pncl_info_get(TPM_PNC_DS_LOAD_BALANCE, &lu_id, &start_offset);
+	IF_ERROR(ret_code);
+	tcam_data->lu_id = lu_id;
+	memcpy(&(tcam_data->start_offset), &start_offset, sizeof(tpm_pncl_offset_t));
+
+	return(TPM_OK);
+}
+
+/*******************************************************************************
+* tpm_proc_ds_load_balance_sram_build()
+*
+* DESCRIPTION:     Function builds a logical SRAM entry from the API data
+*
+* INPUTS:
+* rule_num          - API rule number
+* l2_key            - layer2 key data
+* parse_rule_bm     - Parse rules bitmap
+*
+* OUTPUTS:
+* sram_data         - Logical SRAM Structure
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_proc_ds_load_balance_sram_build(uint32_t rule_num,
+				       tpm_pncl_sram_data_t *sram_data,
+				       tpm_l2_acl_key_t *l2_key,
+				       tpm_ds_load_balance_tgrt_t tgrt_port)
+{
+	int32_t ret_code;
+	tpm_db_pnc_range_conf_t range_conf;
+	uint32_t cpu_rx_queue = 0;
+
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " rule_num(%d) \n", rule_num);
+
+	sram_data->add_info_data |= (1 << TPM_AI_DNRT_DS_TRUNK_BIT_OFF);
+	sram_data->add_info_mask |= TPM_AI_DNRT_DS_TRUNK_MASK;
+
+	/* Update dummy register (offset automatically=zero) */
+	sram_data->shift_updt_reg = TPM_PNC_NOSHIFT_UPDATE_REG;
+
+	ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_L2_MAIN, &range_conf);
+	IF_ERROR(ret_code);
+
+	sram_data->next_lu_id = range_conf.base_lu_id;
+	sram_data->next_lu_off_reg = TPM_PNC_LU_REG0;
+
+	/* For Target set PNC TXP, GemPort */
+	sram_data->sram_updt_bm = TPM_PNCL_SET_TXP;
+	sram_data->pnc_queue = TPM_PNCL_NO_QUEUE_UPDATE;
+	if (TPM_DS_TGRT_G0 == tgrt_port)
+		sram_data->flow_id_sub.pnc_target = TPM_PNC_TRG_GMAC0;
+	else if (TPM_DS_TGRT_G1 == tgrt_port)
+		sram_data->flow_id_sub.pnc_target = TPM_PNC_TRG_GMAC1;
+	else {
+		/* Set lookup done and target */
+		sram_data->sram_updt_bm |= TPM_PNCL_SET_LUD;
+		sram_data->flow_id_sub.pnc_target = TPM_PNC_TRG_CPU;
+		tpm_db_get_cpu_rx_queue(&cpu_rx_queue);
+		sram_data->pnc_queue = cpu_rx_queue;
+
+		/* Set L3, L4 to OTHER */
+		sram_data->sram_updt_bm |= (TPM_PNCL_SET_L3 | TPM_PNCL_SET_L4);
+		sram_data->l3_type = TPM_PNCL_L3_OTHER;
+		sram_data->l4_type = TPM_PNCL_L4_OTHER;
+	}
 	return(TPM_OK);
 }
 
@@ -3169,7 +3764,7 @@ int32_t tpm_proc_ipv4_sram_build(tpm_src_port_type_t src_port,
 		l4_parse = ((ipv4_parse_bm & TPM_PARSE_L4_SRC) || (ipv4_parse_bm & TPM_PARSE_L4_DST));
 		if (l4_parse && (sram_data->l4_type == TPM_PNCL_L4_TCP)) {
 			sram_data->next_lu_off_reg = TPM_PNC_LU_REG1;
-			ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_TCP_FLAG, &range_conf);
+			ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_IPV4_TCP_FLAG, &range_conf);
 			IF_ERROR(ret_code);
 		}
 		/* For any other NAPT/ROUTE, check TTL */
@@ -4313,7 +4908,7 @@ tpm_error_code_t tpm_proc_add_cpu_wan_loopback(uint32_t owner_id, tpm_pkt_frwd_t
 
 	/* Check whether CPU loopback entry number exceed the Max value */
 	lpbk_num = tpm_proc_get_cpu_lpbk_entry_num();
-	if (lpbk_num > TPM_MAX_CPU_LOOPBACK_ENTRY) {
+	if (lpbk_num >= TPM_MAX_CPU_LOOPBACK_ENTRY) {
 		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "%s[Line(%d)]:(%d) Exceed MAX entry number\r\n", __func__, __LINE__,
 			     lpbk_num);
 		return ERR_GENERAL;
@@ -4490,9 +5085,9 @@ tpm_error_code_t tpm_proc_add_l2_prim_acl_rule(uint32_t owner_id,
 {
 	tpm_error_code_t ret_code;
 	int32_t int_ret_code;
-	uint32_t pnc_entry = 0, mod_entry = 0, api_rng_entries = 0;
+	uint32_t pnc_entry = 0, mod_entry = 0, mod_entry_tmp = 0, api_rng_entries = 0;
 	uint32_t l_rule_idx = 0, bi_dir = 0, update_sram_only = 0;
-	tpm_gmacs_enum_t trg_gmac;
+	tpm_gmacs_enum_t trg_gmac, duplicate_gmac;
 	tpm_dir_t dir = 0;
 	tpm_pnc_ranges_t range_id = 0;
 	tpm_db_pon_type_t pon_type = 0;
@@ -4505,6 +5100,7 @@ tpm_error_code_t tpm_proc_add_l2_prim_acl_rule(uint32_t owner_id,
 	tpm_db_pnc_range_t range_data;
 	tpm_db_pnc_range_conf_t rangConf;
 	tpm_api_lu_conf_t lu_conf;
+	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
 
 	/* Set Structs to zero */
 	tpm_proc_set_int_structs(&pnc_data, &start_offset, &api_data, &pnc_conn, &range_data);
@@ -4570,15 +5166,15 @@ tpm_error_code_t tpm_proc_add_l2_prim_acl_rule(uint32_t owner_id,
 		}
 	}
 
-	if (!update_sram_only) {
-		if (SET_MOD(rule_action->pkt_act)) {
-			if (tpm_proc_trg_port_gmac_map(pkt_frwd->trg_port, &trg_gmac)) {
-				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "tpm_proc_trg_port_gmac_map failed \n");
-				return(ERR_MOD_INVALID);
-			} else if (trg_gmac == TPM_INVALID_GMAC) {
-				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Target gmac invalid (%d) \n", trg_gmac);
-				return(ERR_MOD_INVALID);
-			}
+	if (    (!update_sram_only)
+	     && (SET_MOD(rule_action->pkt_act))) {
+
+		if (tpm_proc_trg_port_gmac_map(pkt_frwd->trg_port, &trg_gmac)) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "tpm_proc_trg_port_gmac_map failed \n");
+			return(ERR_MOD_INVALID);
+		} else if (trg_gmac == TPM_INVALID_GMAC) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Target gmac invalid (%d) \n", trg_gmac);
+			return(ERR_MOD_INVALID);
 		}
 
 		/* if split mod is enable, add split rule if possible*/
@@ -4592,13 +5188,13 @@ tpm_error_code_t tpm_proc_add_l2_prim_acl_rule(uint32_t owner_id,
 				TPM_OS_ERROR(TPM_MODZ2_HM_MOD, "failed to add pmt split mod stage-1\n");
 				return(TPM_FAIL);
 			}
-			int_ret_code = tpm_db_mod2_split_mod_get_vlan_index(trg_gmac, pkt_mod, &mod_entry);
+			int_ret_code = tpm_db_mod2_split_mod_get_vlan_index(trg_gmac, pkt_mod, &mod_entry_tmp);
 			if (TPM_DB_OK != int_ret_code) {
 				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "split mod stage-1, failed to get pmt entry\n");
 				return ERR_MOD_INVALID;
 			}
 
-			mod_entry *= 16;
+			mod_entry = mod_entry_tmp * 16;
 
 			/* VLANOP_EXT_TAG_MOD_INS mod insert VLAN p_bit*/
 			if (VLANOP_EXT_TAG_MOD_INS == pkt_mod->vlan_mod.vlan_op) {
@@ -4610,6 +5206,28 @@ tpm_error_code_t tpm_proc_add_l2_prim_acl_rule(uint32_t owner_id,
 			}
 
 			TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "Set Modification mod_cmd(%d)\n", mod_entry);
+
+			/* when ds load balance on G0 and G1 is enabled, need to duplicate DS PMT on G0/1 */
+			tpm_db_ds_mac_based_trunk_enable_get(&ds_mac_based_trunk_enable);
+			if (    (TPM_DS_MAC_BASED_TRUNK_ENABLED == ds_mac_based_trunk_enable)
+			     && (TPM_ENUM_GMAC_0 == trg_gmac || TPM_ENUM_GMAC_1 == trg_gmac)) {
+
+				/* if this is DS and DS_MAC_BASED_TRUNK is ENABLED */
+				if (trg_gmac == TPM_ENUM_GMAC_0)
+					duplicate_gmac = TPM_ENUM_GMAC_1;
+				else
+					duplicate_gmac = TPM_ENUM_GMAC_0;
+
+				ret_code = tpm_mod2_split_mod_create_l2_pmts(duplicate_gmac, pkt_mod, false);
+				if (TPM_RC_OK != ret_code)
+				{
+					TPM_OS_ERROR(TPM_MODZ2_HM_MOD,
+						"failed to add pmt split mod stage-1 for duplicate GMAC\n");
+					tpm_mod2_split_mod_try_pmt_entry_del(TPM_L2_PRIM_ACL, trg_gmac, mod_entry_tmp);
+					return(TPM_FAIL);
+				}
+
+			}
 		} else if((TPM_SPLIT_MOD_ENABLED == tpm_db_split_mod_get_enable()) &&
 							(TPM_VLAN_MOD == pkt_mod_bm) &&
 							(VLANOP_NOOP == pkt_mod->vlan_mod.vlan_op) &&
@@ -4725,6 +5343,171 @@ tpm_error_code_t tpm_proc_add_l2_prim_acl_rule(uint32_t owner_id,
 		/* Return Output */
 		*rule_idx = l_rule_idx;
 	}
+
+	return(TPM_RC_OK);
+}
+
+
+/*******************************************************************************
+* tpm_proc_add_ds_load_balance_acl_rule()
+*
+* DESCRIPTION:    Main function for adding DS load balance API rule.
+*
+* INPUTS:
+*           All inputs/outputs are same as API call
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_add_ds_load_balance_acl_rule(uint32_t owner_id,
+					       uint32_t rule_num,
+					       uint32_t *rule_idx,
+					       tpm_parse_fields_t parse_rule_bm,
+					       tpm_parse_flags_t parse_flags_bm,
+					       tpm_l2_acl_key_t *l2_key,
+					       tpm_ds_load_balance_tgrt_t tgrt_port)
+{
+	tpm_error_code_t ret_code;
+	int32_t int_ret_code;
+	uint32_t pnc_entry = 0, api_rng_entries = 0;
+	uint32_t l_rule_idx = 0;
+	uint32_t bi_dir;
+	tpm_pnc_ranges_t range_id = 0;
+	tpm_db_mod_conn_t mod_con = { 0, 0};
+
+	tpm_pncl_pnc_full_t pnc_data;
+	tpm_pncl_offset_t start_offset;
+	tpm_rule_entry_t api_data;
+	tpm_db_pnc_conn_t pnc_conn;
+	tpm_db_pnc_range_t range_data;
+	tpm_db_pnc_range_conf_t rangConf;
+	tpm_api_lu_conf_t lu_conf;
+
+	/* Set Structs to zero */
+	tpm_proc_set_int_structs(&pnc_data, &start_offset, &api_data, &pnc_conn, &range_data);
+
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " owner(%d), rule_num(%d)\n", owner_id, rule_num);
+
+	/* Check parameters */
+	ret_code = tpm_proc_add_ds_load_balance_check(owner_id, rule_num, parse_rule_bm, parse_flags_bm, l2_key);
+	IF_ERROR(ret_code);
+
+	/* Get Range_Id */
+	tpm_db_api_section_main_pnc_get(TPM_DS_LOAD_BALANCE_ACL, &range_id);
+
+	/* Get Range Conf */
+	ret_code = tpm_db_pnc_rng_conf_get(range_id, &rangConf);
+	IF_ERROR(ret_code);
+
+	/* Only do it in table mode */
+	if (TPM_RANGE_TYPE_TABLE == rangConf.range_type) {
+		/* Try to getting the current entry */
+		ret_code = tpm_db_api_entry_get(TPM_DS_LOAD_BALANCE_ACL, rule_num, &l_rule_idx, &bi_dir,
+						&api_data, &mod_con, &pnc_conn);
+		/* if current entry with this rule num is valid */
+		if (TPM_DB_OK == ret_code) {
+			TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " owner(%d) , rule_num(%d) already exists\n", owner_id, rule_num);
+
+			ret_code = tpm_proc_del_ds_load_balance_acl_rule(owner_id, rule_num, TPM_INT_CALL);
+			IF_ERROR(ret_code);
+		} else {
+			TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " owner(%d) , rule_num(%d) is a new entry\n", owner_id, rule_num);
+		}
+	}
+	/*********** Create PNC Entries **********/
+	/* Build PnC Entry */
+	int_ret_code = tpm_proc_ds_load_balance_tcam_build(rule_num, l2_key,
+				parse_rule_bm, parse_flags_bm, &(pnc_data.pncl_tcam));
+	IF_ERROR(int_ret_code);
+
+	/* Build SRAM Entry */
+	int_ret_code = tpm_proc_ds_load_balance_sram_build(rule_num, &(pnc_data.pncl_sram), l2_key, tgrt_port);
+	IF_ERROR(int_ret_code);
+
+	if (TPM_RANGE_TYPE_ACL == rangConf.range_type) {
+	    /*** Insert the PNC Entry ***/
+		int_ret_code =
+		tpm_proc_create_acl_pnc_entry(TPM_DS_LOAD_BALANCE_ACL, rule_num, &pnc_data,
+					&pnc_entry, &api_rng_entries);
+		IF_ERROR(int_ret_code);
+	} else {
+	/*** Set the PNC Entry ***/
+		int_ret_code =
+		tpm_proc_create_table_pnc_entry(TPM_DS_LOAD_BALANCE_ACL, rule_num, 0,
+						&pnc_data, &pnc_entry, &api_rng_entries);
+		IF_ERROR(int_ret_code);
+	}
+
+	/*********** Update API Range in DB **********/
+	/* Set PNC API data */
+	api_data.l2_prim_key.parse_rule_bm = parse_rule_bm;
+	if (l2_key)
+		memcpy(&(api_data.l2_prim_key.l2_key), l2_key, sizeof(tpm_l2_acl_key_t));
+
+	/* Set Pnc Connection data */
+	pnc_conn.num_pnc_ranges = 1;
+	pnc_conn.pnc_conn_tbl[0].pnc_range = range_id;
+	pnc_conn.pnc_conn_tbl[0].pnc_index = pnc_entry;
+
+	if (TPM_RANGE_TYPE_ACL == rangConf.range_type) {
+		/* Increase rule_numbers and PnC entries of the existing API entries that were "moved down" */
+		if (rule_num < api_rng_entries) {
+			int_ret_code =
+			tpm_proc_api_entry_rulenum_inc(TPM_DS_LOAD_BALANCE_ACL, rule_num, (api_rng_entries - 1));
+			IF_ERROR(int_ret_code);
+		}
+	}
+
+	/* Set new API Entry */
+	int_ret_code = tpm_db_api_entry_set(TPM_DS_LOAD_BALANCE_ACL, rule_num, 0 /*bi_dir */ ,
+					    &api_data, &mod_con, &pnc_conn, &l_rule_idx);
+	IF_ERROR(int_ret_code);
+
+	/* Return Output */
+	*rule_idx = l_rule_idx;
+
+	/* Set aging counter group nunmber and msk */
+	int_ret_code = tpm_db_pnc_get_lu_conf(TPM_PNC_DS_LOAD_BALANCE, &lu_conf);
+	IF_ERROR(int_ret_code);
+	tpm_tcam_set_lu_mask(pnc_entry, (int32_t) lu_conf.lu_mask);
+	tpm_tcam_set_cntr_group(pnc_entry, (int32_t) lu_conf.cntr_grp);
+
+	return(TPM_RC_OK);
+}
+
+
+/*******************************************************************************
+* tpm_proc_del_ds_load_balance_acl_rule()
+*
+* DESCRIPTION:    Main function for deleting DS load balance API rule.
+*
+* INPUTS:
+*           All inputs/outputs are same as API call
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_del_ds_load_balance_acl_rule(uint32_t owner_id, uint32_t rule_idx, uint32_t ext_call)
+{
+
+	int32_t ret_code;
+
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " owner(%d) rule_idx(%d)", owner_id, rule_idx);
+
+	ret_code = tpm_proc_del_acl_rule(TPM_DS_LOAD_BALANCE_ACL, owner_id, rule_idx, ext_call);
+	IF_ERROR(ret_code);
 
 	return(TPM_RC_OK);
 }
@@ -4900,7 +5683,7 @@ tpm_error_code_t tpm_proc_l2_num_vlan_tags_init(void)
 	pnc_data.pncl_sram.add_info_data = 1 << TPM_AI_DNRT_BIT_OFF;
 	pnc_data.pncl_sram.add_info_mask = TPM_AI_DNRT_MASK;
 	/* Set SINGLE_TAG AI filter */
-	pnc_data.pncl_sram.add_info_data |= 0 << TPM_AI_TAG2_BIT_OFF;
+	pnc_data.pncl_sram.add_info_data &= (~TPM_AI_TAG2_MASK);
 	pnc_data.pncl_sram.add_info_mask |= TPM_AI_TAG2_MASK;
 	pnc_data.pncl_sram.add_info_data |= 1 << TPM_AI_TAG1_BIT_OFF;
 	pnc_data.pncl_sram.add_info_mask |= TPM_AI_TAG1_MASK;
@@ -4938,9 +5721,9 @@ tpm_error_code_t tpm_proc_l2_num_vlan_tags_init(void)
 	pnc_data.pncl_sram.add_info_data = 1 << TPM_AI_DNRT_BIT_OFF;
 	pnc_data.pncl_sram.add_info_mask = TPM_AI_DNRT_MASK;
 	/* Set ZERO_TAG AI filter */
-	pnc_data.pncl_sram.add_info_data |= 0 << TPM_AI_TAG2_BIT_OFF;
+	pnc_data.pncl_sram.add_info_data &= (~TPM_AI_TAG2_MASK);
 	pnc_data.pncl_sram.add_info_mask |= TPM_AI_TAG2_MASK;
-	pnc_data.pncl_sram.add_info_data |= 0 << TPM_AI_TAG1_BIT_OFF;
+	pnc_data.pncl_sram.add_info_data &= (~TPM_AI_TAG1_MASK);
 	pnc_data.pncl_sram.add_info_mask |= TPM_AI_TAG1_MASK;
 
 	/* Do NOT set VLAN Result_Info bit */
@@ -5249,11 +6032,12 @@ tpm_error_code_t tpm_proc_ipv4_frag_init(void)
 }
 
 /*******************************************************************************
-* tpm_proc_tcp_flag_init()
+* tpm_proc_tcp_flag_pnc_entry_create()
 *
 * DESCRIPTION:
 *
 * INPUTS:
+* ip_ver      - IP version, IPV4 or IPV6
 *
 * RETURNS:
 * On success, the function returns TPM_RC_OK. On error different types are returned
@@ -5263,15 +6047,16 @@ tpm_error_code_t tpm_proc_ipv4_frag_init(void)
 * It is APIs caller responsibility to maintain the correct number of each rule.
 *
 *******************************************************************************/
-tpm_error_code_t tpm_proc_tcp_flag_init(void)
+tpm_error_code_t tpm_proc_tcp_flag_pnc_entry_create(tpm_ip_ver_t ip_ver)
 {
 	int32_t int_ret_code;
-	uint32_t free_entries, tcp_flag_lu, ttl_lu, pnc_entry;
+	uint32_t free_entries, tcp_flag_lu, ttl_lu = 0, pnc_entry;
 	int32_t cpu_rx_queue;
 
 	tpm_pncl_pnc_full_t pnc_data;
 	tpm_pncl_offset_t start_offset;
 	tpm_db_pnc_range_t range_data;
+	tpm_pnc_ranges_t   range_id;
 
 	/* Set Structs to zero */
 	memset(&pnc_data, 0, sizeof(tpm_pncl_pnc_full_t));
@@ -5283,16 +6068,21 @@ tpm_error_code_t tpm_proc_tcp_flag_init(void)
 	/* Get default CPU Rx queue */
 	tpm_db_get_cpu_rx_queue(&cpu_rx_queue);
 
-	/* Get Next Range TTL Info */
-	int_ret_code = tpm_db_pnc_rng_get(TPM_PNC_TTL, &range_data);
-	if (int_ret_code != TPM_OK) {
-		TPM_OS_ERROR(TPM_TPM_LOG_MOD, " To create TCP Flag range, TPM_PNC_TTL range must exist \n");
-		return(int_ret_code);
-	}
-	ttl_lu = range_data.pnc_range_conf.base_lu_id;
+	if (TPM_IP_VER_4 == ip_ver) {
+		range_id = TPM_PNC_IPV4_TCP_FLAG;
+
+		/* Get Next Range TTL Info, only for IPv4 */
+		int_ret_code = tpm_db_pnc_rng_get(TPM_PNC_TTL, &range_data);
+		if (int_ret_code != TPM_OK) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, " To create TCP Flag range, TPM_PNC_TTL range must exist \n");
+			return(int_ret_code);
+		}
+		ttl_lu = range_data.pnc_range_conf.base_lu_id;
+	} else
+		range_id = TPM_PNC_IPV6_TCP_FLAG;
 
 	/* Get TCP_FLAG Range Info */
-	int_ret_code = tpm_db_pnc_rng_get(TPM_PNC_TCP_FLAG, &range_data);
+	int_ret_code = tpm_db_pnc_rng_get(range_id, &range_data);
 	IF_ERROR(int_ret_code);
 	tcp_flag_lu = range_data.pnc_range_conf.base_lu_id;
 
@@ -5303,11 +6093,16 @@ tpm_error_code_t tpm_proc_tcp_flag_init(void)
 	pnc_data.pncl_tcam.start_offset.offset_sub.tcp_subf = TPM_PARSE_L4_SRC;
 
 	/* Set common SRAM params */
-	pnc_data.pncl_sram.next_offset.offset_base = TPM_PNCL_TCP_OFFSET;
-	pnc_data.pncl_sram.next_offset.offset_sub.tcp_subf = TPM_PARSE_TCPFLAGS;
+	if (TPM_IP_VER_4 == ip_ver) {
+		pnc_data.pncl_sram.next_offset.offset_base = TPM_PNCL_TCP_OFFSET;
+		pnc_data.pncl_sram.next_offset.offset_sub.tcp_subf = TPM_PARSE_TCPFLAGS;
+		pnc_data.pncl_sram.next_lu_id = ttl_lu;
+		pnc_data.pncl_sram.next_lu_off_reg = TPM_PNC_LU_REG0;
+	} else {
+		pnc_data.pncl_sram.sram_updt_bm = TPM_PNCL_SET_LUD;
+	}
+
 	pnc_data.pncl_sram.pnc_queue = cpu_rx_queue;
-	pnc_data.pncl_sram.next_lu_id = ttl_lu;
-	pnc_data.pncl_sram.next_lu_off_reg = TPM_PNC_LU_REG0;
 	pnc_data.pncl_sram.shift_updt_reg = TPM_PNC_NOSHIFT_UPDATE_REG;
 
 	/* Get pnc_range tcam_start_entry, and number of free entries */
@@ -5318,25 +6113,32 @@ tpm_error_code_t tpm_proc_tcp_flag_init(void)
 	/* Create FIN FLAG=1 */
 	/*******************/
 	NO_FREE_ENTRIES();
+
 	/* Build PnC Entry */
 	/* Double check - only check packets that are MTM */
 	pnc_data.pncl_tcam.add_info_data |= (1 << TPM_AI_MTM_BIT_OFF);
 	pnc_data.pncl_tcam.add_info_mask |= TPM_AI_MTM_MASK;
+	if (TPM_IP_VER_6 == ip_ver) {
+		pnc_data.pncl_tcam.add_info_data &= ~(TPM_AI_L4P_MASK);
+		pnc_data.pncl_tcam.add_info_mask |= TPM_AI_L4P_MASK;
+	}
 
 	pnc_data.pncl_tcam.tcp_parse_bm = TPM_PARSE_TCPFLAGS;
 	pnc_data.pncl_tcam.pkt_key.tcp_key.tcp_flags = TPM_TCP_FIN;
 	pnc_data.pncl_tcam.pkt_key.tcp_key.tcp_flags_mask = TPM_TCP_FIN;
 
 	/* Build SRAM Entry */
-	pnc_data.pncl_sram.sram_updt_bm = TPM_PNCL_SET_TXP;
+	pnc_data.pncl_sram.sram_updt_bm |= TPM_PNCL_SET_TXP;
 	pnc_data.pncl_sram.flow_id_sub.pnc_target = TPM_PNC_TRG_CPU;
 
-	/* Signal the packet is going to CPU */
-	pnc_data.pncl_sram.add_info_data |= (1 << TPM_AI_TO_CPU_BIT_OFF);
-	pnc_data.pncl_sram.add_info_mask |= TPM_AI_TO_CPU_MASK;
+	if (TPM_IP_VER_4 == ip_ver) {
+		/* Signal the packet is going to CPU */
+		pnc_data.pncl_sram.add_info_data |= (1 << TPM_AI_TO_CPU_BIT_OFF);
+		pnc_data.pncl_sram.add_info_mask |= TPM_AI_TO_CPU_MASK;
+	}
 
 	/* Create Entry in PnC */
-	int_ret_code = tpm_proc_pnc_create(TPM_PNC_TCP_FLAG, pnc_entry, &pnc_data);
+	int_ret_code = tpm_proc_pnc_create(range_id, pnc_entry, &pnc_data);
 	IF_ERROR(int_ret_code);
 	free_entries--;
 	pnc_entry++;
@@ -5350,11 +6152,15 @@ tpm_error_code_t tpm_proc_tcp_flag_init(void)
 	pnc_data.pncl_tcam.pkt_key.tcp_key.tcp_flags_mask = TPM_TCP_RES;
 
 	/* Create Entry in PnC */
-	int_ret_code = tpm_proc_pnc_create(TPM_PNC_TCP_FLAG, pnc_entry, &pnc_data);
+	int_ret_code = tpm_proc_pnc_create(range_id, pnc_entry, &pnc_data);
 	IF_ERROR(int_ret_code);
 	free_entries--;
 	pnc_entry++;
 
+	if (TPM_IP_VER_6 == ip_ver) {
+		/* no default rule for IPv6 */
+		return(TPM_RC_OK);
+	}
 	/***************/
 	/* All Others  */
 	/***************/
@@ -5372,12 +6178,42 @@ tpm_error_code_t tpm_proc_tcp_flag_init(void)
 	pnc_data.pncl_sram.pnc_queue = TPM_PNCL_NO_QUEUE_UPDATE;
 
 	/* Create Entry in PnC */
-	int_ret_code = tpm_proc_pnc_create(TPM_PNC_TCP_FLAG, pnc_entry, &pnc_data);
+	int_ret_code = tpm_proc_pnc_create(range_id, pnc_entry, &pnc_data);
 	IF_ERROR(int_ret_code);
 	free_entries--;
 	pnc_entry++;
 	return(TPM_RC_OK);
 }
+
+/*******************************************************************************
+* tpm_proc_tcp_flag_init()
+*
+* DESCRIPTION:
+*
+* INPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+* It is APIs caller responsibility to maintain the correct number of each rule.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_tcp_flag_init(void)
+{
+	int32_t int_ret_code;
+
+	/* Create Entry in PnC */
+	int_ret_code = tpm_proc_tcp_flag_pnc_entry_create(TPM_IP_VER_4);
+	IF_ERROR(int_ret_code);
+
+	int_ret_code = tpm_proc_tcp_flag_pnc_entry_create(TPM_IP_VER_6);
+	IF_ERROR(int_ret_code);
+
+	return(TPM_RC_OK);
+}
+
 
 /*******************************************************************************
 * tpm_proc_virt_uni_init()
@@ -5530,6 +6366,80 @@ tpm_error_code_t tpm_proc_virt_uni_init(void)
 
 	return(TPM_RC_OK);
 }
+/*******************************************************************************
+* tpm_proc_ds_load_balance_init()
+*
+* DESCRIPTION:
+*
+* INPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+* It is APIs caller responsibility to maintain the correct number of each rule.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_ds_load_balance_init(void)
+{
+	int32_t ret_code;
+	tpm_pnc_all_t pnc_data;
+	tpm_pncl_offset_t start_offset;
+	tpm_db_pnc_range_t range_data, nextphase_range_data;
+	uint32_t pnc_entry;
+
+	/* Set Structs to zero */
+	memset(&pnc_data, 0, sizeof(tpm_pnc_all_t));
+	memset(&start_offset, 0, sizeof(tpm_pncl_offset_t));
+	memset(&range_data, 0, sizeof(tpm_db_pnc_range_t));
+	memset(&nextphase_range_data, 0, sizeof(tpm_db_pnc_range_t));
+
+	/* Get Range data */
+	ret_code = tpm_db_pnc_rng_get(TPM_PNC_DS_LOAD_BALANCE, &range_data);
+	IF_ERROR(ret_code);
+
+	/* Get Next Range data */
+	ret_code = tpm_db_pnc_rng_get(TPM_PNC_L2_MAIN, &nextphase_range_data);
+	IF_ERROR(ret_code);
+
+	/* Get pnc_range tcam_start_entry, and number of free entries */
+	pnc_entry = range_data.pnc_range_conf.range_end;
+
+	/* Set common TCAM params */
+	pnc_data.tcam_entry.lu_id = range_data.pnc_range_conf.base_lu_id;
+	pnc_data.tcam_entry.port_ids = TPM_BM_PMAC;
+
+	/* Set common SRAM params */
+	pnc_data.sram_entry.shift_updt_reg = TPM_PNC_NOSHIFT_UPDATE_REG;
+	pnc_data.sram_entry.next_lu_id = nextphase_range_data.pnc_range_conf.base_lu_id;
+
+	/* do not repeat this section again */
+	pnc_data.tcam_entry.add_info_data = 0;
+	pnc_data.tcam_entry.add_info_mask = TPM_AI_DNRT_DS_TRUNK_MASK;
+
+	/* Packet forwarded to GMAC0 */
+	pnc_data.sram_entry.flowid_updt_mask = TPM_TXP_FL_UPDT_MASK;
+	pnc_data.sram_entry.pnc_queue = TPM_PNCL_NO_QUEUE_UPDATE;
+	pnc_data.sram_entry.flowid_val = (TPM_PNC_TRG_GMAC0 << TPM_TXP_FL_SHIFT);
+
+	pnc_data.sram_entry.add_info_data |= (1 << TPM_AI_DNRT_DS_TRUNK_BIT_OFF);
+	pnc_data.sram_entry.add_info_mask |= TPM_AI_DNRT_DS_TRUNK_MASK;
+
+	/* create default rule to frwd all DS packets to GMAC0 */
+	ret_code = tpm_pnc_set(pnc_entry, 0, &pnc_data);
+	IF_ERROR(ret_code);
+
+	/* Write to Shadow */
+	ret_code = tpm_db_pnc_shdw_ent_set(pnc_entry, &pnc_data);
+	IF_ERROR(ret_code);
+
+	ret_code = tpm_db_pnc_rng_api_end_dec(TPM_PNC_DS_LOAD_BALANCE);
+	IF_ERROR(ret_code);
+
+	return(TPM_RC_OK);
+}
+
 
 /*******************************************************************************
 * tpm_proc_ipv4_ttl_init()
@@ -5810,7 +6720,7 @@ tpm_error_code_t tpm_proc_int_del_acl_rule(tpm_api_sections_t api_section, uint3
 		ret_code = tpm_mod2_split_mod_try_pmt_entry_del(api_section, mod_con.mod_cmd_mac, mod_con.mod_cmd_ind);
 		if (TPM_OK != ret_code) {
 			/* this is not split mod entry, remove it */
-			ret_code = tpm_mod2_entry_del(TPM_MOD_OWNER_TPM, mod_con.mod_cmd_mac, mod_con.mod_cmd_ind);
+			ret_code = tpm_proc_delete_mod(TPM_MOD_OWNER_TPM, mod_con.mod_cmd_mac, mod_con.mod_cmd_ind);
 		}
 	}
 	IF_ERROR(ret_code);
@@ -5967,7 +6877,8 @@ tpm_error_code_t tpm_proc_add_ipv4_acl_rule(uint32_t owner_id,
 		}
 	}
 
-	if (!update_sram_only) {
+	if (    (!update_sram_only)
+	     && (SET_MOD(rule_action->pkt_act))) {
 		/* if split mod stage-2 */
 		if ((TPM_SPLIT_MOD_ENABLED == tpm_db_split_mod_get_enable()) &&
 			VLANOP_SPLIT_MOD_PBIT == pkt_mod->vlan_mod.vlan_op &&
@@ -6170,6 +7081,7 @@ tpm_error_code_t tpm_proc_check_dst_uni_port(tpm_trg_port_type_t dest_port_bm)
 	uint32_t dst_port;
 	tpm_src_port_type_t src_port;
 	tpm_init_virt_uni_t virt_uni_info;
+	uint32_t gmac_is_uni_num, max_uni_port_num;
 
 	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "dest_port_bm(0x%x)\n", dest_port_bm);
 
@@ -6193,6 +7105,26 @@ tpm_error_code_t tpm_proc_check_dst_uni_port(tpm_trg_port_type_t dest_port_bm)
 	     && (dest_port_bm & TPM_TRG_UNI_VIRT)) {
 		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "TPM_TRG_UNI_VIRT is not enabled\n");
 		return ERR_MC_DST_PORT_INVALID;
+	}
+	/* Get GMAC LAN_UNI and UNI ports number */
+	tpm_proc_gmaclanuni_uninum_get(&gmac_is_uni_num, &max_uni_port_num);
+
+	/* check UNI_ANY */
+	if (dest_port_bm & TPM_TRG_PORT_UNI_ANY) {
+		/* Check UNI_ANY is supported or not */
+		if (gmac_is_uni_num > 1 ||
+		    (gmac_is_uni_num == 1 && max_uni_port_num > 1)) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "dest_port UNI_ANY is not supported\n");
+			return ERR_MC_DST_PORT_INVALID;
+		}
+	}
+
+	/* Check multi des port  in bm */
+	if (dest_port_bm > TPM_TRG_UNI_1) {
+		if (gmac_is_uni_num > 1) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "dest_port bit map combine is not supported\n");
+			return ERR_MC_DST_PORT_INVALID;
+		}
 	}
 
 	return TPM_RC_OK;
@@ -6219,16 +7151,18 @@ tpm_error_code_t tpm_proc_check_dst_uni_port(tpm_trg_port_type_t dest_port_bm)
 * COMMENTS:
 *
 *******************************************************************************/
-tpm_error_code_t tpm_proc_add_ipv4_mc_check(uint32_t owner_id,
+tpm_error_code_t tpm_proc_add_ipvx_mc_check(uint32_t owner_id,
 					    uint32_t stream_num,
 					    tpm_mc_igmp_mode_t igmp_mode,
 					    uint8_t mc_stream_pppoe,
 					    uint16_t vid,
-					    uint8_t ipv4_src_add[4],
-					    uint8_t ipv4_dst_add[4],
-					    uint8_t ignore_ipv4_src,
+					    uint8_t src_add[16],
+					    uint8_t dst_add[16],
+					    uint8_t ignore_ipvx_src,
+					    uint16_t dest_queue,
 					    tpm_trg_port_type_t dest_port_bm,
-					    tpm_mc_filter_mode_t filter_mode)
+					    tpm_mc_filter_mode_t filter_mode,
+					    tpm_ip_ver_t ip_version)
 {
 	tpm_error_code_t ret_code;
 	int32_t int_ret_code, index;
@@ -6236,16 +7170,30 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_check(uint32_t owner_id,
 	uint32_t ai_bit;
 	tpm_init_virt_uni_t virt_uni;
 	uint32_t pnc_rng_free_size;
+	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
+	tpm_pnc_ranges_t range;
+	tpm_api_sections_t api_section;
+	tpm_api_type_t api_type;
+
+	if (TPM_IP_VER_4 == ip_version) {
+		range = TPM_PNC_IPV4_MC_DS;
+		api_section = TPM_IPV4_MC;
+		api_type = TPM_API_IPV4_MC;
+	} else {
+		range = TPM_PNC_IPV6_MC_DS;
+		api_section = TPM_IPV6_MC_ACL;
+		api_type = TPM_API_IPV6_MC;
+	}
 
 	/* Check TPM was successfully initialized */
 	if (!tpm_db_init_done_get())
 		IF_ERROR(ERR_SW_NOT_INIT);
 
-	ret_code = tpm_owner_id_check(TPM_API_IPV4_MC, owner_id);
+	ret_code = tpm_owner_id_check(api_type, owner_id);
 	IF_ERROR(ret_code);
 
 	/* Get PNC Range Start */
-	int_ret_code = tpm_db_pnc_rng_get(TPM_PNC_IPV4_MC_DS, &range_data);
+	int_ret_code = tpm_db_pnc_rng_get(range, &range_data);
 	IF_ERROR(int_ret_code);
 
 	if (stream_num >= range_data.pnc_range_conf.range_size)
@@ -6268,7 +7216,7 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_check(uint32_t owner_id,
 	if ((stream_num < range_data.pnc_range_conf.api_start) || (stream_num > range_data.pnc_range_conf.api_end))
 		IF_ERROR(ERR_MC_STREAM_INVALID);
 
-	tpm_db_api_entry_ind_get(TPM_IPV4_MC, stream_num, &index);
+	tpm_db_api_entry_ind_get(api_section, stream_num, &index);
 	if (-1 != index)
 		IF_ERROR(ERR_MC_STREAM_EXISTS);
 
@@ -6304,8 +7252,25 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_check(uint32_t owner_id,
 			IF_ERROR(ERR_FEAT_UNSUPPORT);
 	}
 
-	if ((ipv4_dst_add[0] < 224) || (ipv4_dst_add[0] > 239))
-		IF_ERROR(ERR_IPV4_MC_DST_IP_INVALID);
+	if (TPM_IP_VER_4 == ip_version) {
+		if ((dst_add[0] < 224) || (dst_add[0] > 239))
+			IF_ERROR(ERR_IPV4_MC_DST_IP_INVALID);
+	} else {
+		if (dst_add[0] != 0xff)
+			IF_ERROR(ERR_IPV6_MC_DST_IP_INVALID);
+
+		/* check if there is MC SIP slot */
+		if(0 == ignore_ipvx_src) {
+			if(!tpm_db_ipv6_mc_sip_index_get(src_add)) {
+				/* this is a new MC SIP */
+				if(!tpm_db_ipv6_mc_sip_free_slot_num_get())
+					IF_ERROR(ERR_OUT_OF_RESOURCES);
+			}
+		}
+	}
+
+	if ((dest_queue != TPM_INVALID_QUEUE) && (dest_queue >= TPM_MAX_NUM_RX_QUEUE))
+		IF_ERROR(ERR_MC_DST_QUEUE_INVALID);
 
 	if (dest_port_bm & TPM_TRG_UNI_VIRT) {
 		if (virt_uni.enabled == 0)
@@ -6317,6 +7282,21 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_check(uint32_t owner_id,
 			IF_ERROR(ERR_MC_DST_PORT_INVALID);
 	}
 
+	/* when ds load balance on G0 and G1 is enabled, no Proxy stream is allowed */
+	tpm_db_ds_mac_based_trunk_enable_get(&ds_mac_based_trunk_enable);
+	if (TPM_DS_MAC_BASED_TRUNK_ENABLED == ds_mac_based_trunk_enable) {
+		if (    (TPM_IP_VER_4 == ip_version)
+		     && (TPM_MC_IGMP_PROXY == igmp_mode)) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "when ds load balance on G0 and G1 is enabled, "
+				"no Proxy stream is allowed\n");
+			return(ERR_FEAT_UNSUPPORT);
+		}
+		if (TPM_IP_VER_6 == ip_version) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "when ds load balance on G0 and G1 is enabled, "
+				"there is no IPv6 MC feature\n");
+			return(ERR_FEAT_UNSUPPORT);
+		}
+	}
 	return(TPM_RC_OK);
 }
 
@@ -6411,7 +7391,7 @@ int32_t tpm_proc_ipv4_mc_tcam_build(tpm_mc_filter_mode_t filter_mode,
 }
 
 /*******************************************************************************
-* tpm_proc_l2_sram_build()
+* tpm_proc_ipvx_mc_sram_build()
 *
 * DESCRIPTION:     Function builds a logical TCAM entry from the API data
 *
@@ -6435,34 +7415,41 @@ int32_t tpm_proc_ipv4_mc_tcam_build(tpm_mc_filter_mode_t filter_mode,
 * COMMENTS:
 *
 *******************************************************************************/
-int32_t tpm_proc_ipv4_mc_sram_build(tpm_mc_filter_mode_t filter_mode,
+int32_t tpm_proc_ipvx_mc_sram_build(tpm_mc_filter_mode_t filter_mode,
 				    tpm_mc_igmp_mode_t igmp_mode,
+				    uint16_t dest_queue,
 				    tpm_trg_port_type_t target_port,
 				    uint32_t mod_entry,
-				    tpm_pncl_sram_data_t *sram_data)
+				    tpm_pncl_sram_data_t *sram_data,
+				    tpm_ip_ver_t ip_version)
 {
 	tpm_db_mh_src_t ds_mh_src;
 	tpm_init_virt_uni_t virt_uni;
 	tpm_db_pnc_range_conf_t range_conf;
 	int32_t ret_code;
+	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
 
 	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " target_port(%d)\n", target_port);
 
 	/* Update dummy register (offset automatically=zero) */
 	sram_data->shift_updt_reg = TPM_PNC_NOSHIFT_UPDATE_REG;
-	sram_data->sram_updt_bm = 0;
-
-	/*Set next lookup */
-	sram_data->next_lu_off_reg = 0;
-	/* For igmp_proxy, check TTL, for igmp_snooping do not */
-	if (igmp_mode == TPM_MC_IGMP_PROXY) {
-		ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_TTL, &range_conf);
-		IF_ERROR(ret_code);
+	if (TPM_IP_VER_4 == ip_version) {
+		sram_data->sram_updt_bm = 0;
+		/*Set next lookup */
+		sram_data->next_lu_off_reg = 0;
+		/* For igmp_proxy, check TTL, for igmp_snooping do not */
+		if (igmp_mode == TPM_MC_IGMP_PROXY) {
+			ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_TTL, &range_conf);
+			IF_ERROR(ret_code);
+		} else {
+			ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_IPV4_PROTO, &range_conf);
+			IF_ERROR(ret_code);
+		}
+		sram_data->next_lu_id = range_conf.base_lu_id;
 	} else {
-		ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_IPV4_PROTO, &range_conf);
-		IF_ERROR(ret_code);
+		sram_data->sram_updt_bm = TPM_PNCL_SET_LUD;
 	}
-	sram_data->next_lu_id = range_conf.base_lu_id;
+
 
 	/* Set MH */
 	if (tpm_db_get_mc_per_uni_vlan_xlate() == 0) {
@@ -6496,42 +7483,48 @@ int32_t tpm_proc_ipv4_mc_sram_build(tpm_mc_filter_mode_t filter_mode,
 		sram_data->flow_id_sub.mod_cmd = mod_entry;
 	}
 
-	/* Reset AI bits for following LU */
-	sram_data->add_info_data = 0;
-	sram_data->add_info_mask = (TPM_AI_MC_VID_MASK | TPM_AI_MC_VID_VALID_MASK);
-	if (TPM_MC_IGMP_PROXY == igmp_mode) {
-	/* set MTM AI since in proxy mode */
-		sram_data->add_info_data |= (1 << TPM_AI_MTM_BIT_OFF);
-		sram_data->add_info_mask |= TPM_AI_MTM_MASK;
+	if (TPM_IP_VER_4 == ip_version) {
+		/* Reset AI bits for following LU */
+		sram_data->add_info_data = 0;
+		sram_data->add_info_mask = (TPM_AI_MC_VID_MASK | TPM_AI_MC_VID_VALID_MASK);
+		if (TPM_MC_IGMP_PROXY == igmp_mode) {
+		/* set MTM AI since in proxy mode */
+			sram_data->add_info_data |= (1 << TPM_AI_MTM_BIT_OFF);
+			sram_data->add_info_mask |= TPM_AI_MTM_MASK;
+		}
+
+		/* Final Fragment and L4 is detremined in separate stage */
+		sram_data->l3_type = TPM_PNCL_L3_IPV4_NFRAG;
+		sram_data->l4_type = TPM_PNCL_L4_OTHER;
 	}
 
-	/* Final Fragment and L4 is detremined in separate stage */
-	sram_data->l3_type = TPM_PNCL_L3_IPV4_NFRAG;
-	sram_data->l4_type = TPM_PNCL_L4_OTHER;
-
 	/* Set Target Port */
+	tpm_db_ds_mac_based_trunk_enable_get(&ds_mac_based_trunk_enable);
+
 	sram_data->sram_updt_bm |= TPM_PNCL_SET_TXP;
+	sram_data->pnc_queue = dest_queue;
 	if (target_port == TPM_TRG_PORT_CPU) {
 		sram_data->flow_id_sub.pnc_target = TPM_PNC_TRG_CPU;
-		sram_data->pnc_queue = tpm_db_get_mc_cpu_queue();
+	} else if (TPM_DS_MAC_BASED_TRUNK_ENABLED == ds_mac_based_trunk_enable){
+		sram_data->sram_updt_bm &= (~TPM_PNCL_SET_TXP);
 	} else {
 		tpm_pnc_trg_t pnc_target;
 		ret_code = tpm_db_to_lan_gmac_get(target_port, &pnc_target);
 		IF_ERROR(ret_code);
 		sram_data->flow_id_sub.pnc_target = pnc_target;
-		sram_data->pnc_queue = tpm_db_get_mc_hwf_queue();
 	}
 
 	return(TPM_OK);
 }
 
-int32_t tpm_proc_create_ipv4_mc_mod(tpm_mc_filter_mode_t filter_mode,
+int32_t tpm_proc_create_ipvx_mc_mod(tpm_mc_filter_mode_t filter_mode,
 				    tpm_mc_igmp_mode_t igmp_mode,
 				    uint8_t mc_stream_pppoe,
 				    uint16_t vid,
 				    uint8_t *group_addr,
 				    uint32_t dest_port_bm,
-				    uint32_t *mod_entry)
+				    uint32_t *mod_entry,
+				    tpm_ip_ver_t ip_version)
 {
 	int32_t ret_code;
 	tpm_pkt_mod_bm_t pkt_mod_bm = 0;
@@ -6541,13 +7534,25 @@ int32_t tpm_proc_create_ipv4_mc_mod(tpm_mc_filter_mode_t filter_mode,
 	tpm_mc_vid_port_cfg_t *mc_vid_cfg = NULL;
 	uint8_t valid;
 	uint32_t mh_en;
-	uint32_t switch_init;
+	uint32_t switch_init, trgt_gmac;
+	tpm_pnc_trg_t pnc_target;
+	tpm_gmacs_enum_t gmac;
 	/*struct net_device *dev = NULL;*/
 
 	memset(&pkt_mod, 0, sizeof(tpm_pkt_mod_t));
 
+	if (TPM_TRG_PORT_CPU == dest_port_bm) {
+		TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "target to CPU, no pkt mod is needed\n");
+		*mod_entry = 0;
+		return TPM_OK;
+	}
+
 	/*get MH EN */
-	ret_code = tpm_db_gmac_mh_en_conf_get(TPM_ENUM_GMAC_0, &mh_en);
+	ret_code = tpm_db_to_lan_gmac_get(dest_port_bm, &pnc_target);
+	IF_ERROR(ret_code);
+	ret_code = tpm_db_target_to_gmac(pnc_target, &gmac);
+	IF_ERROR(ret_code);
+	ret_code = tpm_db_gmac_mh_en_conf_get(gmac, &mh_en);
 	IF_ERROR(ret_code);
 
 	/*get switch init*/
@@ -6635,7 +7640,11 @@ int32_t tpm_proc_create_ipv4_mc_mod(tpm_mc_filter_mode_t filter_mode,
 		pkt_mod.mac_mod.mac_sa_mask[5] = 0xff;
 #endif
 
-		pkt_mod_bm |= (TPM_MAC_SA_SET | TPM_TTL_DEC | TPM_IPV4_UPDATE);
+		if (TPM_IP_VER_4 == ip_version)
+			pkt_mod_bm |= (TPM_MAC_SA_SET | TPM_TTL_DEC | TPM_IPV4_UPDATE);
+		else
+			pkt_mod_bm |= (TPM_MAC_SA_SET | TPM_HOPLIM_DEC | TPM_IPV6_UPDATE);
+
 		tpm_db_get_mc_igmp_proxy_sa_mac(mc_mac, &valid);
 
 		if (valid) {
@@ -6646,14 +7655,20 @@ int32_t tpm_proc_create_ipv4_mc_mod(tpm_mc_filter_mode_t filter_mode,
 
 		if (mc_stream_pppoe) {
 			pkt_mod_bm |= (TPM_MAC_DA_SET | TPM_PPPOE_DEL);
-			MULTI_IP_2_MAC(mc_mac, group_addr);
+
+			if (TPM_IP_VER_4 == ip_version) {
+				MULTI_IP_2_MAC(mc_mac, group_addr);
+			} else {
+				MULTI_IPV6_2_MAC(mc_mac, group_addr);
+			}
 			memcpy(pkt_mod.mac_mod.mac_da, mc_mac, 6 * sizeof(uint8_t));
 			memset(pkt_mod.mac_mod.mac_da_mask, 0xff, 6 * sizeof(uint8_t));
 		}
 	}
 
 	if (pkt_mod_bm != 0) {
-		ret_code = tpm_mod2_entry_set(TPM_MOD_OWNER_TPM, TPM_ENUM_GMAC_0, pkt_mod_bm, TPM_INT_MC_MOD, &pkt_mod, mod_entry);
+		ret_code = tpm_proc_create_mod(TPM_ACTION_SET_PKT_MOD, dest_port_bm, &pkt_mod, pkt_mod_bm,
+			TPM_INT_MC_MOD, mod_entry, &trgt_gmac);
 		IF_ERROR(ret_code);
 	}
 
@@ -7067,6 +8082,7 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 						uint8_t ipv4_src_add[4],
 						uint8_t ipv4_dst_add[4],
 						uint8_t ignore_ipv4_src,
+						uint16_t dest_queue,
 						uint32_t dest_port_bm)
 {
 	tpm_pncl_pnc_full_t pnc_data;
@@ -7077,6 +8093,7 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 	tpm_db_pnc_range_t range_data;
 	tpm_db_mc_stream_entry_t mc_stream;
 	tpm_mc_vid_port_cfg_t *mc_vid_cfg = NULL;
+	tpm_gmacs_enum_t gmac;
 
 	int32_t ret_code;
 	uint32_t pnc_entry = 0, mod_entry = 0, rule_num = 0xffff;
@@ -7093,8 +8110,8 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 
 		/*********** Create Modification Entries **********/
 		ret_code =
-		tpm_proc_create_ipv4_mc_mod(filter_mode, igmp_mode, mc_stream_pppoe, vid, ipv4_dst_add,
-					    dest_port_bm, &mod_entry);
+		tpm_proc_create_ipvx_mc_mod(filter_mode, igmp_mode, mc_stream_pppoe, vid, ipv4_dst_add,
+					    dest_port_bm, &mod_entry, TPM_IP_VER_4);
 		IF_ERROR(ret_code);
 
 		/*********** Create PNC Entries **********/
@@ -7106,7 +8123,9 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 
 		/* Build SRAM Entry */
 		ret_code =
-		tpm_proc_ipv4_mc_sram_build(filter_mode, igmp_mode, dest_port_bm, mod_entry, &(pnc_data.pncl_sram));
+		tpm_proc_ipvx_mc_sram_build(filter_mode, igmp_mode, dest_queue,
+					    dest_port_bm, mod_entry,
+					    &(pnc_data.pncl_sram), TPM_IP_VER_4);
 		IF_ERROR(ret_code);
 
 		/*** Calculate PNC Entry ***/
@@ -7136,7 +8155,11 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 		memcpy(api_data.ipv4_mc_key.ipv4_dest_add, ipv4_dst_add, sizeof(ipv4_dst_add));
 		api_data.ipv4_mc_key.ignore_ipv4_src = ignore_ipv4_src;
 		api_data.ipv4_mc_key.dest_port_bm = dest_port_bm;
+		api_data.ipv4_mc_key.dest_queue = dest_queue;
 		api_data.ipv4_mc_key.vid = vid;
+		api_data.ipv4_mc_key.igmp_mode = igmp_mode;
+		api_data.ipv4_mc_key.mc_stream_pppoe = mc_stream_pppoe;
+		api_data.ipv4_mc_key.stream_num = stream_num;
 
 		/* Set Pnc Connection data */
 		pnc_conn.num_pnc_ranges = 1;
@@ -7145,8 +8168,11 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 
 		/* Set Modification Connection data */
 		mod_con.mod_cmd_ind = mod_entry;
-		mod_con.mod_cmd_mac = TPM_PNC_TRG_GMAC0;
-
+		if (mod_entry) {
+			ret_code = tpm_db_target_to_gmac(pnc_data.pncl_sram.flow_id_sub.pnc_target, &gmac);
+			IF_ERROR(ret_code);
+			mod_con.mod_cmd_mac = gmac;
+		}
 		/* Set new API Entry */
 		ret_code = tpm_db_api_entry_set(TPM_IPV4_MC, stream_num, 0 /*bi_dir */ ,
 						&api_data, &mod_con, &pnc_conn, &rule_idx);
@@ -7189,10 +8215,11 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 	mc_stream.mc_stream_pppoe = mc_stream_pppoe;
 	mc_stream.src_valid = ignore_ipv4_src;
 	mc_stream.vid = vid;
+	mc_stream.dest_queue = dest_queue;
 	mc_stream.dest_port_bm = dest_port_bm;
 	mc_stream.u4_entry = rule_num;
 	memcpy(mc_stream.group_addr, ipv4_dst_add, 4 * sizeof(uint8_t));
-	if (ignore_ipv4_src)
+	if (!ignore_ipv4_src)
 		memcpy(mc_stream.src_addr, ipv4_src_add, 4 * sizeof(uint8_t));
 
 	ret_code = tpm_db_set_mc_stream_entry(stream_num, &mc_stream);
@@ -7209,6 +8236,7 @@ tpm_error_code_t tpm_proc_update_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 						   uint8_t ipv4_src_add[4],
 						   uint8_t ipv4_dst_add[4],
 						   uint8_t ignore_ipv4_src,
+						   uint16_t dest_queue,
 						   uint32_t dest_port_bm)
 {
 	tpm_db_pnc_range_t range_data;
@@ -7226,6 +8254,11 @@ tpm_error_code_t tpm_proc_update_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 
 	memset(&mc_stream, 0, sizeof(tpm_db_mc_stream_entry_t));
 
+	/* Get old API Entry */
+	ret_code = tpm_db_api_entry_get(TPM_IPV4_MC, stream_num, &rule_idx, &bi_dir,
+					&api_data, &mod_con, &pnc_conn);
+	IF_ERROR(ret_code);
+
 	/* Only MC_IP_ONLY_FILTER mode, update the multicast group member ports by mh_mod. */
 	if (filter_mode == TPM_MC_IP_ONLY_FILTER) {
 		/* Get PNC Range Start */
@@ -7235,16 +8268,11 @@ tpm_error_code_t tpm_proc_update_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 		if (stream_num >= range_data.pnc_range_conf.range_size)
 			IF_ERROR(ERR_MC_STREAM_INVALID);
 
-		/* Get old API Entry */
-		ret_code = tpm_db_api_entry_get(TPM_IPV4_MC, stream_num, &rule_idx, &bi_dir,
-						&api_data, &mod_con, &pnc_conn);
-		IF_ERROR(ret_code);
-
 		pnc_entry = pnc_conn.pnc_conn_tbl[0].pnc_index;
 
 		/* Create new Modification Entry */
-		ret_code = tpm_proc_create_ipv4_mc_mod(filter_mode, igmp_mode, mc_stream_pppoe,
-						       vid, ipv4_dst_add, dest_port_bm, &mod_entry);
+		ret_code = tpm_proc_create_ipvx_mc_mod(filter_mode, igmp_mode, mc_stream_pppoe,
+						       vid, ipv4_dst_add, dest_port_bm, &mod_entry, TPM_IP_VER_4);
 		IF_ERROR(ret_code);
 
 		/* Rebuild PnC Entry */
@@ -7254,7 +8282,9 @@ tpm_error_code_t tpm_proc_update_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 
 		/* Rebuild SRAM Entry */
 		ret_code =
-		tpm_proc_ipv4_mc_sram_build(filter_mode, igmp_mode, dest_port_bm, mod_entry, &(pnc_data.pncl_sram));
+		tpm_proc_ipvx_mc_sram_build(filter_mode, igmp_mode, dest_queue,
+					    dest_port_bm, mod_entry,
+					    &(pnc_data.pncl_sram), TPM_IP_VER_4);
 		IF_ERROR(ret_code);
 
 		/* Update only Sram of PNC Entry */
@@ -7263,21 +8293,11 @@ tpm_error_code_t tpm_proc_update_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 
 		/* Delete old Modification Entry */
 		if (mod_con.mod_cmd_ind != 0) {
-			ret_code = tpm_mod2_entry_del(TPM_MOD_OWNER_TPM, TPM_ENUM_GMAC_0, mod_con.mod_cmd_ind);
+			ret_code = tpm_proc_delete_mod(TPM_MOD_OWNER_TPM, mod_con.mod_cmd_mac, mod_con.mod_cmd_ind);
 			IF_ERROR(ret_code);
 		}
 		/* Update new Modification Entry */
 		mod_con.mod_cmd_ind = mod_entry;
-
-		/* Invalidate old API Entry */
-		ret_code = tpm_db_api_entry_invalidate(TPM_IPV4_MC, stream_num);
-		IF_ERROR(ret_code);
-
-		/* Set new API Entry */
-		mod_con.mod_cmd_ind = mod_entry;
-		ret_code = tpm_db_api_entry_set(TPM_IPV4_MC, stream_num, 0 /*bi_dir */ ,
-						&api_data, &mod_con, &pnc_conn, &rule_idx);
-		IF_ERROR(ret_code);
 	}
 
 	if (filter_mode == TPM_MC_COMBINED_IP_MAC_FILTER) {
@@ -7340,79 +8360,16 @@ tpm_error_code_t tpm_proc_update_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 	ret_code = tpm_db_set_mc_stream_entry(stream_num, &mc_stream);
 	IF_ERROR(ret_code);
 
-	return(TPM_RC_OK);
-}
+	/* Update API entry */
+	/* Invalidate old API Entry */
+	ret_code = tpm_db_api_entry_invalidate(TPM_IPV4_MC, stream_num);
+	IF_ERROR(ret_code);
 
-tpm_error_code_t tpm_proc_delete_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode,
-						   uint32_t stream_num,
-						   uint32_t dest_port_bm,
-						   uint32_t u4_entry)
-{
-	tpm_db_pnc_range_t range_data;
-	tpm_rule_entry_t api_data;
-	tpm_db_mod_conn_t mod_con;
-	tpm_db_pnc_conn_t pnc_conn;
-
-	int32_t ret_code;
-	uint32_t bi_dir = 0, rule_idx = 0;
-	uint32_t pnc_range_start = 0, api_start = 0, pnc_entry = 0;
-
-	if (filter_mode != TPM_MC_MAC_ONLY_FILTER) {
-		/* Get PNC Range Start */
-		ret_code = tpm_db_pnc_rng_get(TPM_PNC_IPV4_MC_DS, &range_data);
-		IF_ERROR(ret_code);
-
-		if (stream_num >= range_data.pnc_range_conf.range_size)
-			IF_ERROR(ERR_MC_STREAM_INVALID);
-
-		/* Check parameters */
-		ret_code = tpm_db_api_entry_get(TPM_IPV4_MC, stream_num, &rule_idx, &bi_dir,
-						&api_data, &mod_con, &pnc_conn);
-		IF_ERROR(ret_code);
-
-		/* Delete PNC Entry */
-#if 0
-		ret_code = tpm_proc_pnc_con_del(&pnc_conn);
-		IF_ERROR(ret_code);
-#endif
-		pnc_range_start = range_data.pnc_range_conf.range_start;
-		api_start = range_data.pnc_range_conf.api_start;
-
-		/* Pull range from this index untill last used entry in Pnc range */
-		pnc_entry = (pnc_range_start + api_start) + stream_num;
-
-		/* Delete PNC entry */
-		ret_code = tpm_pncl_entry_delete(pnc_entry, pnc_entry);
-		IF_ERROR(ret_code);
-
-		/* Increase number of free entries in pnc_range */
-		ret_code = tpm_db_pnc_rng_free_ent_inc(TPM_PNC_IPV4_MC_DS);
-		IF_ERROR(ret_code);
-
-		if (mod_con.mod_cmd_ind != 0) {
-			ret_code = tpm_mod2_entry_del(TPM_MOD_OWNER_TPM, TPM_ENUM_GMAC_0, mod_con.mod_cmd_ind);
-			IF_ERROR(ret_code);
-		}
-
-		/* Delete API Rule Entry */
-		ret_code = tpm_db_api_entry_invalidate(TPM_IPV4_MC, stream_num);
-		IF_ERROR(ret_code);
-	}
-
-	if (filter_mode == TPM_MC_COMBINED_IP_MAC_FILTER) {
-		if (tpm_db_get_mc_per_uni_vlan_xlate() != 0) {
-			if (u4_entry != 0xffff) {
-				ret_code = tpm_proc_mc_delete_virt_uni_pnc_entry(u4_entry);
-				IF_ERROR(ret_code);
-
-				ret_code = tpm_db_mc_free_virt_uni_entry(u4_entry);
-				IF_ERROR(ret_code);
-			}
-		}
-	}
-
-	/* Remove stream entry */
-	tpm_db_reset_mc_stream_entry(stream_num);
+	/* Set new API Entry */
+	api_data.ipv4_mc_key.dest_port_bm = dest_port_bm;
+	ret_code = tpm_db_api_entry_set(TPM_IPV4_MC, stream_num, 0 /*bi_dir */ ,
+					&api_data, &mod_con, &pnc_conn, &rule_idx);
+	IF_ERROR(ret_code);
 
 	return(TPM_RC_OK);
 }
@@ -7511,6 +8468,7 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_stream(uint32_t owner_id,
 					     uint8_t ipv4_src_add[4],
 					     uint8_t ipv4_dst_add[4],
 					     uint8_t ignore_ipv4_src,
+					     uint16_t dest_queue,
 					     tpm_trg_port_type_t dest_port_bm)
 {
 	tpm_error_code_t ret_code;
@@ -7533,13 +8491,21 @@ tpm_error_code_t tpm_proc_add_ipv4_mc_stream(uint32_t owner_id,
 		dest_port_bm = tpm_db_trg_port_uni_any_bmp_get(true);
 
 	/* Check parameters */
-	ret_code = tpm_proc_add_ipv4_mc_check(owner_id, stream_num, igmp_mode, mc_stream_pppoe, vid,
-					      ipv4_src_add, ipv4_dst_add, ignore_ipv4_src, dest_port_bm, filter_mode);
+	ret_code = tpm_proc_add_ipvx_mc_check(owner_id, stream_num, igmp_mode, mc_stream_pppoe, vid,
+					      ipv4_src_add, ipv4_dst_add, ignore_ipv4_src, dest_queue,
+					      dest_port_bm, filter_mode, TPM_IP_VER_4);
 	IF_ERROR(ret_code);
 
+	/* get queue number */
+	if (dest_queue == TPM_INVALID_QUEUE) {
+		if (dest_port_bm & TPM_TRG_PORT_CPU)
+			dest_queue = tpm_db_get_mc_cpu_queue();
+		else
+			dest_queue = tpm_db_get_mc_hwf_queue();
+	}
 	/* Create PNC entry */
 	ret_code = tpm_proc_add_ipv4_mc_pnc_entry(filter_mode, stream_num, igmp_mode, mc_stream_pppoe, vid,
-						  ipv4_src_add, ipv4_dst_add, ignore_ipv4_src, dest_port_bm);
+						  ipv4_src_add, ipv4_dst_add, ignore_ipv4_src, dest_queue, dest_port_bm);
 	IF_ERROR(ret_code);
 
 	/* Set switch port_map for multicast MAC, but don't overwrite 224.0.0.1 (IGMP General Query) MAC */
@@ -7610,21 +8576,30 @@ tpm_error_code_t tpm_proc_updt_ipv4_mc_stream(uint32_t owner_id, uint32_t stream
 	ret_code = tpm_db_get_mc_stream_entry(stream_num, &mc_stream);
 	IF_ERROR(ret_code);
 
+	if (dest_port_bm == mc_stream.dest_port_bm) {
+		/* nothing changed, return directly */
+		TPM_OS_INFO(TPM_TPM_LOG_MOD, "dest_port_bm does not change, return directly\n");
+		return (TPM_OK);
+	}
+
 	if (((dest_port_bm & TPM_TRG_PORT_CPU) != 0 && (mc_stream.dest_port_bm & TPM_TRG_PORT_CPU) == 0) ||
 	    ((dest_port_bm & TPM_TRG_PORT_CPU) == 0 && (mc_stream.dest_port_bm & TPM_TRG_PORT_CPU) != 0)) {
-		ret_code = tpm_proc_delete_ipv4_mc_pnc_entry(filter_mode, stream_num,
-														mc_stream.dest_port_bm, mc_stream.u4_entry);
+		ret_code = tpm_proc_delete_ipvx_mc_pnc_entry(filter_mode, stream_num,
+							mc_stream.dest_port_bm, mc_stream.u4_entry,
+							TPM_IP_VER_4);
 		IF_ERROR(ret_code);
 
 		ret_code = tpm_proc_add_ipv4_mc_pnc_entry(filter_mode, stream_num, mc_stream.igmp_mode,
-													mc_stream.mc_stream_pppoe, mc_stream.vid,
-													mc_stream.src_addr, mc_stream.group_addr,
-													mc_stream.src_valid, dest_port_bm);
+							mc_stream.mc_stream_pppoe, mc_stream.vid,
+							mc_stream.src_addr, mc_stream.group_addr,
+							mc_stream.src_valid, mc_stream.dest_queue,
+							dest_port_bm);
 	} else {
 		ret_code = tpm_proc_update_ipv4_mc_pnc_entry(filter_mode, stream_num, mc_stream.igmp_mode,
-														mc_stream.mc_stream_pppoe, mc_stream.vid,
-														mc_stream.src_addr, mc_stream.group_addr,
-														mc_stream.src_valid, dest_port_bm);
+							mc_stream.mc_stream_pppoe, mc_stream.vid,
+							mc_stream.src_addr, mc_stream.group_addr,
+							mc_stream.src_valid, mc_stream.dest_queue,
+							dest_port_bm);
 	}
 	IF_ERROR(ret_code);
 
@@ -7679,7 +8654,10 @@ tpm_error_code_t tpm_proc_del_ipv4_mc_stream(uint32_t owner_id, uint32_t stream_
 	IF_ERROR(ret_code);
 
 	ret_code =
-	tpm_proc_delete_ipv4_mc_pnc_entry(filter_mode, stream_num, mc_stream.dest_port_bm, mc_stream.u4_entry);
+	tpm_proc_delete_ipvx_mc_pnc_entry(filter_mode, stream_num,
+	                                  mc_stream.dest_port_bm,
+	                                  mc_stream.u4_entry,
+	                                  TPM_IP_VER_4);
 	IF_ERROR(ret_code);
 
 	/* Set switch VID and multicast MAC */
@@ -8210,6 +9188,7 @@ int32_t tpm_proc_mc_refresh_translation(uint16_t mvlan)
 									       stream_data.vid, stream_data.src_addr,
 									       stream_data.group_addr,
 									       stream_data.src_valid,
+									       stream_data.dest_queue,
 									       stream_data.dest_port_bm);
 					IF_ERROR(ret_code);
 				} else {
@@ -9117,13 +10096,10 @@ tpm_error_code_t tpm_proc_oam_epon_add_channel(uint32_t owner_id, uint32_t cpu_r
 
 	return(TPM_RC_OK);
 }
-
 /*******************************************************************************
-* tpm_proc_loop_detect_add_channel()
+* tpm_proc_loop_detect_del_channel()
 *
-* DESCRIPTION:      Establishes a communication channel for the loop detection management protocol.
-*                   The API sets the Rx input queue in the CPU, and the
-*                   Tx T-CONT and queue parameters, which are configured in the driver.
+* DESCRIPTION:      remove the communication channel for the loop detection management protocol.
 *
 * INPUTS:
 * owner_id           - APP owner id  should be used for all API calls.
@@ -9138,7 +10114,73 @@ tpm_error_code_t tpm_proc_oam_epon_add_channel(uint32_t owner_id, uint32_t cpu_r
 * COMMENTS:
 *
 *******************************************************************************/
-tpm_error_code_t tpm_proc_loop_detect_add_channel(uint32_t owner_id)
+tpm_error_code_t tpm_proc_loop_detect_del_channel(uint32_t owner_id)
+{
+	uint32_t pnc_entry;
+	tpm_db_pnc_range_t range_data;
+	tpm_error_code_t ret_code;
+
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "owner(%d)\n", owner_id);
+
+	ret_code = tpm_owner_id_check(TPM_API_MGMT, owner_id);
+	IF_ERROR(ret_code);
+
+	memset(&range_data, 0, sizeof(range_data));
+	/* Get PNC Range data */
+	ret_code = tpm_db_pnc_rng_get(TPM_PNC_LOOP_DET_US, &range_data);
+	IF_ERROR(ret_code);
+
+	if (!range_data.valid) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "range TPM_PNC_LOOP_DET_US is not valid\n");
+		return ERR_GENERAL;
+	}
+
+	if (range_data.pnc_range_conf.range_size == range_data.pnc_range_oper.free_entries) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "there is no loopback detect channel yet\n");
+		return ERR_GENERAL;
+	}
+
+	pnc_entry = range_data.pnc_range_conf.range_start;
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "remove pnc_entry(%d)\n", pnc_entry);
+
+	ret_code = tpm_pnc_entry_inv(pnc_entry);
+	IF_ERROR(ret_code);
+
+	ret_code = tpm_db_pnc_rng_free_ent_inc(TPM_PNC_LOOP_DET_US);
+	IF_ERROR(ret_code);
+
+	/* remove tag PNC rule */
+	pnc_entry++;
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "remove pnc_entry(%d)\n", pnc_entry);
+
+	ret_code = tpm_pnc_entry_inv(pnc_entry);
+	IF_ERROR(ret_code);
+
+	ret_code = tpm_db_pnc_rng_free_ent_inc(TPM_PNC_LOOP_DET_US);
+	IF_ERROR(ret_code);
+
+	return(TPM_RC_OK);
+}
+/*******************************************************************************
+* tpm_proc_loop_detect_add_channel()
+*
+* DESCRIPTION:      Establishes a communication channel for the loop detection management protocol.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* ety                    - EtherType of the loop detection Pkt.
+*
+* OUTPUTS:
+*  None.
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_loop_detect_add_channel(uint32_t owner_id, tpm_ether_type_key_t ety)
 {
 	tpm_pncl_pnc_full_t pnc_data;
 	tpm_gmac_bm_t gmac_bm;
@@ -9155,49 +10197,60 @@ tpm_error_code_t tpm_proc_loop_detect_add_channel(uint32_t owner_id)
 	memset(&pnc_data, 0, sizeof(tpm_pncl_pnc_full_t));
 
 	/* build TCAM */
-	pnc_data.pncl_tcam.l2_parse_bm = TPM_L2_PARSE_ONE_VLAN_TAG | TPM_L2_PARSE_ETYPE;
-	pnc_data.pncl_tcam.l3_parse_bm = 0;
-	pnc_data.pncl_tcam.ipv6_parse_bm = 0;
-	pnc_data.pncl_tcam.ipv4_parse_bm = 0;
-	pnc_data.pncl_tcam.add_info_mask = 0;
+	pnc_data.pncl_tcam.l2_parse_bm = TPM_L2_PARSE_ETYPE;
+	pnc_data.pncl_tcam.add_info_mask = TPM_AI_TAG1_MASK;
 	pnc_data.pncl_tcam.add_info_data = 0;
 
 	/* src port */
 	tpm_proc_src_port_gmac_bm_map(TPM_SRC_PORT_UNI_ANY, &gmac_bm);
 	pnc_data.pncl_tcam.port_ids = gmac_bm;
-	pnc_data.pncl_tcam.pkt_key.l2_key.vlan1.tpid = 0x8100;
-	pnc_data.pncl_tcam.pkt_key.l2_key.vlan1.tpid_mask = 0xffff;
-	pnc_data.pncl_tcam.pkt_key.l2_key.ether_type = 0xA0A0;
+	pnc_data.pncl_tcam.pkt_key.l2_key.ether_type = ety;
 	pnc_data.pncl_tcam.lu_id = 0;
 	pnc_data.pncl_tcam.start_offset.offset_base = TPM_PNCL_ZERO_OFFSET;
 	pnc_data.pncl_tcam.start_offset.offset_sub.l2_subf = TPM_L2_PARSE_MH;
 
 	/* Build SRAM */
-	pnc_data.pncl_sram.next_lu_id = 0;
-	pnc_data.pncl_sram.next_lu_off_reg = 0;
-	pnc_data.pncl_sram.next_offset.offset_base = 0;
-	pnc_data.pncl_sram.next_offset.offset_sub.l2_subf = 0;
 	pnc_data.pncl_sram.shift_updt_reg = TPM_PNC_NOSHIFT_UPDATE_REG;
 	pnc_data.pncl_sram.pnc_queue = 0;	/*send to queue 0 by default */
 	pnc_data.pncl_sram.sram_updt_bm = TPM_PNCL_SET_LUD | TPM_PNCL_SET_TXP | TPM_PNCL_SET_RX_SPECIAL;
-	pnc_data.pncl_sram.mh_reg.mh_set = TPM_FALSE;
-	pnc_data.pncl_sram.mh_reg.mh_reg = 0;
-	pnc_data.pncl_sram.add_info_data = 0;
-	pnc_data.pncl_sram.add_info_mask = 0;
 	pnc_data.pncl_sram.l3_type = TPM_PNCL_L3_OTHER;
 	pnc_data.pncl_sram.l4_type = TPM_PNCL_L4_OTHER;
 	pnc_data.pncl_sram.flow_id_sub.pnc_target = TPM_PNC_TRG_CPU;
-	pnc_data.pncl_sram.flow_id_sub.mod_cmd = 0;
-	pnc_data.pncl_sram.flow_id_sub.gem_port = 0;
 
-	/* Get PNC Range Start */
+	/* Get PNC Range data */
 	int_ret_code = tpm_db_pnc_rng_get(TPM_PNC_LOOP_DET_US, &range_data);
 	IF_ERROR(int_ret_code);
+
+	if ((!range_data.valid) || (range_data.pnc_range_conf.range_size < 2)) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "range TPM_PNC_LOOP_DET_US is not big enough!\n");
+		return ERR_OUT_OF_RESOURCES;
+	}
+
+	if (range_data.pnc_range_conf.range_size != range_data.pnc_range_oper.free_entries) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "loopback detect channel has already been added\n");
+		return ERR_GENERAL;
+	}
+
 	pnc_entry = range_data.pnc_range_conf.range_start;
 	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " pnc_entry(%d)\n", pnc_entry);
+
+	int_ret_code = tpm_pncl_entry_set(pnc_entry, &pnc_data);
+	IF_ERROR(int_ret_code);
+
 	int_ret_code = tpm_db_pnc_rng_free_ent_dec(TPM_PNC_LOOP_DET_US);
 	IF_ERROR(int_ret_code);
+
+	/* add tag PNC rule */
+	pnc_data.pncl_tcam.l2_parse_bm = TPM_L2_PARSE_ONE_VLAN_TAG | TPM_L2_PARSE_ETYPE;
+	pnc_data.pncl_tcam.add_info_data = TPM_AI_TAG1_MASK;
+
+	pnc_entry++;
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " pnc_entry(%d)\n", pnc_entry);
+
 	int_ret_code = tpm_pncl_entry_set(pnc_entry, &pnc_data);
+	IF_ERROR(int_ret_code);
+
+	int_ret_code = tpm_db_pnc_rng_free_ent_dec(TPM_PNC_LOOP_DET_US);
 	IF_ERROR(int_ret_code);
 
 	return(TPM_RC_OK);
@@ -9491,7 +10544,8 @@ tpm_error_code_t tpm_proc_add_l3_check(uint32_t owner_id,
 
 	/* Check Target_port and Queue are valid */
 	ret_code =
-	tpm_proc_check_valid_target(dir, pon_type, pkt_frwd->trg_port, pkt_frwd->trg_queue, rule_action->pkt_act);
+	tpm_proc_check_valid_target(dir, pon_type, src_port, pkt_frwd->trg_port,
+				pkt_frwd->trg_queue, rule_action->pkt_act, TPM_FALSE);
 	IF_ERROR(ret_code);
 
 	/* Check owner_id */
@@ -10852,16 +11906,16 @@ uint8_t tpm_proc_check_ipv6_5t_flow_a_equal_b(uint32_t parse_bm,
 }
 
 tpm_error_code_t tpm_proc_add_ipv6_gen_5t_check(uint32_t owner_id,
-												tpm_dir_t dir,
-												uint32_t rule_num,
-												tpm_parse_fields_t parse_rule_bm,
-												tpm_parse_flags_t parse_flags_bm,
-												tpm_l4_ports_key_t *l4_key,
-												tpm_ipv6_gen_acl_key_t *ipv6_gen_key,
-												tpm_pkt_frwd_t *pkt_frwd,
-												tpm_pkt_mod_bm_t pkt_mod_bm,
-												tpm_pkt_mod_t *pkt_mod,
-												tpm_rule_action_t *rule_action)
+						tpm_dir_t dir,
+						uint32_t rule_num,
+						tpm_parse_fields_t parse_rule_bm,
+						tpm_parse_flags_t parse_flags_bm,
+						tpm_l4_ports_key_t *l4_key,
+						tpm_ipv6_gen_acl_key_t *ipv6_gen_key,
+						tpm_pkt_frwd_t *pkt_frwd,
+						tpm_pkt_mod_bm_t pkt_mod_bm,
+						tpm_pkt_mod_t *pkt_mod,
+						tpm_rule_action_t *rule_action)
 {
 	int32_t ret_code;
 	tpm_db_pon_type_t pon_type;
@@ -10871,6 +11925,7 @@ tpm_error_code_t tpm_proc_add_ipv6_gen_5t_check(uint32_t owner_id,
 	tpm_ipv6_gen_acl_key_t _gen_key;
 	tpm_ipv6_addr_key_t _dip_key, dip_key;
 	tpm_init_ipv6_5t_enable_t ipv6_5t_enable;
+	tpm_src_port_type_t src_port;
 
 	memset(&dip_key, 0, sizeof(tpm_ipv6_addr_key_t));
 	memset(&range_data, 0, sizeof(tpm_db_pnc_range_t));
@@ -10909,9 +11964,16 @@ tpm_error_code_t tpm_proc_add_ipv6_gen_5t_check(uint32_t owner_id,
 		return(ERR_FRWD_INVALID);
 	}
 
+	/* Get GMAC(s) */
+	if (dir == TPM_DIR_DS)
+		src_port = TPM_SRC_PORT_WAN;
+	else
+		src_port = TPM_SRC_PORT_UNI_ANY;
+
 	/* Check Target_port and Queue are valid */
 	ret_code =
-	tpm_proc_check_valid_target(dir, pon_type, pkt_frwd->trg_port, pkt_frwd->trg_queue, rule_action->pkt_act);
+	tpm_proc_check_valid_target(dir, pon_type, src_port, pkt_frwd->trg_port,
+				pkt_frwd->trg_queue, rule_action->pkt_act, TPM_FALSE);
 	IF_ERROR(ret_code);
 
 	/* Check parse_bm */
@@ -11003,17 +12065,17 @@ tpm_error_code_t tpm_proc_add_ipv6_gen_5t_check(uint32_t owner_id,
 }
 
 tpm_error_code_t tpm_proc_add_ipv6_dip_5t_check(uint32_t owner_id,
-												tpm_dir_t dir,
-												uint32_t rule_num,
-												tpm_parse_fields_t parse_rule_bm,
-												tpm_parse_flags_t parse_flags_bm,
-												tpm_l4_ports_key_t *l4_key,
-												tpm_ipv6_gen_acl_key_t *ipv6_gen_key,
-												tpm_ipv6_addr_key_t *ipv6_dip_key,
-												tpm_pkt_frwd_t *pkt_frwd,
-												tpm_pkt_mod_bm_t pkt_mod_bm,
-												tpm_pkt_mod_t *pkt_mod,
-												tpm_rule_action_t *rule_action)
+						tpm_dir_t dir,
+						uint32_t rule_num,
+						tpm_parse_fields_t parse_rule_bm,
+						tpm_parse_flags_t parse_flags_bm,
+						tpm_l4_ports_key_t *l4_key,
+						tpm_ipv6_gen_acl_key_t *ipv6_gen_key,
+						tpm_ipv6_addr_key_t *ipv6_dip_key,
+						tpm_pkt_frwd_t *pkt_frwd,
+						tpm_pkt_mod_bm_t pkt_mod_bm,
+						tpm_pkt_mod_t *pkt_mod,
+						tpm_rule_action_t *rule_action)
 {
 	int32_t ret_code;
 	tpm_db_pon_type_t pon_type;
@@ -11023,6 +12085,7 @@ tpm_error_code_t tpm_proc_add_ipv6_dip_5t_check(uint32_t owner_id,
 	tpm_ipv6_gen_acl_key_t _gen_key;
 	tpm_ipv6_addr_key_t _dip_key;
 	tpm_init_ipv6_5t_enable_t ipv6_5t_enable;
+	tpm_src_port_type_t src_port;
 
 	memset(&range_data, 0, sizeof(tpm_db_pnc_range_t));
 
@@ -11060,9 +12123,16 @@ tpm_error_code_t tpm_proc_add_ipv6_dip_5t_check(uint32_t owner_id,
 		return(ERR_FRWD_INVALID);
 	}
 
+	/* Get GMAC(s) */
+	if (dir == TPM_DIR_DS)
+		src_port = TPM_SRC_PORT_WAN;
+	else
+		src_port = TPM_SRC_PORT_UNI_ANY;
+
 	/* Check Target_port and Queue are valid */
 	ret_code =
-	tpm_proc_check_valid_target(dir, pon_type, pkt_frwd->trg_port, pkt_frwd->trg_queue, rule_action->pkt_act);
+	tpm_proc_check_valid_target(dir, pon_type, src_port, pkt_frwd->trg_port,
+				pkt_frwd->trg_queue, rule_action->pkt_act, TPM_FALSE);
 	IF_ERROR(ret_code);
 
 	/* Check parse_bm */
@@ -11175,6 +12245,7 @@ tpm_error_code_t tpm_proc_add_ipv6_l4_ports_5t_check(uint32_t owner_id,
 	tpm_ipv6_gen_acl_key_t _gen_key, gen_key;
 	tpm_ipv6_addr_key_t _dip_key, dip_key;
 	tpm_init_ipv6_5t_enable_t ipv6_5t_enable;
+	tpm_src_port_type_t src_port;
 
 	memset(&gen_key, 0, sizeof(tpm_ipv6_gen_acl_key_t));
 	memset(&dip_key, 0, sizeof(tpm_ipv6_addr_key_t));
@@ -11215,9 +12286,16 @@ tpm_error_code_t tpm_proc_add_ipv6_l4_ports_5t_check(uint32_t owner_id,
 		return(ERR_FRWD_INVALID);
 	}
 
+	/* Get GMAC(s) */
+	if (dir == TPM_DIR_DS)
+		src_port = TPM_SRC_PORT_WAN;
+	else
+		src_port = TPM_SRC_PORT_UNI_ANY;
+
 	/* Check Target_port and Queue are valid */
 	ret_code =
-	tpm_proc_check_valid_target(dir, pon_type, pkt_frwd->trg_port, pkt_frwd->trg_queue, rule_action->pkt_act);
+	tpm_proc_check_valid_target(dir, pon_type, src_port, pkt_frwd->trg_port, pkt_frwd->trg_queue,
+				rule_action->pkt_act, TPM_FALSE);
 	IF_ERROR(ret_code);
 
 	/* Check parse_bm */
@@ -12778,66 +13856,6 @@ int32_t tpm_proc_ipv6_mc_tcam_build(tpm_mc_filter_mode_t filter_mode,
 	return(TPM_OK);
 }
 
-int32_t tpm_proc_ipv6_mc_sram_build(tpm_mc_filter_mode_t filter_mode,
-				    tpm_mc_igmp_mode_t igmp_mode,
-				    tpm_trg_port_type_t target_port,
-				    uint32_t mod_entry,
-				    tpm_pncl_sram_data_t *sram_data)
-{
-	tpm_db_mh_src_t ds_mh_src;
-	tpm_init_virt_uni_t virt_uni;
-
-	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " target_port(%d)\n", target_port);
-
-	/* Update dummy register (offset automatically=zero) */
-	sram_data->shift_updt_reg = TPM_PNC_NOSHIFT_UPDATE_REG;
-	sram_data->sram_updt_bm = TPM_PNCL_SET_LUD;
-
-	/* Set MH */
-	if (tpm_db_get_mc_per_uni_vlan_xlate() == 0) {
-		tpm_db_ds_mh_get_conf_set(&ds_mh_src);
-
-		if (filter_mode == TPM_MC_COMBINED_IP_MAC_FILTER) {
-			if (TPM_MH_SRC_PNC_RI == ds_mh_src) {
-				sram_data->sram_updt_bm |= TPM_PNCL_SET_MH_RI;
-				sram_data->mh_reg.mh_set = TPM_TRUE;
-
-				tpm_db_virt_info_get(&virt_uni);
-				if (virt_uni.enabled)
-					sram_data->mh_reg.mh_reg = (TPM_MH_RI_BIT16 | TPM_MH_RI_BIT15);
-				else
-					sram_data->mh_reg.mh_reg = (TPM_MH_RI_BIT17 | TPM_MH_RI_BIT16 |
-								    TPM_MH_RI_BIT15 | TPM_MH_RI_BIT14);
-			} else {
-				sram_data->mh_reg.mh_set = TPM_FALSE;
-				sram_data->mh_reg.mh_reg = 0;
-			}
-		} else if (filter_mode == TPM_MC_IP_ONLY_FILTER) {
-			/* Target UNI is set by Modification Entry */
-		}
-	} else {
-		/* Target UNI is set by Modification Entry */
-	}
-
-	/* Set modification command */
-	if (mod_entry != 0) {
-		sram_data->sram_updt_bm |= TPM_PNCL_SET_MOD;
-		sram_data->flow_id_sub.mod_cmd = mod_entry;
-	}
-
-	/* Set Target Port */
-	sram_data->sram_updt_bm |= TPM_PNCL_SET_TXP;
-	if (target_port == TPM_TRG_PORT_CPU) {
-		sram_data->flow_id_sub.pnc_target = TPM_PNC_TRG_CPU;
-		sram_data->pnc_queue = tpm_db_get_mc_cpu_queue();
-	} else {
-		sram_data->flow_id_sub.pnc_target = TPM_PNC_TRG_GMAC0;
-		sram_data->pnc_queue = tpm_db_get_mc_hwf_queue();
-	}
-
-	return(TPM_OK);
-}
-
 int32_t tpm_proc_ipv6_mc_sip_entry_create(uint32_t sip_index, uint8_t *ipv6_src_add)
 {
 	int32_t int_ret_code;
@@ -12932,250 +13950,6 @@ int32_t tpm_proc_ipv6_mc_sip_entry_del(uint32_t sip_index)
 	return TPM_RC_OK;
 }
 
-int32_t tpm_proc_create_ipv6_mc_mod(tpm_mc_filter_mode_t filter_mode,
-				    tpm_mc_igmp_mode_t igmp_mode,
-				    uint8_t mc_stream_pppoe,
-				    uint16_t vid,
-				    uint8_t *group_addr,
-				    uint32_t dest_port_bm,
-				    uint32_t *mod_entry)
-{
-	int32_t ret_code;
-	tpm_pkt_mod_bm_t pkt_mod_bm = 0;
-	tpm_pkt_mod_t pkt_mod;
-	uint8_t mc_mac[6];
-	uint32_t lpbk_port_bm = 0, entry_id;
-	tpm_mc_vid_port_cfg_t *mc_vid_cfg = NULL;
-	uint8_t valid;
-	uint32_t switch_init;
-	uint32_t mh_en;
-	/*struct net_device *dev = NULL;*/
-
-	memset(&pkt_mod, 0, sizeof(tpm_pkt_mod_t));
-
-	/*get switch init*/
-	ret_code = tpm_db_switch_init_get(&switch_init);
-	IF_ERROR(ret_code);
-
-	/*get MH EN */
-	ret_code = tpm_db_gmac_mh_en_conf_get(TPM_ENUM_GMAC_0, &mh_en);
-	IF_ERROR(ret_code);
-
-	if (filter_mode == TPM_MC_IP_ONLY_FILTER && mh_en) {
-		/* TODO: Check virt_port status. If it is not enabled, set target_port via MH_Tx_reg in RI. */
-		pkt_mod_bm |= TPM_MH_SET;
-		pkt_mod.mh_mod = tpm_db_trg_port_switch_port_get(dest_port_bm);
-	}
-
-	if (tpm_db_get_mc_per_uni_vlan_xlate() == 0) {
-		if (vid != 0xffff) {
-			if (tpm_db_get_mc_vid_cfg(vid, &mc_vid_cfg) == TPM_OK) {
-				for (entry_id = 0; entry_id < TPM_MAX_NUM_UNI_PORTS; entry_id++) {
-					if (mc_vid_cfg[entry_id].mc_uni_port_mode == TPM_MC_UNI_MODE_TRANSLATE) {
-						pkt_mod_bm |= TPM_VLAN_MOD;
-
-						pkt_mod.vlan_mod.vlan_op = VLANOP_EXT_TAG_MOD;
-						pkt_mod.vlan_mod.vlan1_out.tpid = 0x8100;
-						pkt_mod.vlan_mod.vlan1_out.pbit = 0;
-						pkt_mod.vlan_mod.vlan1_out.pbit_mask = 0x0;
-						pkt_mod.vlan_mod.vlan1_out.cfi = 0;
-						pkt_mod.vlan_mod.vlan1_out.cfi_mask = 0x0;
-						pkt_mod.vlan_mod.vlan1_out.vid = mc_vid_cfg[entry_id].uni_port_vid;
-						pkt_mod.vlan_mod.vlan1_out.vid_mask = 0xffff;
-						break;
-					} else if (mc_vid_cfg[entry_id].mc_uni_port_mode == TPM_MC_UNI_MODE_STRIP) {
-						/* Just for MC, no switch */
-						if (switch_init == 0) {
-							pkt_mod_bm |= TPM_VLAN_MOD;
-
-							pkt_mod.vlan_mod.vlan_op = VLANOP_EXT_TAG_DEL;
-							break;
-						}
-					}
-				}
-			} else
-				TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " not found mv_vlan_cfg %d, assume as transparent! \n", vid);
-		}
-	} else if (filter_mode == TPM_MC_COMBINED_IP_MAC_FILTER) {
-		pkt_mod_bm |= TPM_MH_SET;
-
-		ret_code = tpm_db_get_mc_vid_cfg(vid, &mc_vid_cfg);
-		IF_ERROR(ret_code);
-
-		for (entry_id = 0; entry_id < TPM_MAX_NUM_UNI_PORTS; entry_id++) {
-			if (mc_vid_cfg[entry_id].tpm_src_port != TPM_SRC_PORT_UNI_VIRT) {
-				if (mc_vid_cfg[entry_id].mc_uni_port_mode == TPM_MC_UNI_MODE_TRANSPARENT ||
-				    mc_vid_cfg[entry_id].mc_uni_port_mode == TPM_MC_UNI_MODE_STRIP) {
-					lpbk_port_bm |=
-					TPM_TRG_UNI_0 << (mc_vid_cfg[entry_id].tpm_src_port - TPM_SRC_PORT_UNI_0);
-				}
-			}
-		}
-		lpbk_port_bm |= TPM_TRG_UNI_VIRT;
-
-		pkt_mod.mh_mod = tpm_db_trg_port_switch_port_get(lpbk_port_bm);
-	}
-
-	if (igmp_mode == TPM_MC_IGMP_PROXY) {
-#if 0
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24)
-		dev = dev_get_by_name("eth0");
-#else
-		dev = dev_get_by_name(&init_net, "eth0");
-#endif
-		if (dev == NULL)
-			IF_ERROR(ERR_GENERAL);
-
-		pkt_mod_bm |= (TPM_MAC_SA_SET | TPM_TTL_DEC | TPM_IPV4_UPDATE);
-		pkt_mod.mac_mod.mac_sa[0] = ((uint8_t *) dev->dev_addr)[0];
-		pkt_mod.mac_mod.mac_sa[1] = ((uint8_t *) dev->dev_addr)[1];
-		pkt_mod.mac_mod.mac_sa[2] = ((uint8_t *) dev->dev_addr)[2];
-		pkt_mod.mac_mod.mac_sa[3] = ((uint8_t *) dev->dev_addr)[3];
-		pkt_mod.mac_mod.mac_sa[4] = ((uint8_t *) dev->dev_addr)[4];
-		pkt_mod.mac_mod.mac_sa[5] = ((uint8_t *) dev->dev_addr)[5];
-
-		pkt_mod.mac_mod.mac_sa_mask[0] = 0xff;
-		pkt_mod.mac_mod.mac_sa_mask[1] = 0xff;
-		pkt_mod.mac_mod.mac_sa_mask[2] = 0xff;
-		pkt_mod.mac_mod.mac_sa_mask[3] = 0xff;
-		pkt_mod.mac_mod.mac_sa_mask[4] = 0xff;
-		pkt_mod.mac_mod.mac_sa_mask[5] = 0xff;
-#endif
-
-		pkt_mod_bm |= (TPM_MAC_SA_SET | TPM_HOPLIM_DEC | TPM_IPV6_UPDATE);
-		tpm_db_get_mc_igmp_proxy_sa_mac(mc_mac, &valid);
-
-		if (valid) {
-			memcpy(pkt_mod.mac_mod.mac_sa, mc_mac, 6 * sizeof(uint8_t));
-			memset(pkt_mod.mac_mod.mac_sa_mask, 0xff, 6 * sizeof(uint8_t));
-		} else
-			IF_ERROR(ERR_GENERAL);
-
-		if (mc_stream_pppoe) {
-			pkt_mod_bm |= (TPM_MAC_DA_SET | TPM_PPPOE_DEL);
-			MULTI_IPV6_2_MAC(mc_mac, group_addr);
-			memcpy(pkt_mod.mac_mod.mac_da, mc_mac, 6 * sizeof(uint8_t));
-			memset(pkt_mod.mac_mod.mac_da_mask, 0xff, 6 * sizeof(uint8_t));
-		}
-	}
-
-	if (pkt_mod_bm != 0) {
-		ret_code = tpm_mod2_entry_set(TPM_MOD_OWNER_TPM, TPM_ENUM_GMAC_0,
-			pkt_mod_bm, TPM_INT_MC_MOD, &pkt_mod, mod_entry);
-		IF_ERROR(ret_code);
-	}
-
-	return(TPM_OK);
-}
-tpm_error_code_t tpm_proc_add_ipv6_mc_check(uint32_t owner_id,
-						uint32_t stream_num,
-						tpm_mc_igmp_mode_t igmp_mode,
-						uint8_t mc_stream_pppoe,
-						uint16_t vid,
-						uint8_t ipv6_src_add[16],
-						uint8_t ipv6_dst_add[16],
-						uint8_t ignore_ipv6_src,
-						tpm_trg_port_type_t dest_port_bm,
-						tpm_mc_filter_mode_t filter_mode)
-{
-	tpm_error_code_t ret_code;
-	int32_t int_ret_code, index;
-	tpm_db_pnc_range_t range_data;
-	uint32_t ai_bit;
-	tpm_init_virt_uni_t virt_uni;
-	uint32_t pnc_rng_free_size;
-
-	/* Check TPM was successfully initialized */
-	if (!tpm_db_init_done_get())
-		IF_ERROR(ERR_SW_NOT_INIT);
-
-	ret_code = tpm_owner_id_check(TPM_API_IPV6_MC, owner_id);
-	IF_ERROR(ret_code);
-
-	/* Get PNC Range Start */
-	int_ret_code = tpm_db_pnc_rng_get(TPM_PNC_IPV6_MC_DS, &range_data);
-	IF_ERROR(int_ret_code);
-
-	if (stream_num >= range_data.pnc_range_conf.range_size)
-		IF_ERROR(ERR_MC_STREAM_INVALID);
-
-	ret_code = tpm_proc_check_dst_uni_port(dest_port_bm);
-	IF_ERROR(ret_code);
-
-	/*check virt range size if necessary*/
-	if(filter_mode == TPM_MC_COMBINED_IP_MAC_FILTER) {
-		if ((tpm_db_get_mc_per_uni_vlan_xlate() != 0) && ((dest_port_bm & TPM_TRG_UNI_VIRT) != 0)) {
-			int_ret_code = tpm_db_pnc_rng_free_ent_get(TPM_PNC_VIRT_UNI, &pnc_rng_free_size);
-			IF_ERROR(int_ret_code);
-			if(pnc_rng_free_size == 0)
-				IF_ERROR(ERR_OUT_OF_RESOURCES);
-		}
-	}
-
-	/* fix bug of adding 1-2-3 instead of 0-1-2 => when 3 is over-writing the hardcoded entry */
-	if ((stream_num < range_data.pnc_range_conf.api_start) || (stream_num > range_data.pnc_range_conf.api_end))
-		IF_ERROR(ERR_MC_STREAM_INVALID);
-
-	tpm_db_api_entry_ind_get(TPM_IPV6_MC_ACL, stream_num, &index);
-	if (-1 != index)
-		IF_ERROR(ERR_MC_STREAM_EXISTS);
-
-	tpm_db_virt_info_get(&virt_uni);
-
-	if (vid == 0xffff) {
-		if (tpm_db_get_mc_filter_mode() == TPM_MC_IP_ONLY_FILTER) {
-			if (virt_uni.enabled) {
-				TPM_OS_WARN(TPM_TPM_LOG_MOD,
-					    " filter mode fall back to MC_COMBINED_MAC_IP_FILTER \r\n");
-			}
-		}
-
-		if (tpm_db_get_mc_per_uni_vlan_xlate() != 0) {
-			TPM_OS_ERROR(TPM_TPM_LOG_MOD,
-				    "when mc_per_uni_vlan_xlate is enabled, untagged mcast stream is not supported, "
-				    "and MC VID must be specified \r\n");
-			IF_ERROR(ERR_SW_VID_INVALID);
-		}
-	} else {
-		if (tpm_db_mc_vlan_get_ai_bit(vid, &ai_bit) != TPM_OK) {
-			TPM_OS_ERROR(TPM_TPM_LOG_MOD,
-				    "MC VID must be configured first \r\n");
-			IF_ERROR(ERR_SW_VID_INVALID);
-		}
-	}
-
-	if (mc_stream_pppoe) {
-		if (tpm_db_get_mc_pppoe_enable() == 0)
-			IF_ERROR(ERR_FEAT_UNSUPPORT);
-
-		if (igmp_mode == TPM_MC_IGMP_SNOOPING && tpm_db_get_mc_per_uni_vlan_xlate())
-			IF_ERROR(ERR_FEAT_UNSUPPORT);
-	}
-
-	if (ipv6_dst_add[0] != 0xff)
-		IF_ERROR(ERR_IPV6_MC_DST_IP_INVALID);
-
-	if (dest_port_bm & TPM_TRG_UNI_VIRT) {
-		if (virt_uni.enabled == 0)
-			IF_ERROR(ERR_MC_DST_PORT_INVALID);
-	}
-
-	if (dest_port_bm & TPM_TRG_PORT_CPU) {
-		if (dest_port_bm & (~TPM_TRG_PORT_CPU))
-			IF_ERROR(ERR_MC_DST_PORT_INVALID);
-	}
-
-	/* check if there is MC SIP slot */
-	if(0 == ignore_ipv6_src) {
-		if(!tpm_db_ipv6_mc_sip_index_get(ipv6_src_add)) {
-			/* this is a new MC SIP */
-			if(!tpm_db_ipv6_mc_sip_free_slot_num_get())
-				IF_ERROR(ERR_OUT_OF_RESOURCES);
-		}
-	}
-
-	return(TPM_RC_OK);
-}
 tpm_error_code_t tpm_proc_add_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode,
 						uint32_t stream_num,
 						tpm_mc_igmp_mode_t igmp_mode,
@@ -13184,6 +13958,7 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 						uint8_t ipv6_src_add[16],
 						uint8_t ipv6_dst_add[16],
 						uint8_t ignore_ipv6_src,
+						uint16_t dest_queue,
 						uint32_t dest_port_bm)
 {
 	tpm_pncl_pnc_full_t pnc_data;
@@ -13201,6 +13976,7 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 	uint32_t entry_id;
 	uint16_t u4_vid;
 	int32_t  sip_index = 0;
+	tpm_gmacs_enum_t gmac;
 
 	memset(&mc_stream, 0, sizeof(tpm_db_mc_stream_entry_t));
 
@@ -13209,8 +13985,8 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 
 	/*********** Create Modification Entries **********/
 	ret_code =
-	tpm_proc_create_ipv6_mc_mod(filter_mode, igmp_mode, mc_stream_pppoe, vid, ipv6_dst_add,
-				    dest_port_bm, &mod_entry);
+	tpm_proc_create_ipvx_mc_mod(filter_mode, igmp_mode, mc_stream_pppoe, vid, ipv6_dst_add,
+				    dest_port_bm, &mod_entry, TPM_IP_VER_6);
 	IF_ERROR(ret_code);
 
 	/* Handle IPv6 SSM */
@@ -13240,7 +14016,10 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 
 	/* Build SRAM Entry */
 	ret_code =
-	tpm_proc_ipv6_mc_sram_build(filter_mode, igmp_mode, dest_port_bm, mod_entry, &(pnc_data.pncl_sram));
+	tpm_proc_ipvx_mc_sram_build(filter_mode, igmp_mode,
+				    dest_queue, dest_port_bm,
+				    mod_entry, &(pnc_data.pncl_sram),
+				    TPM_IP_VER_6);
 	IF_ERROR(ret_code);
 
 	/*** Calculate PNC Entry ***/
@@ -13267,8 +14046,14 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 
 	/* Set API data */
 	memcpy(api_data.ipv6_mc_key.ipv6_dest_add, ipv6_dst_add, 16 * sizeof(uint8_t));
+	memcpy(api_data.ipv6_mc_key.ipv6_src_add, ipv6_src_add, 16 * sizeof(uint8_t));
 	api_data.ipv6_mc_key.dest_port_bm = dest_port_bm;
+	api_data.ipv6_mc_key.dest_queue = dest_queue;
 	api_data.ipv6_mc_key.vid = vid;
+	api_data.ipv6_mc_key.igmp_mode = igmp_mode;
+	api_data.ipv6_mc_key.mc_stream_pppoe = mc_stream_pppoe;
+	api_data.ipv6_mc_key.stream_num = stream_num;
+	api_data.ipv6_mc_key.ignore_ipv6_src = ignore_ipv6_src;
 
 	/* Set Pnc Connection data */
 	pnc_conn.num_pnc_ranges = 1;
@@ -13277,7 +14062,11 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 
 	/* Set Modification Connection data */
 	mod_con.mod_cmd_ind = mod_entry;
-	mod_con.mod_cmd_mac = TPM_PNC_TRG_GMAC0;
+	if (mod_entry) {
+		ret_code = tpm_db_target_to_gmac(pnc_data.pncl_sram.flow_id_sub.pnc_target, &gmac);
+		IF_ERROR(ret_code);
+		mod_con.mod_cmd_mac = gmac;
+	}
 
 	/* Set new API Entry */
 	ret_code = tpm_db_api_entry_set(TPM_IPV6_MC_ACL, stream_num, 0 /*bi_dir */ ,
@@ -13319,6 +14108,7 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode
 	mc_stream.igmp_mode = igmp_mode;
 	mc_stream.mc_stream_pppoe = mc_stream_pppoe;
 	mc_stream.vid = vid;
+	mc_stream.dest_queue = dest_queue;
 	mc_stream.dest_port_bm = dest_port_bm;
 	mc_stream.u4_entry = rule_num;
 	mc_stream.ignore_src_addr = ignore_ipv6_src;
@@ -13339,6 +14129,7 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_stream(uint32_t owner_id,
 					     uint8_t ipv6_src_add[16],
 					     uint8_t ipv6_dst_add[16],
 					     uint8_t ignore_ipv6_src,
+					     uint16_t dest_queue,
 					     tpm_trg_port_type_t dest_port_bm)
 {
 	tpm_error_code_t ret_code;
@@ -13362,14 +14153,22 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_stream(uint32_t owner_id,
 		dest_port_bm = tpm_db_trg_port_uni_any_bmp_get(true);
 
 	/* Check parameters */
-	ret_code = tpm_proc_add_ipv6_mc_check(owner_id, stream_num, igmp_mode, mc_stream_pppoe, vid,
+	ret_code = tpm_proc_add_ipvx_mc_check(owner_id, stream_num, igmp_mode, mc_stream_pppoe, vid,
 						  ipv6_src_add, ipv6_dst_add, ignore_ipv6_src,
-						  dest_port_bm, filter_mode);
+						  dest_queue, dest_port_bm, filter_mode, TPM_IP_VER_6);
 	IF_ERROR(ret_code);
 
+	/* get queue number */
+	if (dest_queue == TPM_INVALID_QUEUE) {
+		if (dest_port_bm & TPM_TRG_PORT_CPU)
+			dest_queue = tpm_db_get_mc_cpu_queue();
+		else
+			dest_queue = tpm_db_get_mc_hwf_queue();
+	}
 	/* Create PNC entry */
 	ret_code = tpm_proc_add_ipv6_mc_pnc_entry(filter_mode, stream_num, igmp_mode, mc_stream_pppoe, vid,
-						  ipv6_src_add, ipv6_dst_add, ignore_ipv6_src, dest_port_bm);
+						  ipv6_src_add, ipv6_dst_add, ignore_ipv6_src,
+						  dest_queue, dest_port_bm);
 	IF_ERROR(ret_code);
 
 	/* Set switch port_map for multicast MAC, but don't overwrite FF02::1 (MLD General Query) MAC */
@@ -13382,10 +14181,11 @@ tpm_error_code_t tpm_proc_add_ipv6_mc_stream(uint32_t owner_id,
 	return(TPM_RC_OK);
 }
 
-tpm_error_code_t tpm_proc_delete_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode,
+tpm_error_code_t tpm_proc_delete_ipvx_mc_pnc_entry(tpm_mc_filter_mode_t filter_mode,
 						   uint32_t stream_num,
 						   uint32_t dest_port_bm,
-						   uint32_t u4_entry)
+						   uint32_t u4_entry,
+						   tpm_ip_ver_t ip_version)
 {
 	tpm_db_pnc_range_t range_data;
 	tpm_rule_entry_t api_data;
@@ -13398,17 +14198,27 @@ tpm_error_code_t tpm_proc_delete_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 	uint32_t pnc_range_start = 0, api_start = 0, pnc_entry = 0;
 	uint32_t sip_index = 0;
 	uint8_t	 new_ref_num = 0;
+	tpm_pnc_ranges_t range;
+	tpm_api_sections_t api_section;
+
+	if (TPM_IP_VER_4 == ip_version) {
+		range = TPM_PNC_IPV4_MC_DS;
+		api_section = TPM_IPV4_MC;
+	} else {
+		range = TPM_PNC_IPV6_MC_DS;
+		api_section = TPM_IPV6_MC_ACL;
+	}
 
 	if (filter_mode != TPM_MC_MAC_ONLY_FILTER) {
 		/* Get PNC Range Start */
-		ret_code = tpm_db_pnc_rng_get(TPM_PNC_IPV6_MC_DS, &range_data);
+		ret_code = tpm_db_pnc_rng_get(range, &range_data);
 		IF_ERROR(ret_code);
 
 		if (stream_num >= range_data.pnc_range_conf.range_size)
 			IF_ERROR(ERR_MC_STREAM_INVALID);
 
 		/* Check parameters */
-		ret_code = tpm_db_api_entry_get(TPM_IPV6_MC_ACL, stream_num, &rule_idx, &bi_dir,
+		ret_code = tpm_db_api_entry_get(api_section, stream_num, &rule_idx, &bi_dir,
 						&api_data, &mod_con, &pnc_conn);
 		IF_ERROR(ret_code);
 
@@ -13428,38 +14238,41 @@ tpm_error_code_t tpm_proc_delete_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 		IF_ERROR(ret_code);
 
 		/* Increase number of free entries in pnc_range */
-		ret_code = tpm_db_pnc_rng_free_ent_inc(TPM_PNC_IPV6_MC_DS);
+		ret_code = tpm_db_pnc_rng_free_ent_inc(range);
 		IF_ERROR(ret_code);
 
 		if (mod_con.mod_cmd_ind != 0) {
-			ret_code = tpm_mod2_entry_del(TPM_MOD_OWNER_TPM, TPM_ENUM_GMAC_0, mod_con.mod_cmd_ind);
+			ret_code = tpm_proc_delete_mod(TPM_MOD_OWNER_TPM, mod_con.mod_cmd_mac, mod_con.mod_cmd_ind);
 			IF_ERROR(ret_code);
 		}
 
 		/* Delete API Rule Entry */
-		ret_code = tpm_db_api_entry_invalidate(TPM_IPV6_MC_ACL, stream_num);
+		ret_code = tpm_db_api_entry_invalidate(api_section, stream_num);
 		IF_ERROR(ret_code);
 
-		/* remove SIP PNC entry */
-		ret_code = tpm_db_get_ipv6_mc_stream_entry(stream_num, &mc_stream);
-		IF_ERROR(ret_code);
-		if (0 == mc_stream.ignore_src_addr) {
-			/* get index of this IPv6 MC SIP */
-			sip_index = tpm_db_ipv6_mc_sip_index_get(mc_stream.src_addr);
-			if (0 == sip_index) {
-				/* SIP is not in DB, error */
-				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "get index of IPv6 MC SIP failed!\n");
-				return(ERR_IPV6_MC_SRC_IP_INVALID);
-			}
-
-			/* dec reference number in DB */
-			ret_code = tpm_db_ipv6_mc_sip_ref_num_dec(sip_index, &new_ref_num);
+		
+		if (TPM_IP_VER_6 == ip_version) {
+			/* remove SIP PNC entry */
+			ret_code = tpm_db_get_ipv6_mc_stream_entry(stream_num, &mc_stream);
 			IF_ERROR(ret_code);
+			if (0 == mc_stream.ignore_src_addr) {
+				/* get index of this IPv6 MC SIP */
+				sip_index = tpm_db_ipv6_mc_sip_index_get(mc_stream.src_addr);
+				if (0 == sip_index) {
+					/* SIP is not in DB, error */
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "get index of IPv6 MC SIP failed!\n");
+					return(ERR_IPV6_MC_SRC_IP_INVALID);
+				}
 
-			/* if new ref num is 0, remove this SIP in PNC */
-			if (new_ref_num == 0) {
-				ret_code = tpm_proc_ipv6_mc_sip_entry_del(sip_index);
+				/* dec reference number in DB */
+				ret_code = tpm_db_ipv6_mc_sip_ref_num_dec(sip_index, &new_ref_num);
 				IF_ERROR(ret_code);
+
+				/* if new ref num is 0, remove this SIP in PNC */
+				if (new_ref_num == 0) {
+					ret_code = tpm_proc_ipv6_mc_sip_entry_del(sip_index);
+					IF_ERROR(ret_code);
+				}
 			}
 		}
 
@@ -13478,7 +14291,10 @@ tpm_error_code_t tpm_proc_delete_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 	}
 
 	/* Remove stream entry */
-	tpm_db_reset_ipv6_mc_stream_entry(stream_num);
+	if (TPM_IP_VER_4 == ip_version)
+		tpm_db_reset_mc_stream_entry(stream_num);
+	else
+		tpm_db_reset_ipv6_mc_stream_entry(stream_num);
 
 	return(TPM_RC_OK);
 }
@@ -13491,6 +14307,7 @@ tpm_error_code_t tpm_proc_update_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 						   uint8_t ipv6_dst_add[16],
 						   uint8_t sip_index,
 						   uint8_t ignore_sip,
+						   uint16_t dest_queue,
 						   uint32_t dest_port_bm)
 {
 	tpm_db_pnc_range_t range_data;
@@ -13508,6 +14325,11 @@ tpm_error_code_t tpm_proc_update_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 
 	memset(&mc_stream, 0, sizeof(tpm_db_ipv6_mc_stream_entry_t));
 
+	/* Get old API Entry */
+	ret_code = tpm_db_api_entry_get(TPM_IPV6_MC_ACL, stream_num, &rule_idx, &bi_dir,
+					&api_data, &mod_con, &pnc_conn);
+	IF_ERROR(ret_code);
+
 	/* Only MC_IP_ONLY_FILTER mode, update the multicast group member ports by mh_mod. */
 	if (filter_mode == TPM_MC_IP_ONLY_FILTER) {
 		/* Get PNC Range Start */
@@ -13517,16 +14339,11 @@ tpm_error_code_t tpm_proc_update_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 		if (stream_num >= range_data.pnc_range_conf.range_size)
 			IF_ERROR(ERR_MC_STREAM_INVALID);
 
-		/* Get old API Entry */
-		ret_code = tpm_db_api_entry_get(TPM_IPV6_MC_ACL, stream_num, &rule_idx, &bi_dir,
-						&api_data, &mod_con, &pnc_conn);
-		IF_ERROR(ret_code);
-
 		pnc_entry = pnc_conn.pnc_conn_tbl[0].pnc_index;
 
 		/* Create new Modification Entry */
-		ret_code = tpm_proc_create_ipv6_mc_mod(filter_mode, igmp_mode, mc_stream_pppoe,
-						       vid, ipv6_dst_add, dest_port_bm, &mod_entry);
+		ret_code = tpm_proc_create_ipvx_mc_mod(filter_mode, igmp_mode, mc_stream_pppoe,
+						       vid, ipv6_dst_add, dest_port_bm, &mod_entry, TPM_IP_VER_6);
 		IF_ERROR(ret_code);
 
 		/* Rebuild PnC Entry */
@@ -13536,7 +14353,9 @@ tpm_error_code_t tpm_proc_update_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 
 		/* Rebuild SRAM Entry */
 		ret_code =
-		tpm_proc_ipv6_mc_sram_build(filter_mode, igmp_mode, dest_port_bm, mod_entry, &(pnc_data.pncl_sram));
+		tpm_proc_ipvx_mc_sram_build(filter_mode, igmp_mode, dest_queue,
+					dest_port_bm, mod_entry, &(pnc_data.pncl_sram),
+					TPM_IP_VER_6);
 		IF_ERROR(ret_code);
 
 		/* Update only Sram of PNC Entry */
@@ -13545,22 +14364,12 @@ tpm_error_code_t tpm_proc_update_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 
 		/* Delete old Modification Entry */
 		if (mod_con.mod_cmd_ind != 0) {
-			ret_code = tpm_mod2_entry_del(TPM_MOD_OWNER_TPM, TPM_ENUM_GMAC_0, mod_con.mod_cmd_ind);
+			ret_code = tpm_proc_delete_mod(TPM_MOD_OWNER_TPM, mod_con.mod_cmd_mac, mod_con.mod_cmd_ind);
 			IF_ERROR(ret_code);
 		}
 
 		/* Update new Modification Entry */
 		mod_con.mod_cmd_ind = mod_entry;
-
-		/* Invalidate old API Entry */
-		ret_code = tpm_db_api_entry_invalidate(TPM_IPV6_MC_ACL, stream_num);
-		IF_ERROR(ret_code);
-
-		/* Set new API Entry */
-		mod_con.mod_cmd_ind = mod_entry;
-		ret_code = tpm_db_api_entry_set(TPM_IPV6_MC_ACL, stream_num, 0 /*bi_dir */ ,
-						&api_data, &mod_con, &pnc_conn, &rule_idx);
-		IF_ERROR(ret_code);
 	}
 
 	if (filter_mode == TPM_MC_COMBINED_IP_MAC_FILTER) {
@@ -13620,6 +14429,17 @@ tpm_error_code_t tpm_proc_update_ipv6_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 	ret_code = tpm_db_set_ipv6_mc_stream_entry(stream_num, &mc_stream);
 	IF_ERROR(ret_code);
 
+	/* Update API entry */
+	/* Invalidate old API Entry */
+	ret_code = tpm_db_api_entry_invalidate(TPM_IPV6_MC_ACL, stream_num);
+	IF_ERROR(ret_code);
+
+	/* Set new API Entry */
+	api_data.ipv6_mc_key.dest_port_bm = dest_port_bm;
+	ret_code = tpm_db_api_entry_set(TPM_IPV6_MC_ACL, stream_num, 0 /*bi_dir */ ,
+					&api_data, &mod_con, &pnc_conn, &rule_idx);
+	IF_ERROR(ret_code);
+
 	return(TPM_RC_OK);
 }
 
@@ -13669,6 +14489,12 @@ tpm_error_code_t tpm_proc_updt_ipv6_mc_stream(uint32_t owner_id, uint32_t stream
 	ret_code = tpm_db_get_ipv6_mc_stream_entry(stream_num, &mc_stream);
 	IF_ERROR(ret_code);
 
+	if (dest_port_bm == mc_stream.dest_port_bm) {
+		/* nothing changed, return directly */
+		TPM_OS_INFO(TPM_TPM_LOG_MOD, "dest_port_bm does not change, return directly\n");
+		return (TPM_OK);
+	}
+
 	/* get sip_index */
 	if (0 == mc_stream.ignore_src_addr) {
 		/* get index of this IPv6 MC SIP */
@@ -13682,19 +14508,22 @@ tpm_error_code_t tpm_proc_updt_ipv6_mc_stream(uint32_t owner_id, uint32_t stream
 
 	if (((dest_port_bm & TPM_TRG_PORT_CPU) != 0 && (mc_stream.dest_port_bm & TPM_TRG_PORT_CPU) == 0) ||
 	    ((dest_port_bm & TPM_TRG_PORT_CPU) == 0 && (mc_stream.dest_port_bm & TPM_TRG_PORT_CPU) != 0)) {
-		ret_code = tpm_proc_delete_ipv6_mc_pnc_entry(filter_mode, stream_num,
-							     mc_stream.dest_port_bm, mc_stream.u4_entry);
+		ret_code = tpm_proc_delete_ipvx_mc_pnc_entry(filter_mode, stream_num,
+							     mc_stream.dest_port_bm,
+							     mc_stream.u4_entry,
+							     TPM_IP_VER_6);
 		IF_ERROR(ret_code);
 
 		ret_code = tpm_proc_add_ipv6_mc_pnc_entry(filter_mode, stream_num, mc_stream.igmp_mode,
 							  mc_stream.mc_stream_pppoe, mc_stream.vid,
-							  mc_stream.group_addr, mc_stream.src_addr,
-							  mc_stream.ignore_src_addr, dest_port_bm);
+							  mc_stream.src_addr, mc_stream.group_addr,
+							  mc_stream.ignore_src_addr, mc_stream.dest_queue,
+							  dest_port_bm);
 	} else {
 		ret_code = tpm_proc_update_ipv6_mc_pnc_entry(filter_mode, stream_num, mc_stream.igmp_mode,
 							     mc_stream.mc_stream_pppoe, mc_stream.vid,
 							     mc_stream.group_addr, sip_index, mc_stream.ignore_src_addr,
-							     dest_port_bm);
+							     mc_stream.dest_queue, dest_port_bm);
 	}
 	IF_ERROR(ret_code);
 
@@ -13734,7 +14563,10 @@ tpm_error_code_t tpm_proc_del_ipv6_mc_stream(uint32_t owner_id, uint32_t stream_
 	IF_ERROR(ret_code);
 
 	ret_code =
-	tpm_proc_delete_ipv6_mc_pnc_entry(filter_mode, stream_num, mc_stream.dest_port_bm, mc_stream.u4_entry);
+	tpm_proc_delete_ipvx_mc_pnc_entry(filter_mode, stream_num,
+					  mc_stream.dest_port_bm,
+					  mc_stream.u4_entry,
+					  TPM_IP_VER_6);
 	IF_ERROR(ret_code);
 
 	/* Set switch VID and multicast MAC */
@@ -13838,6 +14670,59 @@ tpm_error_code_t tpm_proc_ipv6_hoplimit_init(uint32_t hoplimit_illegal_action)
 
 	return(TPM_RC_OK);
 }
+tpm_error_code_t tpm_proc_set_active_wan_check(tpm_gmacs_enum_t active_wan)
+{
+	tpm_gmacs_enum_t active_wan_current;
+	tpm_eth_complex_profile_t profile_id;
+
+	if(!tpm_db_switch_active_wan_en_get()) {
+		TPM_OS_ERROR(TPM_DB_MOD, "current profile does not support switching active wan\n");
+		return ERR_FEAT_UNSUPPORT;
+	}
+
+	active_wan_current = tpm_db_active_wan_get();
+	profile_id = tpm_db_eth_cmplx_profile_get();
+
+	if (active_wan == active_wan_current) {
+		TPM_OS_ERROR(TPM_DB_MOD, "new active wan port should not be the same with current one\n");
+		return ERR_FEAT_UNSUPPORT;
+	}
+
+	if (    ((profile_id == TPM_PON_G1_WAN_G0_INT_SWITCH) || (profile_id == TPM_PON_G1_WAN_G0_SINGLE_PORT))
+	     && ((active_wan == TPM_ENUM_GMAC_1) || (active_wan == TPM_ENUM_PMAC)))
+		;/* OK */
+	else if  (    ((profile_id == TPM_PON_G0_WAN_G1_INT_SWITCH) || (profile_id == TPM_PON_G0_WAN_G1_SINGLE_PORT))
+	           && ((active_wan == TPM_ENUM_GMAC_0) || (active_wan == TPM_ENUM_PMAC)))
+		;/* OK */
+	else {
+		TPM_OS_ERROR(TPM_DB_MOD, "new active wan port is invalid according to current profile id\n");
+		return ERR_FEAT_UNSUPPORT;
+	}
+
+	return TPM_OK;
+}
+tpm_error_code_t tpm_proc_set_active_wan(tpm_gmacs_enum_t active_wan)
+{
+	int32_t db_ret;
+	tpm_error_code_t tpm_ret;
+
+	tpm_ret = tpm_proc_set_active_wan_check(active_wan);
+	if(TPM_OK != tpm_ret) {
+		TPM_OS_ERROR(TPM_DB_MOD, "input active wan is invalid, error code (%d)\n", tpm_ret);
+		return ERR_GENERAL;
+	}
+
+	db_ret = tpm_db_active_wan_set(active_wan);
+	if(TPM_DB_OK != db_ret) {
+		TPM_OS_ERROR(TPM_DB_MOD, "set current active wan failed(%d)\n", db_ret);
+		return ERR_GENERAL;
+	}
+	/* reset gmac fun */
+	tpm_db_mac_func_set();
+
+	return (TPM_OK);
+}
+
 
 tpm_error_code_t tpm_proc_ipv6_mc_sip_init(void)
 {
@@ -14236,6 +15121,7 @@ int32_t tpm_proc_cnm_ipv4_pre_sram_build(uint32_t key_pattern, tpm_pncl_sram_dat
 
 	/* Set next offset and update register */
 	sram_data->shift_updt_reg = TPM_PNC_NOSHIFT_UPDATE_REG;
+	sram_data->pnc_queue = TPM_PNCL_NO_QUEUE_UPDATE;
 
 	/*** Set next lookup configuration ***/
 
@@ -14719,7 +15605,6 @@ int32_t tpm_proc_cnm_l2_sram_build(uint32_t precedence,
 	long long int_pkt_act = 0;
 	tpm_ai_vectors_t key_field;
 	tpm_db_pon_type_t pon_type;
-	uint32_t i;
 	int32_t ret_code;
 
 	memset(&key_field, 0, sizeof(tpm_ai_vectors_t));
@@ -14763,11 +15648,7 @@ int32_t tpm_proc_cnm_l2_sram_build(uint32_t precedence,
 		sram_data->sram_updt_bm |= TPM_PNCL_SET_TXP;
 
 		/* Set PNC FlowId Target */
-		for (i = 0; i < 8; i++) {
-			if (pkt_frwd->trg_port == (uint32_t)(TPM_TRG_TCONT_0 << i))
-				break;
-		}
-		sram_data->flow_id_sub.pnc_target = TPM_PNC_TRG_PMAC0 + i;
+		sram_data->flow_id_sub.pnc_target = tpm_proc_cnm_pnc_trg_get(pkt_frwd->trg_port);
 
 		TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "Set Target(%d)\n", sram_data->flow_id_sub.pnc_target);
 
@@ -14877,7 +15758,6 @@ int32_t tpm_proc_cnm_ipv6_sram_build(tpm_pkt_frwd_t *pkt_frwd,
 {
 	tpm_ai_vectors_t key_field;
 	tpm_db_pon_type_t pon_type;
-	uint32_t i;
 
 	memset(&key_field, 0, sizeof(tpm_ai_vectors_t));
 
@@ -14902,11 +15782,7 @@ int32_t tpm_proc_cnm_ipv6_sram_build(tpm_pkt_frwd_t *pkt_frwd,
 		sram_data->sram_updt_bm |= TPM_PNCL_SET_TXP;
 
 		/* Set PNC FlowId Target */
-		for (i = 0; i < 8; i++) {
-			if (pkt_frwd->trg_port == (uint32_t)(TPM_TRG_TCONT_0 << i))
-				break;
-		}
-		sram_data->flow_id_sub.pnc_target = TPM_PNC_TRG_PMAC0 + i;
+		sram_data->flow_id_sub.pnc_target = tpm_proc_cnm_pnc_trg_get(pkt_frwd->trg_port);
 
 		TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "Set Target(%d)\n", sram_data->flow_id_sub.pnc_target);
 
@@ -14933,7 +15809,29 @@ int32_t tpm_proc_cnm_ipv6_sram_build(tpm_pkt_frwd_t *pkt_frwd,
 
 	return(TPM_OK);
 }
+tpm_pnc_trg_t tpm_proc_cnm_pnc_trg_get(tpm_trg_port_type_t trg_port)
+{
+	uint32_t i;
+	tpm_pnc_trg_t pnc_trgt = 0;
+	tpm_gmacs_enum_t   active_wan;
 
+	active_wan = tpm_db_active_wan_get();
+
+	/* Set PNC FlowId Target */
+	if (TPM_ENUM_PMAC == active_wan) {
+		for (i = 0; i < 8; i++) {
+			if (trg_port == (uint32_t)(TPM_TRG_TCONT_0 << i))
+				break;
+		}
+		pnc_trgt = TPM_PNC_TRG_PMAC0 + i;
+	} else if (TPM_ENUM_GMAC_0 == active_wan)
+		pnc_trgt = TPM_PNC_TRG_GMAC0;
+	else if (TPM_ENUM_GMAC_1 == active_wan)
+		pnc_trgt = TPM_PNC_TRG_GMAC1;
+
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "Set Target(%d)\n", pnc_trgt);
+	return pnc_trgt;
+}
 int32_t tpm_proc_cnm_ipv4_tcam_build(tpm_src_port_type_t src_port,
 				     uint32_t precedence,
 				     tpm_parse_fields_t ipv4_parse_rule_bm,
@@ -14992,7 +15890,6 @@ int32_t tpm_proc_cnm_ipv4_sram_build(tpm_pkt_frwd_t *pkt_frwd,
 {
 	tpm_ai_vectors_t key_field;
 	tpm_db_pon_type_t pon_type;
-	uint32_t i;
 
 	memset(&key_field, 0, sizeof(tpm_ai_vectors_t));
 
@@ -15016,12 +15913,7 @@ int32_t tpm_proc_cnm_ipv4_sram_build(tpm_pkt_frwd_t *pkt_frwd,
 		/* Add Target Txp to update BM */
 		sram_data->sram_updt_bm |= TPM_PNCL_SET_TXP;
 
-		/* Set PNC FlowId Target */
-		for (i = 0; i < 8; i++) {
-			if (pkt_frwd->trg_port == (uint32_t)(TPM_TRG_TCONT_0 << i))
-				break;
-		}
-		sram_data->flow_id_sub.pnc_target = TPM_PNC_TRG_PMAC0 + i;
+		sram_data->flow_id_sub.pnc_target = tpm_proc_cnm_pnc_trg_get(pkt_frwd->trg_port);
 
 		TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "Set Target(%d)\n", sram_data->flow_id_sub.pnc_target);
 
@@ -15098,6 +15990,8 @@ int32_t tpm_proc_add_l2_cnm_rule(uint32_t owner_id,
 				 uint32_t precedence,
 				 tpm_parse_fields_t l2_parse_rule_bm,
 				 tpm_l2_acl_key_t *l2_key,
+				 tpm_parse_fields_t ipv4_parse_rule_bm,
+				 tpm_ipv4_acl_key_t *ipv4_key,
 				 uint32_t ipv4_key_idx,
 				 tpm_pkt_frwd_t *pkt_frwd,
 				 tpm_pkt_action_t pkt_act,
@@ -15190,10 +16084,13 @@ int32_t tpm_proc_add_l2_cnm_rule(uint32_t owner_id,
 	/* Set PNC API data */
 	api_data.cnm_key.src_port = src_port;
 	api_data.cnm_key.l2_parse_rule_bm = l2_parse_rule_bm;
+	api_data.cnm_key.ipv4_parse_rule_bm = ipv4_parse_rule_bm;
 	api_data.cnm_key.pkt_act = pkt_act;
 	api_data.cnm_key.pbits = pbits;
 	if (l2_key)
 		memcpy(&(api_data.cnm_key.l2_key), l2_key, sizeof(tpm_l2_acl_key_t));
+	if (ipv4_key)
+		memcpy(&(api_data.cnm_key.ipv4_key), ipv4_key, sizeof(tpm_ipv4_acl_key_t));
 	if (pkt_frwd != NULL)
 		memcpy(&(api_data.cnm_key.pkt_frwd), pkt_frwd, sizeof(tpm_pkt_frwd_t));
 	else
@@ -15564,6 +16461,49 @@ int32_t tpm_proc_del_ipv4_cnm_rule(uint32_t owner_id, uint32_t rule_idx)
 }
 
 /*******************************************************************************
+* tpm_proc_mac_learn_port_gmac_bm_map()
+*
+* DESCRIPTION:    The function get the MAC learn port by means of the GMAC Functionality
+*                 for Media convert with loopback mode.
+*
+* INPUTS:
+* None
+*
+* OUTPUTS:
+* gmac_bm          - Bitmap of the GMACs relevant to set in TCAM
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_proc_mac_learn_port_gmac_bm_map(tpm_gmac_bm_t *gmac_bm)
+{
+	int32_t ret_code = TPM_DB_OK;
+	uint32_t gmac_id;
+	tpm_db_gmac_func_t gfunc;
+	tpm_gmac_bm_t l_gmac_bm = 0;
+
+	/* Find the GMAC used to do MAC learn on MC */
+	for (gmac_id = TPM_ENUM_GMAC_0; gmac_id < TPM_MAX_NUM_GMACS; gmac_id ++) {
+		ret_code = tpm_db_gmac_func_get(gmac_id, &gfunc);
+		if (TPM_DB_OK == ret_code) {
+			if (TPM_GMAC_FUNC_US_MAC_LEARN_DS_LAN_UNI == gfunc)
+				l_gmac_bm |= gmac_pnc_bm[gmac_id];
+		} else {
+			TPM_OS_ERROR(TPM_DB_MOD, "GMAC%d Func get failed \n", gmac_id);
+			return ret_code;
+		}
+	}
+
+	*gmac_bm = l_gmac_bm;
+
+	return (TPM_OK);
+}
+
+/*******************************************************************************
 * tpm_proc_mac_learn_tcam_build()
 *
 * DESCRIPTION:     Function builds a logical TCAM entry from the API data
@@ -15588,10 +16528,15 @@ int32_t tpm_proc_mac_learn_tcam_build(uint32_t rule_num,
 	int32_t ret_code;
 	uint32_t lu_id;
 	tpm_pncl_offset_t start_offset;
+	tpm_gmac_bm_t gmac_bm;
 
 	/* L2 Parsing, according to bm in param */
 	tcam_data->l2_parse_bm = TPM_L2_PARSE_MAC_SA;
-	tcam_data->port_ids = TPM_BM_GMAC_0;
+
+	/* Get GMAC(s) */
+	ret_code = tpm_proc_mac_learn_port_gmac_bm_map(&gmac_bm);
+	IF_ERROR(ret_code);
+	tcam_data->port_ids = gmac_bm;
 
 	/* Copy in logical PnC Key */
 	if (src_mac_addr)
@@ -15959,7 +16904,7 @@ tpm_error_code_t tpm_proc_add_static_mac_rule(uint32_t owner_id, tpm_l2_acl_key_
 	if (addr_exist)
 		return TPM_OK;
 	/* Get Tx queue */
-	if (tpm_db_gmac_lpk_queue_get(&gmac_num, &queue_idx)) {
+	if (tpm_db_gmac_lpk_queue_get(&gmac_num, &queue_idx, TPM_GMAC1_QUEUE_DATA_TRAFFIC)) {
 		printk("Loopback Tx queue index get failed\n");
 		return TPM_FAIL;
 	}
@@ -16045,10 +16990,11 @@ tpm_error_code_t tpm_proc_mac_learn_default_rule_act_set(uint32_t owner_id, tpm_
 	tpm_db_pnc_range_t range_data;
 	tpm_pnc_all_t pnc_entry;
 	uint32_t entry_id;
-	int32_t cpu_rx_queue;
 	uint32_t queue_id;
 	tpm_gmacs_enum_t lpk_gmac;
 	uint32_t switch_init;
+	uint32_t mod_idx = 0;
+	tpm_pkt_mod_t mod_data;
 
 	/* check switch init */
 	ret_code = tpm_db_switch_init_get(&switch_init);
@@ -16072,6 +17018,12 @@ tpm_error_code_t tpm_proc_mac_learn_default_rule_act_set(uint32_t owner_id, tpm_
 	IF_ERROR(ret_code);
 	entry_id = range_data.pnc_range_conf.range_end;
 
+	/* Get mod_idx */
+	if (TPM_DB_OK != tpm_db_mac_learn_mod_idx_get(&mod_idx)) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "MAC learn mod index get failed \n");
+		return TPM_FAIL;
+	}
+
 	/* construct default rule */
 	/* Set Lookup Id */
 	pnc_entry.tcam_entry.lu_id = range_data.pnc_range_conf.base_lu_id;
@@ -16086,28 +17038,77 @@ tpm_error_code_t tpm_proc_mac_learn_default_rule_act_set(uint32_t owner_id, tpm_
 	pnc_entry.sram_entry.flowid_updt_mask = TPM_TXP_FL_UPDT_MASK;
 	switch (mac_conf) {
 	case TPM_UNK_MAC_TRAP:
-		/* Get default CPU queue */
-		tpm_db_get_cpu_rx_queue(&cpu_rx_queue);
-		/* Trap to CPU */
-		pnc_entry.sram_entry.flowid_val = (TPM_PNC_TRG_CPU << TPM_TXP_FL_SHIFT);
-		pnc_entry.sram_entry.pnc_queue = cpu_rx_queue;
-		/* Set result info */
-		pnc_entry.sram_entry.res_info_15_0_data |= (1 << TPM_PNC_RI_MAC_LEARN_BIT);
-		pnc_entry.sram_entry.res_info_15_0_mask |= (1 << TPM_PNC_RI_MAC_LEARN_BIT);
+		if (TPM_DB_OK != tpm_db_gmac_lpk_queue_get(&lpk_gmac,
+							   &queue_id,
+							   TPM_GMAC1_QUEUE_MAC_LEARN_TRAFFIC)) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "loopback gmac queue get failed \n");
+			return TPM_FAIL;
+		}
+		/* Alloc PMT for MAC learn if needed */
+		if (mod_idx == 0) {
+			memset((uint8_t *) &mod_data, 0, sizeof(tpm_pkt_mod_t));
+			mod_data.mh_mod = TPM_MOD2_MAC_LEARN_MH;
+			if (tpm_mod2_entry_set(owner_id,
+					       lpk_gmac,
+					       TPM_MH_SET,
+					       0,
+					       &mod_data,
+					       &mod_idx)) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "PMT entry for MAC leanrn get failed\n");
+				return TPM_FAIL;
+			}
+			/* store mod_idx in TPM_DB */
+			if (TPM_DB_OK != tpm_db_mac_learn_mod_idx_set(mod_idx)) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Mod index set to tpm db failed \n");
+				return TPM_FAIL;
+			}
+		}
+		/* Frwd to loopback GMAC1 */
+		pnc_entry.sram_entry.flowid_val = (TPM_PNC_TRG_GMAC1 << TPM_TXP_FL_SHIFT);
+		pnc_entry.sram_entry.pnc_queue = queue_id;
+		/* Set MH */
+		pnc_entry.sram_entry.flowid_val |= mod_idx;
+		pnc_entry.sram_entry.flowid_updt_mask |= TPM_MOD_FL_UPDT_MASK;
 		break;
 	case TPM_UNK_MAC_DROP:
 		/* Drop the packet */
 		pnc_entry.sram_entry.res_info_15_0_data |= (1 << TPM_PNC_RI_DISC_BIT);
 		pnc_entry.sram_entry.res_info_15_0_mask |= (1 << TPM_PNC_RI_DISC_BIT);
+		/* delete MAC learn PMT entry if there is */
+		if (mod_idx) {
+			if (tpm_mod2_entry_del(owner_id, TPM_ENUM_GMAC_1, mod_idx)) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "PMT entry del failed\n");
+				return TPM_FAIL;
+			}
+			/* clearn mod index in TPM_DB */
+			if (TPM_DB_OK != tpm_db_mac_learn_mod_idx_set(0)) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "MAC learn mod index clear failed \n");
+				return TPM_FAIL;
+			}
+		}
 		break;
 	case TPM_UNK_MAC_CONTINUE:
-		if (TPM_DB_OK != tpm_db_gmac_lpk_queue_get(&lpk_gmac, &queue_id)) {
+		if (TPM_DB_OK != tpm_db_gmac_lpk_queue_get(&lpk_gmac,
+							   &queue_id,
+							   TPM_GMAC1_QUEUE_DATA_TRAFFIC)) {
 			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "loopback gmac queue get failed \n");
 			return TPM_FAIL;
 		}
 		/* Frwd to loopback GMAC1 */
 		pnc_entry.sram_entry.flowid_val = (TPM_PNC_TRG_GMAC1 << TPM_TXP_FL_SHIFT);
 		pnc_entry.sram_entry.pnc_queue = queue_id;
+		/* delete MAC learn PMT entry if there is */
+		if (mod_idx) {
+			if (tpm_mod2_entry_del(owner_id, TPM_ENUM_GMAC_1, mod_idx)) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "PMT entry del failed\n");
+				return TPM_FAIL;
+			}
+			/* clearn mod index in TPM_DB */
+			if (TPM_DB_OK != tpm_db_mac_learn_mod_idx_set(0)) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "MAC learn mod index clear failed \n");
+				return TPM_FAIL;
+			}
+		}
 		break;
 	default:
 		break;
@@ -16122,6 +17123,626 @@ tpm_error_code_t tpm_proc_mac_learn_default_rule_act_set(uint32_t owner_id, tpm_
 
 	return TPM_OK;
 }
+
+tpm_error_code_t tpm_acl_rcvr_func_mac_learn(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+	ret_code = tpm_proc_add_static_mac_rule(owner_id, &(api_data->api_rule_data.l2_prim_key.l2_key));
+	IF_ERROR(ret_code);
+
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_ds_load_balance(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+	uint32_t rule_index_tmp;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+	ret_code = tpm_proc_add_ds_load_balance_acl_rule(owner_id, api_data->rule_num, &rule_index_tmp,
+					api_data->api_rule_data.l2_prim_key.parse_rule_bm,
+					api_data->api_rule_data.l2_prim_key.parse_flags_bm,
+					&(api_data->api_rule_data.l2_prim_key.l2_key),
+					api_data->api_rule_data.l2_prim_key.pkt_frwd.trg_port);
+	IF_ERROR(ret_code);
+
+	ret_code = tpm_db_api_entry_update_rule_idx(TPM_DS_LOAD_BALANCE_ACL, rule_index_tmp, api_data->rule_idx);
+	IF_ERROR(ret_code);
+
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_cpu_loopback(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+	uint32_t rule_index_tmp;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+	ret_code = tpm_proc_add_cpu_loopback_rule(owner_id, api_data->rule_num, &rule_index_tmp,
+					&(api_data->api_rule_data.l2_prim_key.pkt_frwd));
+	IF_ERROR(ret_code);
+
+	ret_code = tpm_db_api_entry_update_rule_idx(TPM_CPU_LOOPBACK_ACL, rule_index_tmp, api_data->rule_idx);
+	IF_ERROR(ret_code);
+
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_l2_prim(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+	uint32_t rule_index_tmp;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+	ret_code = tpm_proc_add_l2_prim_acl_rule(owner_id, api_data->api_rule_data.l2_prim_key.src_port,
+					api_data->rule_num, &rule_index_tmp,
+					api_data->api_rule_data.l2_prim_key.parse_rule_bm,
+					api_data->api_rule_data.l2_prim_key.parse_flags_bm,
+					&(api_data->api_rule_data.l2_prim_key.l2_key),
+					&(api_data->api_rule_data.l2_prim_key.pkt_frwd),
+					&(api_data->api_rule_data.l2_prim_key.pkt_mod),
+					api_data->api_rule_data.l2_prim_key.pkt_mod_bm,
+					&(api_data->api_rule_data.l2_prim_key.rule_action));
+	IF_ERROR(ret_code);
+
+	if (rule_idx_updt_en) {
+		ret_code = tpm_db_api_entry_update_rule_idx(TPM_L2_PRIM_ACL, rule_index_tmp, api_data->rule_idx);
+		IF_ERROR(ret_code);
+	}
+
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_l3_type(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+	uint32_t rule_index_tmp;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+	ret_code = tpm_proc_add_l3_type_acl_rule(owner_id, api_data->api_rule_data.l3_type_key.src_port,
+					api_data->rule_num, &rule_index_tmp,
+					api_data->api_rule_data.l3_type_key.parse_rule_bm,
+					api_data->api_rule_data.l3_type_key.parse_flags_bm,
+					&(api_data->api_rule_data.l3_type_key.l3_key),
+					&(api_data->api_rule_data.l3_type_key.pkt_frwd),
+					&(api_data->api_rule_data.l3_type_key.rule_action));
+	IF_ERROR(ret_code);
+
+	if (rule_idx_updt_en) {
+		ret_code = tpm_db_api_entry_update_rule_idx(TPM_L3_TYPE_ACL, rule_index_tmp, api_data->rule_idx);
+		IF_ERROR(ret_code);
+	}
+
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_ipv4(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+	uint32_t rule_index_tmp;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+	ret_code = tpm_proc_add_ipv4_acl_rule(owner_id, api_data->api_rule_data.ipv4_key.src_port,
+					api_data->rule_num, &rule_index_tmp,
+					api_data->api_rule_data.ipv4_key.parse_rule_bm,
+					api_data->api_rule_data.ipv4_key.parse_flags_bm,
+					&(api_data->api_rule_data.ipv4_key.ipv4_key),
+					&(api_data->api_rule_data.ipv4_key.pkt_frwd),
+					&(api_data->api_rule_data.ipv4_key.pkt_mod),
+					api_data->api_rule_data.ipv4_key.pkt_mod_bm,
+					&(api_data->api_rule_data.ipv4_key.rule_action));
+	IF_ERROR(ret_code);
+
+	if (rule_idx_updt_en) {
+		ret_code = tpm_db_api_entry_update_rule_idx(TPM_IPV4_ACL, rule_index_tmp, api_data->rule_idx);
+		IF_ERROR(ret_code);
+	}
+
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_ipv4_mc(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+
+	ret_code = tpm_proc_add_ipv4_mc_stream(owner_id,
+					api_data->api_rule_data.ipv4_mc_key.stream_num,
+					api_data->api_rule_data.ipv4_mc_key.igmp_mode,
+					api_data->api_rule_data.ipv4_mc_key.mc_stream_pppoe,
+					api_data->api_rule_data.ipv4_mc_key.vid,
+					api_data->api_rule_data.ipv4_mc_key.ipv4_src_add,
+					api_data->api_rule_data.ipv4_mc_key.ipv4_dest_add,
+					api_data->api_rule_data.ipv4_mc_key.ignore_ipv4_src,
+					api_data->api_rule_data.ipv4_mc_key.dest_queue,
+					api_data->api_rule_data.ipv4_mc_key.dest_port_bm);
+	IF_ERROR(ret_code);
+
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_ipv6_gen(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+	uint32_t rule_index_tmp;
+	tpm_init_ipv6_5t_enable_t ipv6_5t_enable;
+	tpm_dir_t src_dir;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+
+	/* Check 5_tuple feature is enable/disabled */
+	tpm_db_ipv6_5t_enable_get(&ipv6_5t_enable);
+	if (ipv6_5t_enable == TPM_IPV6_5T_DISABLED)
+		ret_code = tpm_proc_add_ipv6_gen_acl_rule(owner_id, api_data->api_rule_data.ipv6_gen_key.src_port,
+						api_data->rule_num, &rule_index_tmp,
+						api_data->api_rule_data.ipv6_gen_key.parse_rule_bm,
+						api_data->api_rule_data.ipv6_gen_key.parse_flags_bm,
+						&(api_data->api_rule_data.ipv6_gen_key.ipv6_gen_key),
+						&(api_data->api_rule_data.ipv6_gen_key.pkt_frwd),
+						&(api_data->api_rule_data.ipv6_gen_key.pkt_mod),
+						api_data->api_rule_data.ipv6_gen_key.pkt_mod_bm,
+						&(api_data->api_rule_data.ipv6_gen_key.rule_action));
+	else {
+		/* get direction */
+		if (FROM_LAN(api_data->api_rule_data.ipv6_gen_key.src_port))
+			src_dir = TPM_DIR_US;
+		else
+			src_dir = TPM_DIR_DS;
+		ret_code = tpm_proc_add_ipv6_gen_5t_rule(owner_id, src_dir,
+						api_data->rule_num, &rule_index_tmp,
+						api_data->api_rule_data.ipv6_gen_key.parse_rule_bm,
+						api_data->api_rule_data.ipv6_gen_key.parse_flags_bm,
+						&(api_data->api_rule_data.ipv6_gen_key.l4_key),
+						&(api_data->api_rule_data.ipv6_gen_key.ipv6_gen_key),
+						&(api_data->api_rule_data.ipv6_gen_key.pkt_frwd),
+						&(api_data->api_rule_data.ipv6_gen_key.pkt_mod),
+						api_data->api_rule_data.ipv6_gen_key.pkt_mod_bm,
+						&(api_data->api_rule_data.ipv6_gen_key.rule_action));
+	}
+	IF_ERROR(ret_code);
+
+	if (rule_idx_updt_en) {
+		ret_code = tpm_db_api_entry_update_rule_idx(TPM_IPV6_GEN_ACL, rule_index_tmp, api_data->rule_idx);
+		IF_ERROR(ret_code);
+	}
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_ipv6_dip(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+	uint32_t rule_index_tmp;
+	tpm_init_ipv6_5t_enable_t ipv6_5t_enable;
+	tpm_dir_t src_dir;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+
+	/* Check 5_tuple feature is enable/disabled */
+	tpm_db_ipv6_5t_enable_get(&ipv6_5t_enable);
+	if (ipv6_5t_enable == TPM_IPV6_5T_DISABLED)
+		ret_code = tpm_proc_add_ipv6_dip_acl_rule(owner_id, api_data->api_rule_data.ipv6_dip_key.src_port,
+						api_data->rule_num, &rule_index_tmp,
+						api_data->api_rule_data.ipv6_dip_key.parse_rule_bm,
+						api_data->api_rule_data.ipv6_dip_key.parse_flags_bm,
+						&(api_data->api_rule_data.ipv6_dip_key.ipv6_dipkey),
+						&(api_data->api_rule_data.ipv6_dip_key.pkt_frwd),
+						&(api_data->api_rule_data.ipv6_dip_key.pkt_mod),
+						api_data->api_rule_data.ipv6_dip_key.pkt_mod_bm,
+						&(api_data->api_rule_data.ipv6_dip_key.rule_action));
+	else {
+		/* get direction */
+		if (FROM_LAN(api_data->api_rule_data.ipv6_dip_key.src_port))
+			src_dir = TPM_DIR_US;
+		else
+			src_dir = TPM_DIR_DS;
+		ret_code = tpm_proc_add_ipv6_dip_5t_rule(owner_id, src_dir,
+						api_data->rule_num, &rule_index_tmp,
+						api_data->api_rule_data.ipv6_dip_key.parse_rule_bm,
+						api_data->api_rule_data.ipv6_dip_key.parse_flags_bm,
+						&(api_data->api_rule_data.ipv6_dip_key.l4_key),
+						&(api_data->api_rule_data.ipv6_dip_key.ipv6_gen_key),
+						&(api_data->api_rule_data.ipv6_dip_key.ipv6_dipkey),
+						&(api_data->api_rule_data.ipv6_dip_key.pkt_frwd),
+						&(api_data->api_rule_data.ipv6_dip_key.pkt_mod),
+						api_data->api_rule_data.ipv6_dip_key.pkt_mod_bm,
+						&(api_data->api_rule_data.ipv6_dip_key.rule_action));
+	}
+	IF_ERROR(ret_code);
+
+	if (rule_idx_updt_en) {
+		ret_code = tpm_db_api_entry_update_rule_idx(TPM_IPV6_DIP_ACL, rule_index_tmp, api_data->rule_idx);
+		IF_ERROR(ret_code);
+	}
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_ipv6_mc(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+
+	ret_code = tpm_proc_add_ipv6_mc_stream(owner_id,
+					api_data->api_rule_data.ipv6_mc_key.stream_num,
+					api_data->api_rule_data.ipv6_mc_key.igmp_mode,
+					api_data->api_rule_data.ipv6_mc_key.mc_stream_pppoe,
+					api_data->api_rule_data.ipv6_mc_key.vid,
+					api_data->api_rule_data.ipv6_mc_key.ipv6_src_add,
+					api_data->api_rule_data.ipv6_mc_key.ipv6_dest_add,
+					api_data->api_rule_data.ipv6_mc_key.ignore_ipv6_src,
+					api_data->api_rule_data.ipv6_mc_key.dest_queue,
+					api_data->api_rule_data.ipv6_mc_key.dest_port_bm);
+	IF_ERROR(ret_code);
+
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_ipv6_nh(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+	uint32_t rule_index_tmp;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+
+	ret_code = tpm_proc_add_ipv6_nh_acl_rule(owner_id,
+					api_data->rule_num, &rule_index_tmp,
+					api_data->api_rule_data.ipv6_nh_key.parse_flags_bm,
+					api_data->api_rule_data.ipv6_nh_key.nh_iter,
+					api_data->api_rule_data.ipv6_nh_key.nh,
+					&(api_data->api_rule_data.ipv6_nh_key.pkt_frwd),
+					&(api_data->api_rule_data.ipv6_nh_key.rule_action));
+	IF_ERROR(ret_code);
+
+	if (rule_idx_updt_en) {
+		ret_code = tpm_db_api_entry_update_rule_idx(TPM_IPV6_NH_ACL, rule_index_tmp, api_data->rule_idx);
+		IF_ERROR(ret_code);
+	}
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_ipv6_l4(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+	uint32_t rule_index_tmp;
+	tpm_init_ipv6_5t_enable_t ipv6_5t_enable;
+	tpm_dir_t src_dir;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+
+	/* Check 5_tuple feature is enable/disabled */
+	tpm_db_ipv6_5t_enable_get(&ipv6_5t_enable);
+	if (ipv6_5t_enable == TPM_IPV6_5T_DISABLED)
+		ret_code = tpm_proc_add_ipv6_l4_ports_acl_rule(owner_id, api_data->api_rule_data.ipv6_l4_key.src_port,
+						api_data->rule_num, &rule_index_tmp,
+						api_data->api_rule_data.ipv6_l4_key.parse_rule_bm,
+						api_data->api_rule_data.ipv6_l4_key.parse_flags_bm,
+						&(api_data->api_rule_data.ipv6_l4_key.l4_key),
+						&(api_data->api_rule_data.ipv6_l4_key.pkt_frwd),
+						&(api_data->api_rule_data.ipv6_l4_key.pkt_mod),
+						api_data->api_rule_data.ipv6_l4_key.pkt_mod_bm,
+						&(api_data->api_rule_data.ipv6_l4_key.rule_action));
+	else {
+		/* get direction */
+		if (FROM_LAN(api_data->api_rule_data.ipv6_l4_key.src_port))
+			src_dir = TPM_DIR_US;
+		else
+			src_dir = TPM_DIR_DS;
+		ret_code = tpm_proc_add_ipv6_l4_ports_5t_rule(owner_id, src_dir,
+						api_data->rule_num, &rule_index_tmp,
+						api_data->api_rule_data.ipv6_l4_key.parse_rule_bm,
+						api_data->api_rule_data.ipv6_l4_key.parse_flags_bm,
+						&(api_data->api_rule_data.ipv6_l4_key.l4_key),
+						&(api_data->api_rule_data.ipv6_l4_key.pkt_frwd),
+						&(api_data->api_rule_data.ipv6_l4_key.pkt_mod),
+						api_data->api_rule_data.ipv6_l4_key.pkt_mod_bm,
+						&(api_data->api_rule_data.ipv6_l4_key.rule_action));
+	}
+	IF_ERROR(ret_code);
+
+	if (rule_idx_updt_en) {
+		ret_code = tpm_db_api_entry_update_rule_idx(TPM_L4_ACL, rule_index_tmp, api_data->rule_idx);
+		IF_ERROR(ret_code);
+	}
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_acl_rcvr_func_cnm(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en)
+{
+	tpm_error_code_t ret_code;
+	static tpm_src_port_type_t src_port = TPM_SRC_PORT_UNI_0;
+	static uint32_t precedence_base = 0;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "rule_index:[%d]\n", api_data->rule_idx);
+	if (src_port < api_data->api_rule_data.cnm_key.src_port) {
+		src_port = api_data->api_rule_data.cnm_key.src_port;
+		precedence_base = api_data->rule_num;
+	} else if (src_port > api_data->api_rule_data.cnm_key.src_port) {
+		src_port = api_data->api_rule_data.cnm_key.src_port;
+		precedence_base = 0;
+	}
+	ret_code = tpm_ctc_cm_acl_rule_add(owner_id, api_data->api_rule_data.cnm_key.src_port,
+					api_data->rule_num - precedence_base,
+					api_data->api_rule_data.cnm_key.l2_parse_rule_bm,
+					api_data->api_rule_data.cnm_key.ipv4_parse_rule_bm,
+					api_data->api_rule_data.cnm_key.ipv6_parse_rule_bm,
+					&(api_data->api_rule_data.cnm_key.l2_key),
+					&(api_data->api_rule_data.cnm_key.ipv4_key),
+					&(api_data->api_rule_data.cnm_key.ipv6_key),
+					&(api_data->api_rule_data.cnm_key.pkt_frwd),
+					api_data->api_rule_data.cnm_key.pkt_act,
+					api_data->api_rule_data.cnm_key.pbits);
+	IF_ERROR(ret_code);
+
+	return (TPM_OK);
+}
+
+tpm_error_code_t tpm_acl_rcvr_func_get(tpm_api_type_t api_type, tpm_acl_recovery_func *func)
+{
+	uint32_t api_loop;
+	uint32_t api_max;
+
+	api_max = sizeof(tpm_hot_swap_acl_recovery)/sizeof(tpm_hot_swap_acl_recovery_t);
+
+	for (api_loop = 0; api_loop < api_max; api_loop++) {
+
+		if (tpm_hot_swap_acl_recovery[api_loop].api_type == api_type) {
+			*func = tpm_hot_swap_acl_recovery[api_loop].func;
+			return TPM_OK;
+		}
+	}
+	return (TPM_OK);
+}
+#ifdef CONFIG_MV_ETH_WAN_SWAP
+
+tpm_error_code_t tpm_proc_check_hot_swap_profile(uint32_t owner_id,
+				    			tpm_eth_complex_profile_t profile_id)
+{
+	tpm_error_code_t ret_code;
+	tpm_api_type_t api_type;
+	tpm_eth_complex_profile_t profile_current;
+
+	/* Check owner_id */
+	for (api_type = TPM_API_MAC_LEARN; api_type < TPM_MAX_API_TYPES; api_type++) {
+		ret_code = tpm_owner_id_check(api_type, owner_id);
+		IF_ERROR(ret_code);
+	}
+
+	/* check profile id */
+	profile_current = tpm_db_eth_cmplx_profile_get();
+	if (    TPM_G0_WAN_G1_INT_SWITCH == profile_current
+	     && TPM_G1_WAN_G0_INT_SWITCH == profile_id)
+		/* allowed */
+		;
+	else if (    TPM_G1_WAN_G0_INT_SWITCH == profile_current
+	          && TPM_G0_WAN_G1_INT_SWITCH == profile_id)
+		/* allowed */
+		;
+	else {
+		/* not support */
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "So far only swapping  from TPM_PON_G1_WAN_G0_INT_SWITCH "
+				"to TPM_PON_G0_WAN_G1_INT_SWITCH or vice versa are supported,"
+				"current profile: [%d], new profile: [%d]\n", profile_current, profile_id);
+		return ERR_FEAT_UNSUPPORT;
+	}
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_proc_hot_swap_update_acl_rules(uint32_t owner_id)
+{
+	tpm_db_api_entry_t api_data;
+	tpm_api_type_t api_type;
+	tpm_acl_recovery_func func = NULL;
+	tpm_api_sections_t api_section;
+	int32_t db_ret = 0;
+	int32_t next_rule = 0;
+	uint32_t current_rule = 0;
+	uint32_t rule_index = 0;
+	uint32_t rule_index_max = 0;
+	tpm_error_code_t ret_code;
+	uint32_t rule_idx_updt_en = 0;
+	tpm_pnc_ranges_t range_id;
+	tpm_db_pnc_range_conf_t range_conf;
+
+	//tpm_glob_trace = ~0;
+
+	rule_index_max = 1000;
+
+	/* add ACL rules again */
+	for (api_type = TPM_API_MAC_LEARN; api_type < TPM_MAX_API_TYPES; api_type++) {
+
+		/* Get acl recovery func */
+		ret_code = tpm_acl_rcvr_func_get(api_type, &func);
+		IF_ERROR(ret_code);
+
+		/* Get the api_section */
+		ret_code = tpm_db_api_section_get_from_api_type(api_type, &api_section);
+		IF_ERROR(ret_code);
+
+		current_rule = -1;
+
+		TPM_OS_INFO(TPM_DB_MOD, "api_type(%d)\n\n", api_type);
+
+		ret_code = tpm_db_api_entry_bak_get_next(api_section, current_rule, &next_rule);
+		IF_ERROR(ret_code);
+
+		if (-1 == next_rule) {
+			continue;
+		}
+
+		/* Get Range_Id */
+		tpm_db_api_section_main_pnc_get(api_section, &range_id);
+
+		/* Get Range Conf */
+		ret_code = tpm_db_pnc_rng_conf_get(range_id, &range_conf);
+		IF_ERROR(ret_code);
+
+		if (range_conf.range_type == TPM_RANGE_TYPE_ACL)
+			rule_idx_updt_en = TPM_TRUE;
+		else
+			rule_idx_updt_en = TPM_FALSE;
+
+		while (-1 != next_rule) {
+			/*get api section table entry*/
+			if (tpm_db_api_section_bak_ent_tbl_get(api_section, &api_data, next_rule)) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "get API data failed, api_section:[%d], rule_index:[%d] \n",
+						api_section, rule_index);
+				return TPM_FAIL;
+			}
+
+			if (api_data.valid != TPM_DB_VALID) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, "API data is not valid, api_section:[%d], rule_index:[%d] \n",
+						api_section, rule_index);
+				return TPM_FAIL;
+			}
+			TPM_OS_INFO(TPM_DB_MOD, "rule_num(%d), rule_idx(%d) \n", api_data.rule_num, api_data.rule_idx);
+
+			ret_code = (*func)(owner_id, &api_data, rule_idx_updt_en);
+			IF_ERROR(ret_code);
+
+			if (rule_index_max < api_data.rule_idx)
+				rule_index_max = api_data.rule_idx;
+
+			ret_code = tpm_db_api_entry_bak_get_next(api_section, api_data.rule_num, &next_rule);
+			IF_ERROR(ret_code);
+		}
+
+		IF_ERROR(ret_code);
+	}
+
+	/* update the max rule index */
+	db_ret = tpm_db_rule_index_set(rule_index_max + 1);
+	if (TPM_DB_OK != db_ret) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "update rule_index failed, before hot swap, max rule_index:[%d]\n", rule_index_max);
+		return TPM_FAIL;
+	}
+	return (TPM_OK);
+}
+tpm_error_code_t tpm_proc_hot_swap_misc_cfg(tpm_eth_complex_profile_t profile_id)
+{
+	tpm_error_code_t ret_code;
+	tpm_init_gmac_conn_conf_t	gmac_port_conf[TPM_NUM_GMACS];
+	tpm_gmacs_enum_t gmac_i;
+	uint32_t gmac0_mh_en = 0;
+	uint32_t gmac1_mh_en = 0;
+	tpm_db_mh_src_t ds_mh_set_conf;
+
+	/* keep current API data */
+	tpm_db_api_data_backup();
+
+	/* do not update switch */
+	tpm_db_switch_init_set(false);
+
+	/* restore normal IPG of GMAC and switch */
+	ret_code = tpm_init_ipg(TPM_MH_LEN);
+	IF_ERROR(ret_code);
+
+	/* set new profile_id */
+	tpm_db_eth_cmplx_profile_set(profile_id);
+
+	/* update active wan and GMAC conf */
+	for (gmac_i = 0; gmac_i < TPM_MAX_NUM_GMACS; gmac_i++)
+		tpm_db_gmac_conn_conf_get(gmac_i, &(gmac_port_conf[gmac_i]));
+
+	if (TPM_G0_WAN_G1_INT_SWITCH == profile_id) {
+		tpm_db_active_wan_set(TPM_ENUM_GMAC_0);
+		gmac_port_conf[TPM_ENUM_GMAC_0].conn = TPM_GMAC_CON_RGMII2;
+		gmac_port_conf[TPM_ENUM_GMAC_0].port_src = TPM_SRC_PORT_WAN;
+		gmac_port_conf[TPM_ENUM_GMAC_1].conn = TPM_GMAC_CON_SWITCH_5;
+		gmac_port_conf[TPM_ENUM_GMAC_1].port_src = TPM_SRC_PORT_ILLEGAL;
+		gmac0_mh_en = TPM_FALSE;
+		gmac1_mh_en = TPM_TRUE;
+	} else if (TPM_G1_WAN_G0_INT_SWITCH == profile_id){
+		tpm_db_active_wan_set(TPM_ENUM_GMAC_1);
+		gmac_port_conf[TPM_ENUM_GMAC_0].conn = TPM_GMAC_CON_SWITCH_4;
+		gmac_port_conf[TPM_ENUM_GMAC_0].port_src = TPM_SRC_PORT_ILLEGAL;
+		gmac_port_conf[TPM_ENUM_GMAC_1].conn = TPM_GMAC_CON_GE_PHY;
+		gmac_port_conf[TPM_ENUM_GMAC_1].port_src = TPM_SRC_PORT_WAN;
+		gmac0_mh_en = TPM_TRUE;
+		gmac1_mh_en = TPM_FALSE;
+	}
+
+	/* Set GMAC Port Config */
+	ret_code = tpm_db_gmac_conn_conf_set(gmac_port_conf, TPM_NUM_GMACS);
+	IF_ERROR(ret_code);
+
+	/* update GMAC func */
+	tpm_db_mac_func_set();
+
+	tpm_db_ds_mh_get_conf_set(&ds_mh_set_conf);
+
+	/* update MH conf */
+	ret_code = tpm_init_mh(ds_mh_set_conf, gmac0_mh_en, gmac1_mh_en, gmac_port_conf);
+	IF_ERROR(ret_code);
+
+	ret_code = tpm_db_gmac_mh_en_conf_set(TPM_ENUM_GMAC_0, gmac0_mh_en);
+	IF_ERROR(ret_code);
+	ret_code = tpm_db_gmac_mh_en_conf_set(TPM_ENUM_GMAC_1, gmac1_mh_en);
+	IF_ERROR(ret_code);
+
+	/* update rate limitation */
+	ret_code = tpm_init_get_gmac_queue_rate_limit();
+	IF_ERROR(ret_code);
+
+	/* exchange rate limitation between G0/G1 */
+	tpm_init_get_gmac_queue_rate_limit();
+	tpm_db_wan_lan_rate_limit_exchange();
+
+	/* set new IPG of GMAC and switch */
+	ret_code = tpm_init_ipg((-TPM_MH_LEN));
+	IF_ERROR(ret_code);
+
+	/* switch pppoe length reg's value */
+	tpm_mod2_registers_init(TPM_ENUM_GMAC_0, 0);
+	tpm_mod2_registers_init(TPM_ENUM_GMAC_1, 0);
+
+#if 0
+	/* Set GMAC mh_enable */
+	if (mv_eth_ctrl_flag(TPM_ENUM_GMAC_0, MV_ETH_F_MH, gmac0_mh_en)){
+		TPM_OS_ERROR(TPM_INIT_MOD, " set GMAC0 MH en (%d) failed\n", gmac0_mh_en);
+		return (TPM_FAIL);
+	}
+	if (mv_eth_ctrl_flag(TPM_ENUM_GMAC_1, MV_ETH_F_MH, gmac1_mh_en)){
+		TPM_OS_ERROR(TPM_INIT_MOD, " set GMAC1 MH en (%d) failed\n", gmac1_mh_en);
+		return (TPM_FAIL);
+	}
+#endif
+
+	return (TPM_OK);
+}
+
+extern int mv_eth_wan_swap(int wan_mode);
+tpm_error_code_t tpm_proc_hot_swap_lsp(tpm_eth_complex_profile_t profile_id)
+{
+	int lsp_ret = 0;
+
+	if (TPM_G0_WAN_G1_INT_SWITCH == profile_id)
+		lsp_ret = mv_eth_wan_swap(0);
+	else if (TPM_G1_WAN_G0_INT_SWITCH == profile_id)
+		lsp_ret = mv_eth_wan_swap(1);
+
+	if (lsp_ret) {
+		TPM_OS_ERROR(TPM_HWM_MOD, "LSP hot swap failed, return value (%d)\n", lsp_ret);
+		return (TPM_FAIL);
+	}
+	return (TPM_OK);
+}
+
+tpm_error_code_t tpm_proc_hot_swap_profile(uint32_t owner_id,
+				    tpm_eth_complex_profile_t profile_id)
+{
+	tpm_error_code_t ret_code = TPM_OK;
+
+	ret_code = tpm_proc_check_hot_swap_profile(owner_id, profile_id);
+	IF_ERROR(ret_code);
+
+	ret_code = tpm_proc_hot_swap_lsp(profile_id);
+	IF_ERROR(ret_code);
+
+	ret_code = tpm_proc_hot_swap_misc_cfg(profile_id);
+	IF_ERROR(ret_code);
+
+	/* perform mib-reset */
+	tpm_proc_mib_reset(owner_id, TPM_ENUM_RESET_LEVEL0);
+
+	/* tpm_db recovery */
+	tpm_db_api_data_rcvr();
+
+	ret_code = tpm_proc_hot_swap_update_acl_rules(owner_id);
+	IF_ERROR(ret_code);
+
+	return (TPM_OK);
+}
+#endif /* CONFIG_MV_ETH_WAN_SWAP */
 
 /*******************************************************************************
 * tpm_proc_mac_learn_entry_num_get()
@@ -16167,6 +17788,103 @@ tpm_error_code_t tpm_proc_mac_learn_entry_num_get(uint32_t *entry_num)
 	IF_ERROR(ret_code);
 
 	*entry_num = valid_entry_num;
+
+	return TPM_OK;
+}
+
+/*******************************************************************************
+* tpm_proc_hwf_admin_set()
+*
+* DESCRIPTION:    Function used to enable/disable hwf to certain port.
+*
+* INPUTS:
+*
+* port
+* txp
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint8_t enable)
+{
+	uint32_t valid, q_num;
+	tpm_db_sched_t sched_method;
+	tpm_db_txq_owner_t queue_owner;
+	uint32_t owner_queue_num;
+	uint32_t queue_size;
+	uint32_t queue_weight;
+	int32_t db_ret;
+	tpm_db_tx_mod_t tx_mod;
+	uint32_t curr_state = 0;
+
+	//TPM_OS_INFO(TPM_PNCL_MOD, "port = %d txp = %d enable = %d\n", port, txp, enable);
+
+	printk("TPM T-Cont API, port(%d), txp(%d) enable(%d)\n", port, txp, enable);
+
+	tx_mod = port + txp;
+
+	if (tx_mod >= TPM_MAX_NUM_TX_PORTS) {
+		TPM_OS_ERROR(TPM_PNCL_MOD, "input invalid, port = %d txp = %d\n", port, txp);
+		return ERR_OMCI_TCONT_INVALID;
+	}
+
+	for (q_num = 0; q_num < TPM_MAX_NUM_TX_QUEUE; q_num++) {
+		db_ret = tpm_db_gmac_tx_q_conf_get(tx_mod, q_num, &valid, &sched_method,
+					&queue_owner, &owner_queue_num, &queue_size,
+					&queue_weight);
+		if (!valid)
+		{
+			//TPM_OS_INFO(TPM_PNCL_MOD, "Q-num = %d not valid, continue\n", q_num);
+			continue;
+		}
+
+		/* HWF Traffic */
+		/* =========== */
+		if (queue_owner != TPM_Q_OWNER_CPU)
+		{
+			/* get the hwf en first */
+			curr_state = NETA_HWF_TX_PORT_MASK(port + txp) | NETA_HWF_TXQ_MASK(q_num);
+			MV_REG_WRITE(NETA_HWF_TX_PTR_REG((queue_owner - 1)), curr_state);
+			curr_state = MV_REG_READ(NETA_HWF_TXQ_ENABLE_REG((queue_owner - 1)));
+
+			/* enable/disable hwf */
+			if (enable == true)
+				printk("HWF T-Cont active, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+
+			mvNetaHwfTxqEnable((queue_owner - 1), port, txp, q_num, enable);
+
+			//TPM_OS_INFO(TPM_PNCL_MOD,"GMAC = %d TCONT = %d Q = %d HWF: owner_rx %d\n", port, txp, q_num, (queue_owner - 1));
+
+			if ((!enable) && (curr_state))
+			{
+				//TPM_OS_INFO(TPM_PNCL_MOD, "Call mv_eth_txq_clean - current state: %d, enable %d\n", curr_state, enable);
+				printk("HWF T-Cont stop/clean, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+				mv_eth_txq_clean(port, txp, q_num);
+			}
+		}
+		/* SWF Traffic */
+		/* =========== */
+		else
+		{
+			if (!enable)
+			{
+				printk("SWF T-Cont stop/clean, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+				mv_cust_set_tcont_state(txp, false);
+				mv_eth_txq_clean(port, txp, q_num);
+			}
+			else
+			{
+				printk("SWF T-Cont active, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+				mv_cust_set_tcont_state(txp, true);
+			}
+		}
+	}
 
 	return TPM_OK;
 }

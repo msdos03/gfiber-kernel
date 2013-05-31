@@ -239,6 +239,29 @@ MV_STATUS mvOnuGponMacRxPsaConfigSet(MV_U32 syncFsmM1,
 
 /*******************************************************************************
 **
+**  mvOnuGponMacRxFecHysteresisSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function set Rx PSA FEC Hysteresis config register
+**
+**  PARAMETERS:  MV_U32 fecHyst
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS mvOnuGponMacRxFecHysteresisSet(MV_U32 fecHyst)
+{
+    MV_STATUS status;
+
+    status = asicOntGlbRegWrite(mvAsicReg_GPON_RX_PSA_CONFIG_FHM1, fecHyst, 0); 
+
+    return(status);
+}
+
+/*******************************************************************************
+**
 **  mvOnuGponMacRxFecConfigSet
 **  ____________________________________________________________________________
 **
@@ -1449,6 +1472,68 @@ MV_STATUS mvOnuGponMacUtmTcConfigGet(MV_U32 *period, MV_U32 *valid)
   return(status);
 }
 
+/*******************************************************************************
+**
+**  mvOnuGponMacUtmActiveTxBitmapSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function set the active TX bitmap
+**
+**  PARAMETERS:  MV_U32 bitmap
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS mvOnuGponMacUtmActiveTxBitmapSet(MV_U32 bitmap)
+{
+	return(asicOntGlbRegWrite(mvAsicReg_GPON_UTM_ACTIVE_TX_BITMAP, bitmap, 0));
+}
+
+/*******************************************************************************
+**
+**  mvOnuGponMacUtmActiveTxBitmapValidSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function set the active TX bitmap valid
+**
+**  PARAMETERS:  MV_U32 valid
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS mvOnuGponMacUtmActiveTxBitmapValidSet(MV_U32 valid)
+{
+	return(asicOntGlbRegWrite(mvAsicReg_GPON_UTM_ACTIVE_TX_BITMAP_VALID, valid, 0));
+}
+
+/*******************************************************************************
+**
+**  mvOnuGponMacUtmActiveTxBitmapConfigGet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function return the active TX bitmap configuration
+**
+**  PARAMETERS:  MV_U32 *bitmap
+**               MV_U32 *valid
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS mvOnuGponMacUtmActiveTxBitmapConfigGet(MV_U32 *bitmap, MV_U32 *valid)
+{
+	MV_STATUS status;
+
+	status  = asicOntGlbRegRead(mvAsicReg_GPON_UTM_ACTIVE_TX_BITMAP,       bitmap, 0);
+	status |= asicOntGlbRegRead(mvAsicReg_GPON_UTM_ACTIVE_TX_BITMAP_VALID, valid, 0);
+
+	return(status);
+}
 
 /******************************************************************************/
 /* ========================================================================== */
@@ -2436,7 +2521,7 @@ MV_STATUS mvOnuGponMacTxConfigAcCouplingSet(MV_U32 busrtMode,
 					    MV_U8  dataPattern1,
 					    MV_U8  dataPattern2)
 {
-	MV_U32    reg = 0;
+	MV_U32 reg = 0;
 
 	if (busrtMode != GPON_TX_AC_COUPL_BUST_MODE_0)
 		reg = 1 << 30;
@@ -4305,6 +4390,52 @@ MV_STATUS mvOnuEponMacVersionGet(MV_U32 *version)
 
 /*******************************************************************************
 **
+**  mvOnuEponMacPcsRxEnableSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets PcsRxEnable register
+**
+**  PARAMETERS:  MV_U32 rxEnable
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or MV_ERROR
+**
+*******************************************************************************/
+MV_STATUS mvOnuEponMacPcsRxEnableSet(MV_U32 rxEnable)
+{
+    MV_STATUS status;
+
+    status = asicOntGlbRegWrite(mvAsicReg_EPON_PCS_CONFIGURATION_RX_ENABLE, rxEnable, 0);
+
+    return (status);
+}
+
+/*******************************************************************************
+**
+**  mvOnuEponMacPcsTxEnableSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets PcsTxEnable register
+**
+**  PARAMETERS:  MV_U32 txEnable
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or MV_ERROR
+**
+*******************************************************************************/
+MV_STATUS mvOnuEponMacPcsTxEnableSet(MV_U32 txEnable)
+{
+    MV_STATUS status;
+
+    status = asicOntGlbRegWrite(mvAsicReg_EPON_PCS_CONFIGURATION_TX_ENABLE, txEnable, 0);
+
+    return (status);
+}
+
+/*******************************************************************************
+**
 **  mvOnuEponMacOnuEnableSet
 **  ____________________________________________________________________________
 **
@@ -4320,12 +4451,15 @@ MV_STATUS mvOnuEponMacVersionGet(MV_U32 *version)
 *******************************************************************************/
 MV_STATUS mvOnuEponMacOnuEnableSet(MV_U32 rxEnable, MV_U32 txEnable)
 {
-  MV_STATUS status;
+    MV_STATUS status;
 
-  status  = asicOntGlbRegWrite(mvAsicReg_EPON_GEN_ONT_RX_ENABLE, rxEnable, 0);
-  status |= asicOntGlbRegWrite(mvAsicReg_EPON_GEN_ONT_TX_ENABLE, txEnable, 0);
+    status = asicOntGlbRegWrite(mvAsicReg_EPON_PCS_CONFIGURATION_RX_ENABLE, rxEnable, 0);
+    status |= asicOntGlbRegWrite(mvAsicReg_EPON_GEN_ONT_RX_ENABLE, rxEnable, 0);
 
-  return(status);
+    status |= asicOntGlbRegWrite(mvAsicReg_EPON_PCS_CONFIGURATION_TX_ENABLE, txEnable, 0);
+    status |= asicOntGlbRegWrite(mvAsicReg_EPON_GEN_ONT_TX_ENABLE, txEnable, 0);
+
+    return (status);
 }
 
 /*******************************************************************************
@@ -4333,7 +4467,7 @@ MV_STATUS mvOnuEponMacOnuEnableSet(MV_U32 rxEnable, MV_U32 txEnable)
 **  mvOnuEponMacOnuRxEnableSet
 **  ____________________________________________________________________________
 **
-**  DESCRIPTION: The function set onu Rx & Tx enable
+**  DESCRIPTION: The function set onu Rx enable
 **
 **  PARAMETERS:  MV_U32 rxEnable
 **
@@ -4344,11 +4478,13 @@ MV_STATUS mvOnuEponMacOnuEnableSet(MV_U32 rxEnable, MV_U32 txEnable)
 *******************************************************************************/
 MV_STATUS mvOnuEponMacOnuRxEnableSet(MV_U32 rxEnable)
 {
-  MV_STATUS status;
+    MV_STATUS status;
 
-  status = asicOntGlbRegWrite(mvAsicReg_EPON_GEN_ONT_RX_ENABLE, rxEnable, 0);
+    status = asicOntGlbRegWrite(mvAsicReg_EPON_PCS_CONFIGURATION_RX_ENABLE, rxEnable, 0);
 
-  return(status);
+    status |= asicOntGlbRegWrite(mvAsicReg_EPON_GEN_ONT_RX_ENABLE, rxEnable, 0);
+
+    return (status);
 }
 
 /*******************************************************************************

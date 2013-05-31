@@ -175,6 +175,7 @@ void      onuGponPonMngTimerPeeHndl(unsigned long data);
 void      onuGponPonMngTimerT01ExpireHndl(void);
 void      onuGponPonMngTimerT02ExpireHndl(void);
 void      onuGponPonMngTimerPeeExpireHndl(void);
+void 	  onuGponTimerTxPwrHndl(unsigned long data);
 
 /* Alarm Functions */
 void      onuGponPonMngGenCritAlarm(E_OnuGponAlarmType alarmType_e, MV_U8 dummyVal, MV_U8 *dummyPtr);

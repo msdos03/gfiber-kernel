@@ -142,6 +142,9 @@ MV_STATUS onuEponApiDgCallbackRegister(DYINGGASPFUNC dgCallBack);
 MV_STATUS onuEponApiLinkStatusCallbackRegister(void);
 MV_BOOL onuEponLinkIsUp(void);
 
+/* Config API */
+MV_STATUS mvEponApi2kSupportedSet(MV_U32 pkt2kSupported);
+
 /* Macros
 ------------------------------------------------------------------------------*/    
 

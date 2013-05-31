@@ -51,7 +51,6 @@ disclaimer.
 #define SW_QOS_NUM_OF_TAG_PRI    (7)
 #define SW_QOS_DSCP_MAX          (64)
 
-
 /* LPort data base*/
 typedef struct _sw_port_info_type_t
 {
@@ -62,8 +61,9 @@ typedef struct _sw_port_info_type_t
 
 typedef struct _sw_vlan_tbl_type
 {
-    uint32_t members;        /* bitmap of the ports max number of ports 32 */
+    uint32_t members;        /* bitmap of the ports max number of ports 32, if its value is 0, indicates that the VID do not exist in HW */
     uint8_t  egr_mode[SW_MAX_PORTS_NUM]; /* egress mode of each port */
+    GT_VTU_ENTRY vtu_entry; /* Add this member to record HW VT info to SW table, descrease access time for VT table */
 }sw_vlan_tbl_type;
 
 /* auto negotiation type */
@@ -78,13 +78,57 @@ typedef enum _sw_autoneg_type_t
 }sw_autoneg_type_t;
 
 /*******************************************************************************
+* mv_switch_find_vid_entry_sw
+*
+* DESCRIPTION:
+*       The API find expected VTU entry in sw_vlan_tbl.
+*
+* INPUTS:
+*       vtuEntry      - VTU entry, supply VID
+*
+* OUTPUTS:
+*       vtuEntry      - VTU entry, store entry info if found
+*       found         - find expected entry or not
+*
+* RETURNS:
+*       On success -  GT_OK.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t mv_switch_find_vid_entry_sw(GT_VTU_ENTRY *vtuEntry, GT_BOOL *found);
+
+/*******************************************************************************
+* mv_switch_record_vid_entry_sw
+*
+* DESCRIPTION:
+*       The API store expected VTU entry in sw_vlan_tbl.
+*
+* INPUTS:
+*       vtuEntry      - VTU entry
+*
+* OUTPUTS:
+*       None
+*
+* RETURNS:
+*       On success -  GT_OK.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t mv_switch_record_vid_entry_sw(GT_VTU_ENTRY *vtuEntry);
+
+/*******************************************************************************
 * mv_switch_prv_port_add_vid
 *
 * DESCRIPTION:
 *       The API adds a VID to the list of the allowed VIDs per lport.
 *
 * INPUTS:
-*       vid      - VLAN id.
+*       lport     - logic port id to set
+*       vid       - vlan id
+*       gmac0Idx  - port GMAC0 connects to, if its value is 0xFFFF, do not care GMAC0 port
+*       eMode     - egress mode
 *
 * OUTPUTS:
 *       None.
@@ -99,7 +143,10 @@ typedef enum _sw_autoneg_type_t
 *******************************************************************************/
 int32_t mv_switch_prv_port_add_vid
 (
-    uint16_t vid
+    uint32_t lport,
+    uint16_t vid,
+    uint16_t gmac0Idx,
+    uint8_t  eMode
 );
 
 /*******************************************************************************
@@ -2839,6 +2886,125 @@ int32_t mv_switch_flush_atu
 (
     IN  GT_FLUSH_CMD flush_cmd,
     IN  uint16_t db_num
+);
+
+/*******************************************************************************
+* mv_switch_set_port_speed_duplex_mode
+*
+* DESCRIPTION:
+*       This routine will disable auto-negotiation and set the PHY port speed and duplex mode.
+*
+* INPUTS:
+*		port -	The logical port number, unless SERDES device is accessed
+*
+*		speed -    PHY_SPEED_10_MBPS -10 Mbps
+*				PHY_SPEED_100_MBPS -100 Mbps
+* 				PHY_SPEED_1000_MBPS -100 Mbps.
+*		enable - Enable/Disable full duplex mode.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success -  TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t mv_switch_set_port_speed_duplex_mode
+(
+IN GT_LPORT port,
+IN GT_PHY_SPEED speed,
+IN GT_BOOL enable
+);
+
+/*******************************************************************************
+* mv_switch_set_port_forced_fc_value
+*
+* DESCRIPTION:
+*       This routine will set forced flow control value when forced flow control enabled.
+*
+* INPUTS:
+*		port -	The logical port number, unless SERDES device is accessed
+*
+*		enable-
+*
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success -  TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t mv_switch_set_port_forced_fc_value
+(
+IN GT_LPORT  port,
+IN GT_BOOL   enable
+);
+
+/*******************************************************************************
+* mv_switch_set_port_forced_flow_control
+*
+* DESCRIPTION:
+*       This routine will enable/disable forced flow control state.
+*
+* INPUTS:
+*		port -	The logical port number, unless SERDES device is accessed
+*
+*		enable-
+*
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success -  TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t mv_switch_set_port_forced_flow_control
+(
+IN GT_LPORT  port,
+IN GT_BOOL   enable
+);
+
+/*******************************************************************************
+* mv_switch_port_add_vid_set_egrs_mode
+*
+* DESCRIPTION:
+*       The API adds a VID to the list of the allowed VIDs per lport
+*       and sets the egress mode for the port.
+*
+* INPUTS:
+*       lport     - logic port id to set
+*       vid       - vlan id
+*       gmac0Idx  - port GMAC0 connects to
+*       eMode     - egress mode
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success -  TPM_RC_OK.
+*       On error different types are returned according to the case see tpm_error_code_t.
+*
+* COMMENTS:
+*       MEMBER_EGRESS_UNMODIFIED - 0
+*       NOT_A_MEMBER             - 1
+*       MEMBER_EGRESS_UNTAGGED   - 2
+*       MEMBER_EGRESS_TAGGED     - 3
+*
+*******************************************************************************/
+int32_t mv_switch_port_add_vid_set_egrs_mode
+(
+    IN uint32_t lport,
+    IN uint16_t vid,
+    IN uint16_t gmac0Idx,
+    IN uint8_t  eMode
 );
 
 /*******************************************************************************

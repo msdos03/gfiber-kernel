@@ -289,8 +289,8 @@ EXPORT_SYMBOL(tpm_get_section_free_size);
 *                        |TPM_L2_PARSE_PPP_PROT|TPM_L2_PARSE_GEMPORT)
 * parse_flags_bm     - Bitmap containing the significant flags result of the primary ACL filtering.
 *                      possible values for L2 API:
-*                        TPM_PARSE_FLAG_TAG1_MASK|TPM_PARSE_FLAG_TAG2_MASK|
-*                        TPM_PARSE_FLAG_MTM_MASK|TPM_PARSE_FLAG_TO_CPU_MASK
+*                        TPM_PARSE_FLAG_TAG1_TRUE|TPM_PARSE_FLAG_TAG1_FLASE|
+*                        TPM_PARSE_FLAG_TAG2_TRUE|TPM_PARSE_FLAG_TAG2_FALSE
 * l2_key             - Information to create a parsing key for the rule.
 *                      Some pointers may be NULL depending on the parse_rule_bm.
 * pkt_frw            - Information for packet forwarding decision.
@@ -365,8 +365,10 @@ EXPORT_SYMBOL(tpm_add_l2_rule);
 *                        TPM_L2_PARSE_ETYPE|TPM_L2_PARSE_PPPOE_SES|TPM_L2_PARSE_PPP_PROT
 * parse_flags_bm     - Bitmap containing the significant flags result of the primary ACL filtering.
 *                      possible values for L3 API:
-*                        TPM_PARSE_FLAG_TAG1_MASK|TPM_PARSE_FLAG_TAG2_MASK|
-*                        TPM_PARSE_FLAG_MTM_MASK|TPM_PARSE_FLAG_TO_CPU_MASK
+*                        TPM_PARSE_FLAG_TAG1_TRUE|TPM_PARSE_FLAG_TAG1_FLASE|
+*                        TPM_PARSE_FLAG_TAG2_TRUE|TPM_PARSE_FLAG_TAG2_FALSE|
+*                        TPM_PARSE_FLAG_MTM_TRUE|TPM_PARSE_FLAG_MTM_FALSE|
+*                        TPM_PARSE_FLAG_TO_CPU_TRUE|TPM_PARSE_FLAG_TO_CPU_FALSE
 * l3_key             - Structure for PPPoE proto or ether type. In order to define a rule for
 *                      any ether type, the ether type value should be set to 0xFFFF
 * action_drop        - If this stage is dropping the packet.
@@ -513,7 +515,10 @@ EXPORT_SYMBOL(tpm_del_l3_type_rule);
 *                         |TPM_IPv4_PARSE_PROTO|TPM_PARSE_L4_SRC|TPM_PARSE_L4_DST
 * parse_flags_bm     - Bitmap containing the significant flags result of the primary ACL filtering.
 *                      possible values for IPv4 API:
-*                        TPM_PARSE_FLAG_TAG1_MASK|TPM_PARSE_FLAG_MTM_MASK|TPM_PARSE_FLAG_TO_CPU_MASK
+*                        TPM_PARSE_FLAG_TAG1_TRUE|TPM_PARSE_FLAG_TAG1_FLASE|
+*                        TPM_PARSE_FLAG_MTM_TRUE|TPM_PARSE_FLAG_MTM_FALSE|
+*                        TPM_PARSE_FLAG_TO_CPU_TRUE|TPM_PARSE_FLAG_TO_CPU_FALSE|
+*                        TPM_PARSE_FLAG_PPPOE_TRUE|TPM_PARSE_FLAG_PPPOE_FALSE
 * ipv4_key           - Information to create an IPv4 parsing key for the rule.
 *                      Some pointers may be NULL depending on the parse_rule_bm.
 * pkt_frwd           - Information for packet forwarding decision.
@@ -612,7 +617,8 @@ EXPORT_SYMBOL(tpm_del_ipv4_rule);
 * rule_num           - Entry index to be added in the current ACL
 * parse_flags_bm     - Bitmap containing the significant flags result of the primary ACL filtering.
 *                      possible values for IPv6 NH API:
-*                         TPM_PARSE_FLAG_MTM_MASK|TPM_PARSE_FLAG_TO_CPU_MASK
+*                        TPM_PARSE_FLAG_MTM_TRUE|TPM_PARSE_FLAG_MTM_FALSE|
+*                        TPM_PARSE_FLAG_TO_CPU_TRUE|TPM_PARSE_FLAG_TO_CPU_FALSE|
 * nh                 - Information to create a NH parsing key for the rule.
 * pkt_frwd           - Information for packet forwarding decision.
 * rule_action        - Action associated to the rule = drop/set target/set packet modification/to CPU
@@ -702,7 +708,10 @@ EXPORT_SYMBOL(tpm_del_ipv6_nh_rule);
 *                      possible values for IPv6 GEN API: 0
 * parse_flags_bm     - Bitmap containing the significant flags result of the primary ACL filtering.
 *                      possible values for IPv6 GEN API:
-*                        TPM_PARSE_FLAG_TAG1_MASK|TPM_PARSE_FLAG_MTM_MASK|TPM_PARSE_FLAG_TO_CPU_MASK
+*                        TPM_PARSE_FLAG_TAG1_TRUE|TPM_PARSE_FLAG_TAG1_FLASE|
+*                        TPM_PARSE_FLAG_MTM_TRUE|TPM_PARSE_FLAG_MTM_FALSE|
+*                        TPM_PARSE_FLAG_TO_CPU_TRUE|TPM_PARSE_FLAG_TO_CPU_FALSE|
+*                        TPM_PARSE_FLAG_PPPOE_TRUE|TPM_PARSE_FLAG_PPPOE_FALSE
 * ipv6_gen_key     - Information to create an IPv6 gen parsing key for the rule.
 *                      Some pointers may be NULL depending on the parse_rule_bm.
 * pkt_frwd           - Information for packet forwarding decision.
@@ -810,7 +819,10 @@ EXPORT_SYMBOL(tpm_del_ipv6_gen_rule);
 *                      possible values for IPv6 DIP API: TPM_IPv6_PARSE_DIP
 * parse_flags_bm     - Bitmap containing the significant flags result of the primary ACL filtering.
 *                      possible values for IPv6 DIP API:
-*                        TPM_PARSE_FLAG_TAG1_MASK|TPM_PARSE_FLAG_MTM_MASK|TPM_PARSE_FLAG_TO_CPU_MASK
+*                        TPM_PARSE_FLAG_TAG1_TRUE|TPM_PARSE_FLAG_TAG1_FLASE|
+*                        TPM_PARSE_FLAG_MTM_TRUE|TPM_PARSE_FLAG_MTM_FALSE|
+*                        TPM_PARSE_FLAG_TO_CPU_TRUE|TPM_PARSE_FLAG_TO_CPU_FALSE|
+*                        TPM_PARSE_FLAG_PPPOE_TRUE|TPM_PARSE_FLAG_PPPOE_FALSE
 * ipv6_dip_key       - Information to create an IPv6 DIP parsing key for the rule.
 *                      Some pointers may be NULL depending on the parse_rule_bm.
 * pkt_frwd           - Information for packet forwarding decision.
@@ -920,7 +932,9 @@ EXPORT_SYMBOL(tpm_del_ipv6_dip_rule);
 *                      possible values for L4 API: TPM_PARSE_L4_SRC|TPM_PARSE_L4_DST
 * parse_flags_bm     - Bitmap containing the significant flags result of the primary ACL filtering.
 *                      possible values for L4 API:
-*                         TPM_PARSE_FLAG_MTM_MASK|TPM_PARSE_FLAG_TO_CPU_MASK
+*                        TPM_PARSE_FLAG_MTM_TRUE|TPM_PARSE_FLAG_MTM_FALSE|
+*                        TPM_PARSE_FLAG_TO_CPU_TRUE|TPM_PARSE_FLAG_TO_CPU_FALSE|
+*                        TPM_PARSE_FLAG_L4_TCP|TPM_PARSE_FLAG_L4_UDP
 * l4_key             - Information to create an L4 parsing key for the rule.
 *                      Some pointers may be NULL depending on the parse_rule_bm.
 * pkt_frwd           - Information for packet forwarding decision.
@@ -1149,6 +1163,83 @@ tpm_error_code_t tpm_del_ipv6_l4_ports_5t_rule(uint32_t owner_id, uint32_t rule_
 EXPORT_SYMBOL(tpm_del_ipv6_l4_ports_5t_rule);
 
 
+/*******************************************************************************
+* tpm_set_active_wan()
+*
+* DESCRIPTION:      Set active WAN port
+*
+* INPUTS:
+* owner_id          - APP owner id  should be used for all API calls.
+* active_wan        - active wan, GMAC0, GMAC1, PON
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_set_active_wan(uint32_t owner_id,
+				    tpm_gmacs_enum_t active_wan)
+{
+	tpm_error_code_t tpm_ret;
+
+	tpm_ret = tpm_proc_set_active_wan(active_wan);
+	if(TPM_OK != tpm_ret) {
+		TPM_OS_ERROR(TPM_DB_MOD, "set active wan has failed with error code (%d)\n", tpm_ret);
+		return tpm_ret;
+	}
+
+	return (TPM_OK);
+}
+EXPORT_SYMBOL(tpm_set_active_wan);
+/*******************************************************************************
+* tpm_hot_swap_profile()
+*
+* DESCRIPTION:      Swap profile and update all the ACL rules according to
+*                   the new profile
+*
+* INPUTS:
+* owner_id          - APP owner id  should be used for all API calls.
+* profile_id        - the new profile that system is swapping to
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_hot_swap_profile(uint32_t owner_id,
+				    tpm_eth_complex_profile_t profile_id)
+{
+#ifdef CONFIG_MV_ETH_WAN_SWAP
+
+	tpm_error_code_t ret_code, busy_ret_code;
+
+	/* Check API_type Busy */
+	ret_code = tpm_proc_check_all_api_busy();
+	if (ret_code != TPM_OK)
+		return(ret_code);
+
+	ret_code = tpm_proc_hot_swap_profile(owner_id, profile_id);
+
+	busy_ret_code = tpm_proc_all_api_busy_done();
+
+	RET_BUSY_ERROR(ret_code, busy_ret_code);
+#else
+	TPM_OS_ERROR(TPM_DB_MOD, "hot swap profile feature is not supported on this product!\n");
+	return TPM_OK;
+
+#endif /* CONFIG_MV_ETH_WAN_SWAP */
+
+}
+EXPORT_SYMBOL(tpm_hot_swap_profile);
+
 /******************************************************************************/
 /********************************** MC handling APIs **************************/
 /******************************************************************************/
@@ -1198,13 +1289,70 @@ tpm_error_code_t tpm_add_ipv4_mc_stream(uint32_t owner_id,
 		return(ret_code);
 
 	ret_code = tpm_proc_add_ipv4_mc_stream(owner_id, stream_num, igmp_mode, mc_stream_pppoe,
-						vid, ipv4_src_add, ipv4_dst_add, ignore_ipv4_src, dest_port_bm);
+						vid, ipv4_src_add, ipv4_dst_add, ignore_ipv4_src,
+						TPM_INVALID_QUEUE, dest_port_bm);
 
 	busy_ret_code = tpm_proc_api_busy_done(TPM_API_IPV4_MC, stream_num);
 
 	RET_BUSY_ERROR(ret_code, busy_ret_code);
 }
 EXPORT_SYMBOL(tpm_add_ipv4_mc_stream);
+
+/*******************************************************************************
+* tpm_add_ipv4_mc_stream_set_queue()
+*
+* DESCRIPTION:      Creates a new IPv4 MC stream with dest Queue.
+*                   It is APIs caller responsibility to maintain the correct number of
+*                   each stream number.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* stream_num         - MC stream number.
+* vid                - VLAN ID (0-4095). If set to 4096 - stream is untagged.
+*                      If set to 0xFFFF - do not care.
+* ipv4_src_add       - IPv4 source IP address in network order.
+* ipv4_src_add       - IPv4 destination IP address in network order.
+* ignore_ipv4_src    - when set to 1 - the IP source is not part of the key.
+* dest_queue          - destination queue number.
+* dest_port_bm       - bitmap which includes all destination UNI ports.
+*
+* OUTPUTS:
+*  None.
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_add_ipv4_mc_stream_set_queue(uint32_t owner_id,
+					uint32_t stream_num,
+					tpm_mc_igmp_mode_t igmp_mode,
+					uint8_t mc_stream_pppoe,
+					uint16_t vid,
+					uint8_t ipv4_src_add[4],
+					uint8_t ipv4_dst_add[4],
+					uint8_t ignore_ipv4_src,
+					uint16_t dest_queue,
+					tpm_trg_port_type_t dest_port_bm)
+{
+	tpm_error_code_t ret_code, busy_ret_code;
+
+	/* Check API_type Busy */
+	ret_code = tpm_proc_check_api_busy(TPM_API_IPV4_MC, stream_num);
+	if (ret_code != TPM_OK)
+		return(ret_code);
+
+	ret_code = tpm_proc_add_ipv4_mc_stream(owner_id, stream_num, igmp_mode, mc_stream_pppoe,
+						vid, ipv4_src_add, ipv4_dst_add, ignore_ipv4_src,
+						dest_queue, dest_port_bm);
+
+	busy_ret_code = tpm_proc_api_busy_done(TPM_API_IPV4_MC, stream_num);
+
+	RET_BUSY_ERROR(ret_code, busy_ret_code);
+}
+EXPORT_SYMBOL(tpm_add_ipv4_mc_stream_set_queue);
 
 /*******************************************************************************
 * tpm_updt_ipv4_mc_stream()
@@ -1319,7 +1467,8 @@ tpm_error_code_t tpm_add_ipv6_mc_stream(uint32_t owner_id,
 		return(ret_code);
 
 	ret_code = tpm_proc_add_ipv6_mc_stream(owner_id, stream_num, igmp_mode, mc_stream_pppoe,
-						vid, ipv6_src_add, ipv6_dst_add, ignore_ipv6_src, dest_port_bm);
+						vid, ipv6_src_add, ipv6_dst_add, ignore_ipv6_src,
+						TPM_INVALID_QUEUE, dest_port_bm);
 
 
 	busy_ret_code = tpm_proc_api_busy_done(TPM_API_IPV6_MC, stream_num);
@@ -1328,6 +1477,64 @@ tpm_error_code_t tpm_add_ipv6_mc_stream(uint32_t owner_id,
 
 }
 EXPORT_SYMBOL(tpm_add_ipv6_mc_stream);
+
+/*******************************************************************************
+* tpm_add_ipv6_mc_stream_set_queue()
+*
+* DESCRIPTION:      Creates a new ipv6 MC stream with specified destination queue number.
+*                   It is APIs caller responsibility to maintain the correct number of
+*                   each stream number.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* stream_num         - MC stream number.
+* vid                - VLAN ID (0-4095). If set to 4096 - stream is untagged.
+*                      If set to 0xFFFF - do not care.
+* ipv6_src_add       - ipv6 source IP address in network order.
+* ipv6_dst_add       - ipv6 destination IP address in network order.
+* ignore_ipv6_src    - when set to 1 - the IP source is not part of the key.
+* dest_queue          - destination queue number.
+* dest_port_bm       - bitmap which includes all destination UNI ports.
+*
+* OUTPUTS:
+*  None.
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_add_ipv6_mc_stream_set_queue(uint32_t owner_id,
+					uint32_t stream_num,
+					tpm_mc_igmp_mode_t igmp_mode,
+					uint8_t mc_stream_pppoe,
+					uint16_t vid,
+					uint8_t ipv6_src_add[16],
+					uint8_t ipv6_dst_add[16],
+					uint8_t ignore_ipv6_src,
+					uint16_t dest_queue,
+					tpm_trg_port_type_t dest_port_bm)
+{
+	tpm_error_code_t ret_code, busy_ret_code;
+
+	/* Check API_type Busy */
+	ret_code = tpm_proc_check_api_busy(TPM_API_IPV6_MC, stream_num);
+	if (ret_code != TPM_OK)
+		return(ret_code);
+
+	ret_code = tpm_proc_add_ipv6_mc_stream(owner_id, stream_num, igmp_mode, mc_stream_pppoe,
+						vid, ipv6_src_add, ipv6_dst_add, ignore_ipv6_src,
+						dest_queue, dest_port_bm);
+
+
+	busy_ret_code = tpm_proc_api_busy_done(TPM_API_IPV6_MC, stream_num);
+
+	RET_BUSY_ERROR(ret_code, busy_ret_code);
+
+}
+EXPORT_SYMBOL(tpm_add_ipv6_mc_stream_set_queue);
 
 /*******************************************************************************
 * tpm_updt_ipv6_mc_stream()
@@ -1515,14 +1722,41 @@ EXPORT_SYMBOL(tpm_oam_epon_add_channel);
 * COMMENTS:
 *
 *******************************************************************************/
-tpm_error_code_t tpm_loop_detect_add_channel(uint32_t owner_id)
+tpm_error_code_t tpm_loop_detect_add_channel(uint32_t owner_id, tpm_ether_type_key_t ety)
 {
 	tpm_error_code_t ret_code;
 
-	ret_code = tpm_proc_loop_detect_add_channel(owner_id);
+	ret_code = tpm_proc_loop_detect_add_channel(owner_id, ety);
 	return ret_code;
 }
 EXPORT_SYMBOL(tpm_loop_detect_add_channel);
+
+/*******************************************************************************
+* tpm_loop_detect_del_channel()
+*
+* DESCRIPTION:      remove a communication channel for loop detection management protocol.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+*
+* OUTPUTS:
+*  None.
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_loop_detect_del_channel(uint32_t owner_id)
+{
+	tpm_error_code_t ret_code;
+
+	ret_code = tpm_proc_loop_detect_del_channel(owner_id);
+	return ret_code;
+}
+EXPORT_SYMBOL(tpm_loop_detect_del_channel);
 
 /*******************************************************************************
 * tpm_oam_loopback_add_channel()
@@ -2939,7 +3173,7 @@ EXPORT_SYMBOL(tpm_flush_vtu);
 * according to the case - see tpm_error_code_t.
 *
 * COMMENTS:
-* 
+*
 *
 *******************************************************************************/
 tpm_error_code_t tpm_flush_atu(uint32_t owner_id, tpm_flush_atu_type_t flush_type, uint16_t db_num)
@@ -3169,4 +3403,208 @@ tpm_error_code_t tpm_mac_learn_entry_num_get(uint32_t *entry_num)
 	return (ret_code);
 }
 EXPORT_SYMBOL(tpm_mac_learn_entry_num_get);
+
+/*******************************************************************************
+* tpm_set_gmac_loopback()
+*
+* DESCRIPTION: The API enable/disable loopback mode of gmac.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* gmac                 -
+* enable               - 1 for enable, 0 for disable
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*           None
+*
+*******************************************************************************/
+tpm_error_code_t tpm_set_gmac_loopback (uint32_t	  owner_id,
+						tpm_gmacs_enum_t  gmac,
+						uint8_t		  enable)
+{
+	tpm_error_code_t ret_code = TPM_RC_OK;
+
+	ret_code = tpm_init_gmac_loopback(gmac, enable);
+
+	return (ret_code);
+}
+EXPORT_SYMBOL(tpm_set_gmac_loopback);
+
+/*******************************************************************************
+* tpm_add_ds_load_balance_rule()
+*
+* DESCRIPTION: The API adds DS load balance PnC rules to set target port to GMAC0 or GMAC1
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* rule_num           - Entry index to be added in the current ACL
+* parse_rule_bm      - Bitmap containing the significant flags for parsing fields of the packet.
+*                      possible values for L2 API:
+*                        TPM_L2_PARSE_MAC_DA|TPM_L2_PARSE_MAC_SA|TPM_L2_PARSE_ONE_VLAN_TAG
+*                        |TPM_L2_PARSE_TWO_VLAN_TAG|TPM_L2_PARSE_ETYPE|TPM_L2_PARSE_PPPOE_SES
+*                        |TPM_L2_PARSE_PPP_PROT|TPM_L2_PARSE_GEMPORT)
+* parse_flags_bm     - Bitmap containing the significant flags result of the primary ACL filtering.
+*                      possible values for L2 API:
+*                        TPM_PARSE_FLAG_TAG1_TRUE|TPM_PARSE_FLAG_TAG1_FLASE|
+*                        TPM_PARSE_FLAG_TAG2_TRUE|TPM_PARSE_FLAG_TAG2_FALSE
+* l2_key             - Information to create a parsing key for the rule.
+*                      Some pointers may be NULL depending on the parse_rule_bm.
+* tgrt_port          - target Port: GMAC0, GMAC1 or CPU
+*
+* OUTPUTS:
+*  rule_idx         - Unique rule identification number which is used when deleting the rule.
+*                     (this is not the rule_num)
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*           None
+*
+*******************************************************************************/
+tpm_error_code_t tpm_add_ds_load_balance_rule(uint32_t owner_id,
+						uint32_t rule_num,
+						uint32_t *rule_idx,
+						tpm_parse_fields_t parse_rule_bm,
+						tpm_parse_flags_t parse_flags_bm,
+						tpm_l2_acl_key_t *l2_key,
+						tpm_ds_load_balance_tgrt_t tgrt_port)
+{
+	tpm_error_code_t ret_code, busy_ret_code;
+
+	/* Check API_section Busy */
+	ret_code = tpm_proc_check_api_busy(TPM_API_DS_LOAD_BALANCE, rule_num);
+	if (ret_code != TPM_OK)
+		return(ret_code);
+
+	ret_code = tpm_proc_add_ds_load_balance_acl_rule(owner_id, rule_num, rule_idx,
+		parse_rule_bm, parse_flags_bm, l2_key, tgrt_port);
+
+	busy_ret_code = tpm_proc_api_busy_done(TPM_API_DS_LOAD_BALANCE, rule_num);
+	RET_BUSY_ERROR(ret_code, busy_ret_code);
+}
+EXPORT_SYMBOL(tpm_add_ds_load_balance_rule);
+
+/*******************************************************************************
+* tpm_del_ds_load_balance_rule()
+*
+* DESCRIPTION: The API delete CPU egress loopback modification and PnC rules for
+*              specific Tcont/queue/gem_port
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* rule_idx           - Unique rule idenitifcation number specifying the rule to be deleted.
+*
+* OUTPUTS:
+*           NONE
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*           None
+*
+*******************************************************************************/
+tpm_error_code_t tpm_del_ds_load_balance_rule(uint32_t owner_id, uint32_t rule_idx)
+{
+	tpm_error_code_t ret_code;
+	ret_code = tpm_proc_del_ds_load_balance_acl_rule(owner_id, rule_idx, TPM_EXT_CALL);
+	return (ret_code);
+}
+EXPORT_SYMBOL(tpm_del_ds_load_balance_rule);
+
+/*******************************************************************************
+* tpm_xlate_uni_2_switch_port()
+*
+* DESCRIPTION: The API translates TPM logic UNI port into Switch port.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* uni_port           - TPM logic port that need to be translated.
+*
+* OUTPUTS:
+* switch_port      - switch port.
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*           None
+*
+*******************************************************************************/
+tpm_error_code_t tpm_xlate_uni_2_switch_port (uint32_t		  owner_id,
+						     tpm_src_port_type_t  uni_port,
+						     uint32_t		 *switch_port)
+{
+	tpm_error_code_t ret_code = TPM_RC_OK;
+
+	*switch_port = tpm_db_eth_port_switch_port_get(uni_port);
+	if (TPM_DB_ERR_PORT_NUM == *switch_port)
+		ret_code = ERR_SRC_PORT_INVALID;
+
+	return (ret_code);
+}
+EXPORT_SYMBOL(tpm_xlate_uni_2_switch_port);
+/*******************************************************************************
+* tpm_active_tcont()
+*
+* DESCRIPTION:    Function used to enable hwf to certain tcont.
+*
+* INPUTS:
+* tcont_num
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_active_tcont(uint32_t tcont_num)
+{
+	tpm_error_code_t ret_code;
+
+	/* active tcont hwf */
+	ret_code = tpm_proc_hwf_admin_set(TPM_ENUM_PMAC, tcont_num, true);
+
+	return ret_code;
+}
+EXPORT_SYMBOL(tpm_active_tcont);
+/*******************************************************************************
+* tpm_deactive_tcont()
+*
+* DESCRIPTION:    Function used to disable hwf to certain tcont.
+*
+* INPUTS:
+* tcont_num
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_deactive_tcont(uint32_t tcont_num)
+{
+	tpm_error_code_t ret_code;
+	/* deactive tcont hwf */
+	ret_code = tpm_proc_hwf_admin_set(TPM_ENUM_PMAC, tcont_num, false);
+
+	return ret_code;
+}
+EXPORT_SYMBOL(tpm_deactive_tcont);
 

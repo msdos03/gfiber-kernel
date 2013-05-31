@@ -120,13 +120,19 @@ MV_STATUS onuGponApiGemPortIdConfig(MV_U32 gemPortid);
 **               MV_U8 *password
 **               MV_BOOL  disabled
 **               MV_U32   sn_src
+**               MV_U32 fecHyst
 **
 **  OUTPUTS:     None
 **
 **  RETURNS:     MV_OK or error
 **
 *******************************************************************************/
-MV_STATUS onuGponApiInit(MV_U8 *serialNumber, MV_U8 *password, MV_BOOL disabled, MV_U32 sn_src)
+MV_STATUS onuGponApiInit(MV_U8 *serialNumber, 
+                         MV_U8 *password, 
+                         MV_BOOL disabled, 
+                         MV_U32 sn_src, 
+                         MV_U32 fecHyst, 
+                         MV_U32 couplingMode)
 {
   MV_STATUS rcode;
   MV_U32    i;
@@ -154,6 +160,22 @@ MV_STATUS onuGponApiInit(MV_U8 *serialNumber, MV_U8 *password, MV_BOOL disabled,
                "ERROR: (%s:%d) onuGponSrvcSerialNumberSet", __FILE_DESC__, __LINE__);
     return rcode;
   }
+
+    rcode = mvOnuGponMacRxFecHysteresisSet(fecHyst);
+    if (rcode != MV_OK)
+    {
+        mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+                   "ERROR: (%s:%d) mvOnuGponMacRxFecHysteresisSet", __FILE_DESC__, __LINE__);
+        return rcode;
+    }
+
+    rcode = onuGponApiCouplingModeSet(couplingMode);
+    if (rcode != MV_OK)
+    {
+        mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+                   "ERROR: (%s:%d) mvOnuGponMacCouplingModeSet", __FILE_DESC__, __LINE__);
+        return rcode;
+    }
 
   rcode = onuGponSrvcRangingRandomInit();
   if (rcode != MV_OK)
@@ -1494,9 +1516,6 @@ MV_STATUS onuGponApiBurstConfigSet(S_apiBurstConfig *burstConfigSet)
     return(rcode);
   }
 
-  onuGponDbXvrPolaritySet(burstConfigSet->polarity);
-  mvOnuPonMacBurstEnablePolarityInit(burstConfigSet->polarity);
-
   return(rcode);
 }
 
@@ -2109,7 +2128,47 @@ MV_STATUS onuGponApiFecStatusGet(MV_U32 *fecMode)
   return mvOnuGponMacRxFecStatusGet(fecMode);
 }
 
+/*******************************************************************************
+**
+**  mvGponAipCouplingModeSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function configures the coupling mode
+**
+**  PARAMETERS:  MV_U32 couplingMode 0 : DC, 1 : AC
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or MV_ERROR
+**
+*******************************************************************************/
+MV_STATUS onuGponApiCouplingModeSet(MV_U32 couplingMode)
+{
+    MV_STATUS status;
+    MV_U32 devId;
+    MV_U32 burstMode = 0;
+    MV_U32 burstTime = 0;
+    MV_U8  dataPattern1 = 0;
+    MV_U8  dataPattern2 = 0;
 
+    devId = mvCtrlModelGet();
+	if (devId != MV_6601_DEV_ID)
+	{
+		return(MV_OK);
+	}
+
+    if (couplingMode == 1)  /* AC coupling mode */
+    {
+        burstMode = GPON_TX_AC_COUPL_BUST_MODE_0;
+        burstTime = GPON_TX_AC_COUPL_PREACT_BURST_TIME;
+        dataPattern1 = GPON_TX_AC_COUPL_DATA_PATTERN_1;
+        dataPattern2 = GPON_TX_AC_COUPL_DATA_PATTERN_2;
+    }
+
+    status = mvOnuGponMacTxConfigAcCouplingSet(burstMode, burstTime, dataPattern1, dataPattern2);
+
+    return (status);
+}
 
 
 

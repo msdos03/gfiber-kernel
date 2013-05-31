@@ -270,6 +270,25 @@ MV_STATUS onuGponMiResetTcontsConfig(void)
 
 /*******************************************************************************
 **
+**  onuGponMiClearTcontConfig
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function clears the specifid tcont configuration
+**               
+**  PARAMETERS:  MV_U32 tcont 
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**                   
+*******************************************************************************/
+MV_STATUS onuGponMiClearTcontConfig(MV_U32 tcont)
+{   
+    return (onuGponApiTcontClear(tcont));
+}
+
+/*******************************************************************************
+**
 **  onuGponMiGem
 **  ____________________________________________________________________________
 ** 
@@ -378,8 +397,7 @@ int mvGponCdevIoctl(struct inode *inode,
 	  spin_unlock_irqrestore(&onuPonIrqLock, flags);
       if(status != MV_OK)
         goto ioctlErr;
-	  onuGponDbXvrPolaritySet(ioctlXvr.polarity);
-	  mvOnuPonMacBurstEnablePolarityInit(ioctlXvr.polarity);
+
       ret = 0;
       break;
 
@@ -412,6 +430,27 @@ int mvGponCdevIoctl(struct inode *inode,
       if(status == MV_OK)
         ret = 0;
       break;
+
+    /* ====== MVGPON_IOCTL_DATA_TCONT_CLEAR ======== */
+    case MVGPON_IOCTL_DATA_TCONT_CLEAR:
+        if(copy_from_user(&ioctlData, (S_GponIoctlData*)arg, sizeof(S_GponIoctlData)))
+        {
+            mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+            "ERROR: (%s:%d) copy_from_user failed\n", __FILE_DESC__, __LINE__);
+            goto ioctlErr;
+        }
+        
+        spin_lock_irqsave(&onuPonIrqLock, flags);
+        status = onuGponMiClearTcontConfig(ioctlData.tcont);
+        spin_unlock_irqrestore(&onuPonIrqLock, flags);
+        if(status != MV_OK)
+        {
+            goto ioctlErr;
+        }
+        
+        ret = 0;
+
+        break;
 
     /* ====== MVGPON_IOCTL_GEMPORT_STATE_SET ======= */
     case MVGPON_IOCTL_GEMPORT_STATE_SET:

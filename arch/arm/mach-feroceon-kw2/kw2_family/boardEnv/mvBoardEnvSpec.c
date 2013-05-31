@@ -911,19 +911,6 @@ MV_BOARD_MPP_INFO rd88f6601InfoBoardMppConfigValue[] = {
 	 }
 };
 
-/*
-MV_BOARD_SPEC_INIT rd88f6601BoardSpecInit[] = {
-	{
-		.reg = PMU_POWER_IF_POLARITY_REG,
-		.mask = (BIT1),
-		.val = 0
-	},
-	{
-		.reg = TBL_TERM,
-		.val = TBL_TERM
-	}
-};
-*/
 MV_BOARD_INFO rd88f6601Info = {
 	.boardName = "RD-88F6601-BP",
 	.numBoardMppTypeValue = MV_ARRAY_SIZE(rd88f6601InfoBoardMppTypeInfo),
@@ -975,7 +962,125 @@ MV_BOARD_INFO rd88f6601Info = {
 	.pBoardTdmInt2CsInfo = {NULL},
 	.boardTdmInfoIndex = -1,
 
-	.pBoardSpecInit = NULL,			/* rd88f6601BoardSpecInit, */
+	.pBoardSpecInit = NULL,
+
+	.deepIdlePwrUpDelay = 2400,	/* 12uS */
+
+	/* NAND init params */
+	.nandFlashParamsValid = MV_FALSE,
+	.nandFlashReadParams = 0,
+	.nandFlashWriteParams = 0,
+	.nandFlashControl = 0,
+	.pBoardTdmSpiInfo = NULL,
+
+	/* Enable modules auto-detection. */
+	.moduleAutoDetect = MV_FALSE
+};
+
+/***************************************************************************
+** RD-88F6601MC2L Avanta
+****************************************************************************/
+/* NAND not supported  */
+
+MV_BOARD_TWSI_INFO rd88f6601MC2LInfoBoardTwsiDev[] = {
+	/* {{MV_BOARD_DEV_CLASS devClass, MV_U8 twsiDevAddr, MV_U8 twsiDevAddrType}} */
+};
+
+MV_BOARD_MAC_INFO rd88f6601MC2LInfoBoardMacInfo[] = {
+	/* {{MV_BOARD_MAC_SPEED boardMacSpeed, MV_U8 boardEthSmiAddr}} */
+	{BOARD_MAC_SPEED_AUTO, 0x0},
+	{N_A, N_A}
+};
+
+MV_BOARD_MPP_TYPE_INFO rd88f6601MC2LInfoBoardMppTypeInfo[] = {
+	{
+		.boardMppTdm = MV_BOARD_AUTO,
+		.ethSataComplexOpt = ESC_OPT_GEPHY_MAC0,
+		.ethPortsMode = 0x0,
+	}
+};
+
+MV_BOARD_GPP_INFO rd88f6601MC2LInfoBoardGppInfo[] = {
+	/* {{MV_BOARD_GPP_CLASS devClass, MV_U8 gppPinNum}} */
+	{BOARD_GPP_PON_XVR_TX, 17},
+	{BOARD_GPP_PON_XVR_TX_POWER, 37},
+	{BOARD_GPP_PON_XVR_TX_IND, 24},	
+};
+
+MV_DEV_CS_INFO rd88f6601MC2LInfoBoardDeCsInfo[] = {
+	/* {deviceCS, params, devType, devWidth} */
+#ifdef MV_SPI
+	{SPI_CS0, N_A, BOARD_DEV_SPI_FLASH, 8},	/* SPI DEV */
+#endif
+#if !defined(MV_SPI)
+	{N_A, N_A, N_A, N_A}			/* No device */
+#endif
+};
+
+MV_BOARD_MPP_INFO rd88f6601MC2LInfoBoardMppConfigValue[] = {
+	{
+	{
+	  RD_88F6601MC2L_MPP0_7,
+	  RD_88F6601MC2L_MPP8_15,
+	  RD_88F6601MC2L_MPP16_23,
+	  RD_88F6601MC2L_MPP24_31,
+	  RD_88F6601MC2L_MPP32_37,
+	}
+	}
+};
+
+MV_BOARD_INFO rd88f6601MC2LInfo = {
+	.boardName = "RD-88F6601-MC2L",
+	.numBoardMppTypeValue = MV_ARRAY_SIZE(rd88f6601MC2LInfoBoardMppTypeInfo),
+	.pBoardMppTypeValue = rd88f6601MC2LInfoBoardMppTypeInfo,
+	.numBoardMppConfigValue = MV_ARRAY_SIZE(rd88f6601MC2LInfoBoardMppConfigValue),
+	.pBoardMppConfigValue = rd88f6601MC2LInfoBoardMppConfigValue,
+	.intsGppMaskLow = 0,
+	.intsGppMaskMid = 0,
+	.intsGppMaskHigh = 0,
+	.numBoardDeviceIf = MV_ARRAY_SIZE(rd88f6601MC2LInfoBoardDeCsInfo),
+	.pDevCsInfo = rd88f6601MC2LInfoBoardDeCsInfo,
+	.numBoardTwsiDev = MV_ARRAY_SIZE(rd88f6601MC2LInfoBoardTwsiDev),
+	.pBoardTwsiDev = rd88f6601MC2LInfoBoardTwsiDev,
+	.numBoardMacInfo = MV_ARRAY_SIZE(rd88f6601MC2LInfoBoardMacInfo),
+	.pBoardMacInfo = rd88f6601MC2LInfoBoardMacInfo,
+	.numBoardGppInfo = MV_ARRAY_SIZE(rd88f6601MC2LInfoBoardGppInfo),
+	.pBoardGppInfo = rd88f6601MC2LInfoBoardGppInfo,
+	.activeLedsNumber = 0,
+	.pLedGppPin = NULL,
+	.ledsPolarity = 0,
+ 
+	/* GPP values */
+	.gppOutEnValLow = RD_88F6601MC2L_GPP_OUT_ENA_LOW,
+	.gppOutEnValMid = RD_88F6601MC2L_GPP_OUT_ENA_MID,
+	.gppOutEnValHigh = 0,
+	.gppOutValLow = RD_88F6601MC2L_GPP_OUT_VAL_LOW,
+	.gppOutValMid = RD_88F6601MC2L_GPP_OUT_VAL_MID,
+	.gppOutValHigh = 0,
+	.gppPolarityValLow = RD_88F6601MC2L_GPP_POL_LOW,
+	.gppPolarityValMid = RD_88F6601MC2L_GPP_POL_MID,
+	.gppPolarityValHigh = 0,
+
+	/* External Switch Configuration */
+	.pSwitchInfo = NULL,
+	.switchInfoNum = 0,
+
+	/* PON configuration. */
+	.ponConfigValue = BOARD_GPON_CONFIG,
+
+	/* TDM configuration */
+	/* We hold a different configuration array for each possible slic that
+	 ** can be connected to board.
+	 ** When modules are scanned, then we select the index of the relevant
+	 ** slic's information array.
+	 ** For RD and Customers boards we only need to initialize a single
+	 ** entry of the arrays below, and set the boardTdmInfoIndex to 0.
+	 */
+	.numBoardTdmInfo = {0},
+	.pBoardTdmInt2CsInfo = {NULL},
+	.boardTdmInfoIndex = -1,
+
+	.pBoardSpecInit = NULL,
 
 	.deepIdlePwrUpDelay = 2400,	/* 12uS */
 
@@ -1449,4 +1554,5 @@ MV_BOARD_INFO *boardInfoTbl[] = {
 	&rd88f6601Info,
 	&gflt200Info,
 	&gflt110Info,
+	&rd88f6601MC2LInfo,
 };

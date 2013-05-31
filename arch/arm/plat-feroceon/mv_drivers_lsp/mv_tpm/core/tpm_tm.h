@@ -250,4 +250,29 @@ tpm_error_code_t tpm_tm_set_wan_q_ingr_rate_lim(IN uint32_t owner_id,
 tpm_error_code_t tpm_tm_set_gmac0_ingr_rate_lim(IN uint32_t owner_id,
 						IN uint32_t rate_limit_val,
 						IN uint32_t bucket_size);
+
+/*******************************************************************************
+* tpm_tm_set_tx_port_rate_lim()
+*
+* DESCRIPTION:      Configures the rate limit of tx port wanted.
+*
+* INPUTS:
+*       owner_id          - APP owner id  should be used for all API calls.
+*       port              - port want to do rate limit
+*       rate_limit_val    - ingress rate limit value
+*       bucket_size       - bucket size value
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success, the function returns TPM_RC_OK. On error different types are returned
+*       according to the case - see tpm_error_code_t.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_tm_set_tx_port_rate_lim(IN uint32_t owner_id,
+					     IN uint32_t port,
+					     IN uint32_t rate_limit_val,
+					     IN uint32_t bucket_size);
+
 #endif /* _TPM_TM_H_ */

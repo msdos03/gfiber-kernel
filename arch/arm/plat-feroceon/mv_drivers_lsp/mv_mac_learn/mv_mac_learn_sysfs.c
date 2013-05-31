@@ -325,13 +325,20 @@ void sfs_mac_learn_max_count_cfg(const char *buf, size_t len)
 	uint32_t max_count;
 	int parsedargs;
 	int numparms;
+	int temp;
 
 	numparms = sys_mac_learn_count_para(buf);
 	if (numparms != mac_learn_max_count_max) {
 		MVMACLEARN_ERR_PRINT("Parameter number not right");
 	} else {
 		/* Get parameters */
-		parsedargs = sscanf(buf, "%d", &max_count);
+		parsedargs = sscanf(buf, "%d", &temp);
+		if (temp < 0) {
+			printk(KERN_INFO "ERROR: Negative Input(%d) can not be accepted\n", temp);
+			return;
+		}
+
+		max_count = temp;
 
 		if (parsedargs != numparms) {
 			printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);
@@ -362,13 +369,20 @@ void sfs_mac_learn_expired_time_cfg(const char *buf, size_t len)
 	uint32_t expire_time;
 	int parsedargs;
 	int numparms;
+	int temp;
 
 	numparms = sys_mac_learn_count_para(buf);
 	if (numparms != mac_learn_expire_time_max) {
 		MVMACLEARN_ERR_PRINT("Parameter number not right");
 	} else {
 		/* Get parameters */
-		parsedargs = sscanf(buf, "%d", &expire_time);
+		parsedargs = sscanf(buf, "%d", &temp);
+		if (temp < 0) {
+			printk(KERN_INFO "ERROR: Negative Input(%d) can not be accepted\n", temp);
+			return;
+		}
+
+		expire_time = temp;
 
 		if (parsedargs != numparms) {
 			printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);

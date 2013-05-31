@@ -95,8 +95,6 @@ extern "C" {
 
 #define TPM_CHAIN_NUM_UNLIMITED		(0x1000)
 
-#define FROM_SPEC_UNI(src)		(src >= TPM_SRC_PORT_UNI_0 && src <= TPM_SRC_PORT_UNI_VIRT)
-
 /* PNC Target TXP, in exact numbering scheme, do not change !! */
 typedef enum {
 	TPM_INVALID_PNC_TRG = -1,
@@ -114,22 +112,13 @@ typedef enum {
 } tpm_pnc_trg_t;
 
 typedef enum {
-	TPM_INVALID_GMAC = -1,
-	TPM_ENUM_GMAC_0,
-	TPM_ENUM_GMAC_1,
-	TPM_ENUM_PMAC,
-	TPM_MAX_GMAC = TPM_ENUM_PMAC,
-	TPM_MAX_NUM_GMACS
-} tpm_gmacs_enum_t;
-
-typedef enum {
 	TPM_INT_CALL = 0,
 	TPM_EXT_CALL
 } tpm_caller_t;
 
 
 #define TPM_MAX_VID			(4096)	/* legal VLAN ID = 0-4095 */
-#define TPM_MAX_NUM_CTC_PRECEDENCE		(8)	
+#define TPM_MAX_NUM_CTC_PRECEDENCE		(8)
 
 #define PON_PORT			(2)
 #define SW_GMAC_0			(0)
@@ -165,20 +154,22 @@ typedef enum {
 
 #define TPM_INTERNAL_OWNER_ID		(0xABBACDDC)
 
+#define TPM_INVALID_QUEUE		(0xFFFF)
 
 typedef enum {
 	TPM_INVALID_SECTION = -1,
 	TPM_PNC_MAC_LEARN_ACL,
+	TPM_DS_LOAD_BALANCE_ACL,
 	TPM_CPU_LOOPBACK_ACL,
 	TPM_L2_PRIM_ACL,
 	TPM_L3_TYPE_ACL,
 	TPM_IPV4_ACL,
 	TPM_IPV4_MC,
+	TPM_IPV6_NH_ACL,
+	TPM_L4_ACL,
 	TPM_IPV6_GEN_ACL,
 	TPM_IPV6_DIP_ACL,
 	TPM_IPV6_MC_ACL,
-	TPM_IPV6_NH_ACL,
-	TPM_L4_ACL,
 	TPM_CNM_MAIN_ACL,
 	TPM_MAX_NUM_API_SECTIONS	/* Equals to number of entries in enum */
 } tpm_api_sections_t;
@@ -224,6 +215,9 @@ typedef enum {
 #define TPM_PARSE_FLAG_CNM_IPV4_MASK	(TPM_PARSE_FLAG_CNM_IPV4_TRUE | TPM_PARSE_FLAG_CNM_IPV4_FALSE)
 #define TPM_PARSE_FLAG_SPLIT_MOD_MASK	(TPM_PARSE_FLGA_SPLIT_MOD_TRUE | TPM_PARSE_FLGA_SPLIT_MOD_FALSE)
 
+#define TPM_DS_LOAD_BALNC_PARSE_BM_MASK		\
+		(TPM_L2_PARSE_MAC_DA | TPM_L2_PARSE_MAC_SA | TPM_L2_PARSE_ONE_VLAN_TAG | TPM_L2_PARSE_TWO_VLAN_TAG |\
+		TPM_L2_PARSE_ETYPE | TPM_L2_PARSE_PPPOE_SES | TPM_L2_PARSE_PPP_PROT | TPM_L2_PARSE_GEMPORT)
 #define TPM_L2_PARSE_BM_MASK		\
 		(TPM_L2_PARSE_MAC_DA | TPM_L2_PARSE_MAC_SA | TPM_L2_PARSE_ONE_VLAN_TAG | TPM_L2_PARSE_TWO_VLAN_TAG |\
 		TPM_L2_PARSE_ETYPE | TPM_L2_PARSE_PPPOE_SES | TPM_L2_PARSE_PPP_PROT | TPM_L2_PARSE_GEMPORT)
@@ -262,6 +256,7 @@ typedef enum {
 #define TPM_PARSE_FLAG_IPV4_PRE_KEY_PARSE   (0x00020000LL)
 #define TPM_PARSE_FLAG_CNM_PREC_PARSE       (0x00040000LL)
 #define TPM_PARSE_FLAG_IPV6_MC_SIP_PARSE    (0x00080000LL)
+#define TPM_PARSE_FLAG_DNRT_DS_TRUNK        (0x00100000LL)	/* Set DNRT_DS_TRUNK bit */
 
 /* Following additional TPM_ACTIONs for internal use, they must co-exist (not overlap)
    with existing TPM_ACTIONs in types.h */
@@ -290,6 +285,7 @@ typedef enum {
 #define TPM_ACTION_UNSET_IPV4_PRE_KEY   (0x00400000LL)
 #define TPM_ACTION_SET_CNM_PREC         (0x00800000LL)
 #define TPM_ACTION_UNSET_CNM_PREC       (0x01000000LL)
+#define TPM_ACTION_UNSET_DNRT_DS_TRUNK  (0x02000000LL)	/* Unset DNRT_DS_TRUNK bit */
 
 #define     TPM_MAX_WRR_WEIGHT             (255)
 

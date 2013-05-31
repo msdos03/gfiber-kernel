@@ -122,7 +122,7 @@ typedef struct
   MV_U32      onuGponOnuIdOverrideEn;              /* ONU ID Overeide Enable*/
   MV_U32      onuGponOnuIdOverrideVal;             /* ONU ID Overeide value*/
   MV_U32	  onuGponRate;
-  MV_U32	  onuGponXvrPolarity;
+  MV_U32      onuGponP2pXvrBurstEnPolarity;
   GPONFUNCPTR onuGponStateAndEventTbl[ONU_GPON_NUM_OF_EVENTS][ONU_GPON_NUM_OF_STATES];
   MV_BOOL	  onuGponInit;						   /* Is ONU initialized? */
   MV_BOOL     omccValid;
@@ -276,8 +276,6 @@ MV_U32    onuGponDbOmccPortOverrideValueGet(void);
 MV_STATUS onuGponDbOmccPortOverrideValueSet(MV_U32 omccPort);
 MV_STATUS onuGponDbRateSet(MV_U32 rate);
 MV_U32	  onuGponDbRateGet (void);
-MV_STATUS onuGponDbXvrPolaritySet(MV_U32 rate);
-MV_U32	  onuGponDbXvrPolarityGet (void);
 MV_BOOL   onuGponDbdGaspEnGet(void);
 MV_STATUS onuGponDbdGaspEnSet(MV_BOOL dGaspEn);
 MV_STATUS onuGponDbAlarmNotifySet(ALARMNOTIFYFUNC alarmCallback);

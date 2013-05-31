@@ -123,19 +123,19 @@ MV_STATUS onuEponSerdesPowerUpSeq(void)
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_PU_Pll, 0x0, 0);
   if (status != MV_OK)                                                         
     return(status);     
 
-  mvOsDelay(10);
-                                                                               
+  mvOsDelay(40);
+
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_PU_RX, 0x0, 0);
   if (status != MV_OK)                                                         
     return(status);                                                            
                                                                               
-  mvOsDelay(10);
+  mvOsDelay(40);
   
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_PU_TX, 0x0, 0);
   if (status != MV_OK)                                                         
@@ -151,11 +151,13 @@ MV_STATUS onuEponSerdesPowerUpSeq(void)
   if (status != MV_OK) 
     return(status);
 
+  mvOsDelay(40);
+
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_REF_CLK_25M, 0x1, 0); 
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_RST, 0x0, 0); 
   if (status != MV_OK) 
@@ -168,19 +170,19 @@ MV_STATUS onuEponSerdesPowerUpSeq(void)
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_INTERNAL_EN_LOOP_TIMING, 0x1, 0); 
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_INTERNAL_PON_SELECT, 0x3, 0); 
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   // status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_PU_Pll, 0x1, 0);
   // if (status != MV_OK) 
@@ -204,7 +206,7 @@ MV_STATUS onuEponSerdesPowerUpSeq(void)
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(20);
+  mvOsDelay(40);
 
   temp = 0;
   do 
@@ -215,7 +217,7 @@ MV_STATUS onuEponSerdesPowerUpSeq(void)
     if (status != MV_OK) 
       return(status);
 
-	mvOsDelay(10);
+    mvOsDelay(40);
 
     status  = asicOntMiscRegRead(mvAsicReg_PON_SERDES_PHY_CTRL_0_READY_RX, &rxReady, 0);  
     if (status != MV_OK) 
@@ -228,13 +230,13 @@ MV_STATUS onuEponSerdesPowerUpSeq(void)
 
   } while ((txReady == 0) || (rxReady == 0));
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_RX_INIT, 0x1, 0);  
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   temp = 0;
   do 
@@ -250,17 +252,17 @@ MV_STATUS onuEponSerdesPowerUpSeq(void)
 	  return (MV_FAIL);
 	}
 
-	mvOsDelay(10);
+   mvOsDelay(40);
  
   } while (initDone == 0);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_RX_INIT, 0x0, 0);  
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   return(MV_OK);
 }
@@ -288,37 +290,97 @@ MV_STATUS onuEponSerdesInit(void)
   if (status != MV_OK) 
    return(status);
 
+  mvOsDelay(40);
+
   status  = asicOntMiscRegWrite(mvAsicReg_PON_MAC_GPON_CLK_EN, 0x0, 0); 
   if (status != MV_OK) 
    return(status);
+
+  mvOsDelay(40);
+
+  /* PON MAC init to GPON mode */
+  /* ========================= */
 
   /* Put PON MAC to Reset */
   status = asicOntMiscRegWrite(mvAsicReg_PON_MAC_SW_RESET_CTRL, 0x0, 0); 
   if (status != MV_OK) 
     return(status);
 
+  mvOsDelay(40);
+
   /* Switch to new PON MAC */
-  status = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_XPON_CTRL, 1, 0); 
-  if (status != MV_OK) 
+  status = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_XPON_CTRL, 0, 0);
+  if (status != MV_OK)
     return(status);
+
+  mvOsDelay(40);
+
+  status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_CLK_SEL, 0x0, 0);
+  if (status != MV_OK)
+    return(status);
+
+  mvOsDelay(40);
+
+  status  = asicOntMiscRegWrite(mvAsicReg_PON_MAC_GPON_CLK_EN, 0x1, 0);
+  if (status != MV_OK)
+   return(status);
+
+  mvOsDelay(40);
+
+  status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_CLK_EN, 0x1, 0);
+  if (status != MV_OK)
+    return(status);
+
+  mvOsDelay(40);
+
+  /* Take PON MAC out of Reset */
+  status = asicOntMiscRegWrite(mvAsicReg_PON_MAC_SW_RESET_CTRL, 0x1, 0);
+  if (status != MV_OK)
+    return(status);
+
+  mvOsDelay(40);
+
+  /* PON MAC init to EPON mode */
+  /* ========================= */
+
+  /* Put PON MAC to Reset */
+  status = asicOntMiscRegWrite(mvAsicReg_PON_MAC_SW_RESET_CTRL, 0x0, 0);
+  if (status != MV_OK)
+    return(status);
+
+  mvOsDelay(40);
+
+  /* Switch to new PON MAC */
+  status = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_XPON_CTRL, 1, 0);
+  if (status != MV_OK)
+    return(status);
+
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_CLK_SEL, 0x0, 0); 
   if (status != MV_OK) 
     return(status);
 
+  mvOsDelay(40);
+
   status  = asicOntMiscRegWrite(mvAsicReg_PON_MAC_GPON_CLK_EN, 0x1, 0); 
   if (status != MV_OK) 
    return(status);
 
+  mvOsDelay(40);
+
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_CLK_EN, 0x1, 0); 
   if (status != MV_OK) 
     return(status);
+
+  mvOsDelay(40);
 
   /* Take PON MAC out of Reset */
   status = asicOntMiscRegWrite(mvAsicReg_PON_MAC_SW_RESET_CTRL, 0x1, 0); 
   if (status != MV_OK) 
     return(status);
 
+  mvOsDelay(40);
 
   /*    EPON configuration of XVR SD is done by LSP code (mvBoardEnvSpec.h, mvCtrlEnvLib.c) */
 
@@ -346,31 +408,31 @@ MV_STATUS onuEponSerdesInit(void)
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_INTERNAL_OPEN_TX_DOOR, 0x0, 0);  
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_CLK_EN, 0x0, 0); 
   if (status != MV_OK) 
       return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_CLK_SEL, 0x1, 0); 
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
   status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_CLK_EN, 0x1, 0); 
   if (status != MV_OK) 
     return(status);
 
-  mvOsDelay(10);
+  mvOsDelay(40);
 
  // status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, 0x0, 0); 
  // if (status != MV_OK) 

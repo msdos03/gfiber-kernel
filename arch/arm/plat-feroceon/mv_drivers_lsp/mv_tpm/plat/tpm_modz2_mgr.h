@@ -112,11 +112,14 @@ extern "C" {
 #define TPM_MOD2_DEFAULT_ETY                (0x8100)
 #define TPM_MOD2_DEFAULT_PPPOE_ETY          (0x8864)
 #define TPM_MOD2_DEFAULT_PPPOE_DATA         (0x1100)
-#define TPM_MOD2_DEFAULT_PPPOE_LEN          (0x7000)
+#define TPM_MOD2_DEFAULT_PPPOE_LEN_MH_EN    (0x7000)
+#define TPM_MOD2_DEFAULT_PPPOE_LEN_MH_DIS   (0x7202)
 #define TPM_MOD2_DEFAULT_PPPOE_PROTO        (0x0021)
 
 /* Self-defined Ethernet type for CPU loopback frames*/
 #define TPM_MOD2_CPU_LOOPBACK_ETY           (0xAABB)
+/* Self-defined Marvell header for MAC learning frames on Media Convert*/
+#define TPM_MOD2_MAC_LEARN_MH               (0xAACC)
 
 /* Max number of modification entries per command */
 #define TPM_MOD2_MAX_CMD_ENTRIES            (5)
@@ -287,7 +290,7 @@ int32_t    tpm_mod2_print_config (tpm_gmacs_enum_t   gmac_port);
 int32_t    tpm_mod2_init(void);
 int32_t tpm_mod2_split_mod_init(tpm_gmacs_enum_t port);
 int32_t tpm_mod2_split_mod_create_l2_pmts(tpm_gmacs_enum_t port, tpm_pkt_mod_t *mod_data, bool init_flag);
-int32_t tpm_mod2_split_mod_try_pmt_entry_del(tpm_api_sections_t api_section, 
+int32_t tpm_mod2_split_mod_try_pmt_entry_del(tpm_api_sections_t api_section,
                                   tpm_gmacs_enum_t     gmac_port,
                                   uint32_t             mod_entry);
 

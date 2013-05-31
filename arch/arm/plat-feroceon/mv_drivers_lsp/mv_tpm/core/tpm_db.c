@@ -109,6 +109,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* TODO - change to static variable after updating print functions */
 tpm_db_t tpm_db;
+tpm_db_hot_swap_bak_db_t hot_swap_bak_db;
 
 static uint32_t mem_alloc_start_ind;
 
@@ -154,6 +155,8 @@ uint8_t tpm_db_mc_virt_uni_entry_state_table[TPM_MC_MAX_STREAM_NUM];
 
 uint8_t tpm_db_mc_igmp_proxy_sa_mac[6];
 uint8_t tpm_db_mc_igmp_proxy_sa_mac_valid;
+
+static uint32_t tpm_db_global_rule_idx = 1000;
 
 /* Function Declarations */
 int32_t tpm_db_api_freeentry_get(tpm_api_sections_t api_section, int32_t *index);
@@ -277,6 +280,19 @@ int32_t tpm_db_eth_port_switch_port_get(tpm_src_port_type_t src_port)
 	}
 	return (TPM_DB_ERR_PORT_NUM);
 }
+uint32_t tpm_db_rule_index_get(void)
+{
+	return tpm_db_global_rule_idx;
+}
+int32_t tpm_db_rule_index_set(uint32_t rule_index)
+{
+	tpm_db_global_rule_idx = rule_index;
+	return TPM_DB_OK;
+}
+void tpm_db_rule_index_incrs(void)
+{
+	tpm_db_global_rule_idx++;
+}
 bool tpm_db_gmac1_lpbk_en_get(void)
 {
 	return tpm_db.func_profile.gmac1_loopback_en;
@@ -292,6 +308,22 @@ bool tpm_db_cpu_wan_lpbk_en_get(void)
 void tpm_db_cpu_wan_lpbk_en_set(bool en)
 {
 	tpm_db.func_profile.cpu_wan_loopback_en = en;
+}
+bool tpm_db_ds_load_bal_en_get(void)
+{
+	return tpm_db.func_profile.ds_load_bal_en;
+}
+void tpm_db_ds_load_bal_en_set(bool en)
+{
+	tpm_db.func_profile.ds_load_bal_en = en;
+}
+bool tpm_db_switch_active_wan_en_get(void)
+{
+	return tpm_db.func_profile.switch_active_wan_en;
+}
+void tpm_db_switch_active_wan_en_set(bool en)
+{
+	tpm_db.func_profile.switch_active_wan_en = en;
 }
 
 int32_t tpm_db_get_valid_uni_ports_num(uint32_t *num_ports)
@@ -406,6 +438,7 @@ int32_t tpm_db_mac_func_set(void)
 			   gmac0 = 0,
 			   gmac1 = 0;
 	int32_t ret_code;
+	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
 
 	switch(tpm_db.eth_cmplx_profile)
 	{
@@ -456,7 +489,7 @@ int32_t tpm_db_mac_func_set(void)
 		break;
 
 	case TPM_PON_G1_WAN_G0_INT_SWITCH:
-       	if (TPM_ENUM_PMAC == tpm_db.init_misc.backup_wan) {
+       		if (TPM_ENUM_GMAC_1 == tpm_db.init_misc.active_wan) {
 			pon = TPM_GMAC_FUNC_NONE;
 			gmac1 = TPM_GMAC_FUNC_WAN;
 		}else{
@@ -467,7 +500,7 @@ int32_t tpm_db_mac_func_set(void)
 		break;
 
 	case TPM_PON_G1_WAN_G0_SINGLE_PORT:
-       	if (TPM_ENUM_PMAC == tpm_db.init_misc.backup_wan) {
+       		if (TPM_ENUM_GMAC_1 == tpm_db.init_misc.active_wan) {
 			pon = TPM_GMAC_FUNC_NONE;
 			gmac1 = TPM_GMAC_FUNC_WAN;
 		}else{
@@ -478,7 +511,7 @@ int32_t tpm_db_mac_func_set(void)
 		break;
 
 	case TPM_PON_G0_WAN_G1_INT_SWITCH:
-       	if (TPM_ENUM_PMAC == tpm_db.init_misc.backup_wan) {
+       		if (TPM_ENUM_GMAC_0 == tpm_db.init_misc.active_wan) {
 			pon = TPM_GMAC_FUNC_NONE;
 			gmac0 = TPM_GMAC_FUNC_WAN;
 		}else{
@@ -489,7 +522,7 @@ int32_t tpm_db_mac_func_set(void)
 		break;
 
 	case TPM_PON_G0_WAN_G1_SINGLE_PORT:
-		if (TPM_ENUM_PMAC == tpm_db.init_misc.backup_wan) {
+		if (TPM_ENUM_GMAC_0 == tpm_db.init_misc.active_wan) {
 			pon = TPM_GMAC_FUNC_NONE;
 			gmac0 = TPM_GMAC_FUNC_WAN;
 		}else{
@@ -508,10 +541,20 @@ int32_t tpm_db_mac_func_set(void)
 
 	case TPM_PON_WAN_G0_G1_LPBK:
 		pon = TPM_GMAC_FUNC_WAN;
-		gmac0 = TPM_GMAC_FUNC_LAN_UNI;
+		gmac0 = TPM_GMAC_FUNC_US_MAC_LEARN_DS_LAN_UNI;
 		gmac1 = TPM_GMAC_FUNC_LAN;
 		break;
+	case TPM_PON_WAN_G0_G1_DUAL_LAN:
+		pon = TPM_GMAC_FUNC_WAN;
+		gmac0 = TPM_GMAC_FUNC_LAN_UNI;
+		gmac1 = TPM_GMAC_FUNC_LAN_UNI;
+		break;
 	}
+
+	/* when ds load balance on G0 and G1 is enabled, G0/1 are both LAN */
+	tpm_db_ds_mac_based_trunk_enable_get(&ds_mac_based_trunk_enable);
+	if (TPM_DS_MAC_BASED_TRUNK_ENABLED == ds_mac_based_trunk_enable)
+		gmac1 = TPM_GMAC_FUNC_LAN;
 
 	ret_code = tpm_db_gmac_func_set(TPM_ENUM_PMAC, pon);
 	IF_ERROR(ret_code);
@@ -549,6 +592,7 @@ int32_t tpm_db_eth_max_uni_port_set(void)
 
 	case TPM_PON_G0_WAN_G1_SINGLE_PORT:
 	case TPM_PON_G1_WAN_G0_SINGLE_PORT:
+	case TPM_PON_WAN_G0_G1_DUAL_LAN:
 		tpm_db.max_uni_port_nr = TPM_SRC_PORT_UNI_1;
        	break;
 
@@ -585,8 +629,8 @@ tpm_src_port_type_t tpm_db_trg_port_uni_any_bmp_get(bool inc_virt_uni)
 	uint32_t dst_port, trg_port_uni_any_bmp = 0;
 	tpm_src_port_type_t src_port;
 
-	for (dst_port = TPM_TRG_UNI_0, src_port = TPM_SRC_PORT_UNI_0; 
-	     dst_port <= TPM_TRG_UNI_7; 
+	for (dst_port = TPM_TRG_UNI_0, src_port = TPM_SRC_PORT_UNI_0;
+	     dst_port <= TPM_TRG_UNI_7;
 	     dst_port = (dst_port << 1), src_port += 1) {
 
 		/* if port is valid */
@@ -607,6 +651,21 @@ bool tpm_db_gmac_valid(tpm_gmacs_enum_t gmac)
 	    return true;
 
 	return false;
+}
+
+int32_t tpm_db_target_to_gmac(tpm_pnc_trg_t pnc_target, tpm_gmacs_enum_t *gmac)
+{
+	if (TPM_PNC_TRG_GMAC0 == pnc_target)
+		*gmac = TPM_ENUM_GMAC_0;
+	else if (TPM_PNC_TRG_GMAC1 == pnc_target)
+		*gmac = TPM_ENUM_GMAC_1;
+	else if (TPM_PNC_TRG_CPU == pnc_target) {
+		TPM_OS_ERROR(TPM_DB_MOD, "target to CPU, no GMAC valid\n");
+		return TPM_DB_ERR_INV_INPUT;
+	} else
+		*gmac = TPM_ENUM_PMAC;
+
+	return TPM_DB_OK;
 }
 
 /*******************************************************************************
@@ -646,8 +705,10 @@ int32_t tpm_db_to_lan_gmac_get(tpm_trg_port_type_t trg_port, tpm_pnc_trg_t *pnc_
 					continue;
 			if (!tpm_db_gmac1_lpbk_en_get()) {
 				if (TPM_GMAC_FUNC_LAN == tpm_db.gmac_func[i]      ||
-				    TPM_GMAC_FUNC_LAN_UNI == tpm_db.gmac_func[i])
+				    TPM_GMAC_FUNC_LAN_UNI == tpm_db.gmac_func[i]) {
 					gmac_vec |= (TPM_ENUM_GMAC_0 == i) ? TPM_PNC_TRG_GMAC0 : TPM_PNC_TRG_GMAC1;
+					break;/* target only one, no others */
+				}
 			} else {
 				gmac_vec |= TPM_PNC_TRG_GMAC0;
 				break;
@@ -951,6 +1012,31 @@ int32_t tpm_db_gmac_conn_conf_set(tpm_init_gmac_conn_conf_t *gmac_port_conf, uin
 		tpm_db.gmac_port_conf[i].conn = gmac_port_conf[i].conn;
 		tpm_db.gmac_port_conf[i].valid = gmac_port_conf[i].valid;
 	}
+	return (TPM_DB_OK);
+}
+
+/*******************************************************************************
+* tpm_db_gmac_conn_conf_get()
+*
+* DESCRIPTION:      Function to get GMAC connection information from DB
+*
+* INPUTS:
+* gmac                   - GMAC port
+*
+* OUTPUTS:
+* gmac_port_conf         - connection info
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK.
+*
+*******************************************************************************/
+int32_t tpm_db_gmac_conn_conf_get(tpm_gmacs_enum_t gmac, tpm_init_gmac_conn_conf_t *gmac_port_conf)
+{
+	if (NULL == gmac_port_conf)
+		return (TPM_DB_ERR_INV_INPUT);
+
+	memcpy(gmac_port_conf, &tpm_db.gmac_port_conf[gmac], sizeof(tpm_init_gmac_conn_conf_t));
+
 	return (TPM_DB_OK);
 }
 
@@ -1299,7 +1385,7 @@ int32_t tpm_db_gmac_rx_q_conf_set(tpm_gmacs_enum_t gmac, uint32_t queue_num, uin
 {
 	if ((gmac >= TPM_MAX_NUM_GMACS) || (queue_num >= TPM_MAX_NUM_RX_QUEUE))
 		return (TPM_DB_ERR_INV_INPUT);
-		
+
 	tpm_db.gmac_rx[gmac].rx_queue[queue_num].queue_size = queue_size;
 	tpm_db.gmac_rx[gmac].rx_queue[queue_num].valid = TPM_DB_VALID;
 
@@ -1456,10 +1542,10 @@ uint32_t tpm_db_gmac_tx_val_get(tpm_db_tx_mod_t tx_mod)
 /*******************************************************************************
 * tpm_db_gmac_lpk_queue_get()
 *
-* DESCRIPTION:      Function to get the queue id used to do gmac loopback on MC
-*
+* DESCRIPTION:      Function to get the queue id used to do gmac loopback on MC, min queue id for data traffic,
+*                   max queue id for MAC learning
 * INPUTS:
-*	None
+* queue_type     - queue type for GMAC1 loopback, for data traffic or for MAC learning
 * OUTPUTS:
 * gmac           - gmac on which loopback is done
 * queue_idx      - queue index which do loopback
@@ -1467,12 +1553,15 @@ uint32_t tpm_db_gmac_tx_val_get(tpm_db_tx_mod_t tx_mod)
 * On success, the function returns TPM_DB_OK. On error different types are returned
 * according to the case - see tpm_db_err_t.
 *******************************************************************************/
-uint32_t tpm_db_gmac_lpk_queue_get(tpm_gmacs_enum_t *gmac, uint32_t *queue_idx)
+uint32_t tpm_db_gmac_lpk_queue_get(tpm_gmacs_enum_t *gmac,
+				   uint32_t *queue_idx,
+				   tpm_db_gmac1_lpk_queue_type_t queue_type)
 {
 	uint32_t queue_id, q_valid, gmac_id;
 	tpm_db_txq_owner_t queue_owner, lpk_queue_owner = TPM_Q_OWNER_GMAC0;
 	tpm_db_gmac_func_t lpk_gmac_func;
 	tpm_db_tx_mod_t tx_mod;
+	uint32_t q_expected = TPM_MAX_NUM_TX_QUEUE;
 
 	/*check input parameters*/
 	if (NULL == gmac || NULL == queue_idx) {
@@ -1509,20 +1598,24 @@ uint32_t tpm_db_gmac_lpk_queue_get(tpm_gmacs_enum_t *gmac, uint32_t *queue_idx)
 		if (TPM_DB_OK != tpm_db_gmac_tx_q_conf_get(tx_mod, queue_id, &q_valid, NULL,
 							   &queue_owner, NULL, NULL, NULL))
 			continue;
-		if (q_valid == TPM_TRUE && queue_owner == lpk_queue_owner)
-					break;
+		if (q_valid == TPM_TRUE && queue_owner == lpk_queue_owner) {
+			q_expected = queue_id;
+			if (TPM_GMAC1_QUEUE_DATA_TRAFFIC == queue_type)
+				break;
+			else if (TPM_GMAC1_QUEUE_MAC_LEARN_TRAFFIC == queue_type)
+				continue;
+		}
 	}
-	if (queue_id >= TPM_MAX_NUM_TX_QUEUE) {
-		TPM_OS_ERROR(TPM_DB_MOD, "Invalid Tx queue %d of GMAC1 assigned to GMAC0 \n", queue_id);
+	if (q_expected >= TPM_MAX_NUM_TX_QUEUE) {
+		TPM_OS_ERROR(TPM_DB_MOD, "Invalid Tx queue %d of GMAC1 assigned to GMAC0 \n", q_expected);
 		return ERR_SW_TM_QUEUE_INVALID;
 	}
 
 	*gmac = gmac_id;
-	*queue_idx = queue_id;
+	*queue_idx = q_expected;
 
 	return (TPM_DB_OK);
 }
-
 
 /*******************************************************************************
 * tpm_db_pnc_rng_create()
@@ -1849,6 +1942,9 @@ int32_t tpm_db_api_section_get_from_api_type(tpm_api_type_t api_type, tpm_api_se
 	case TPM_API_CPU_LOOPBACK:
 		*api_section = TPM_CPU_LOOPBACK_ACL;
 		break;
+	case TPM_API_DS_LOAD_BALANCE:
+		*api_section = TPM_DS_LOAD_BALANCE_ACL;
+		break;
 	case TPM_API_L2_PRIM:
 		*api_section = TPM_L2_PRIM_ACL;
 		break;
@@ -1899,6 +1995,9 @@ int32_t tpm_db_api_type_get_from_api_section(tpm_api_sections_t api_section, tpm
 		break;
 	case TPM_CPU_LOOPBACK_ACL:
 		*api_type = TPM_API_CPU_LOOPBACK;
+		break;
+	case TPM_DS_LOAD_BALANCE_ACL:
+		*api_type = TPM_API_DS_LOAD_BALANCE;
 		break;
 	case TPM_L2_PRIM_ACL:
 		*api_type = TPM_API_L2_PRIM;
@@ -2477,6 +2576,53 @@ int32_t tpm_db_igmp_get_cpu_queue(uint32_t *queue)
 	return (TPM_DB_OK);
 }
 
+
+/*******************************************************************************
+* tpm_db_igmp_set_snoop_enable()
+*
+* DESCRIPTION:      Set IGMP snoop enable
+*
+* INPUTS:
+* igmp_snoop_enable       - IGMP snoop enable
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_igmp_set_snoop_enable(uint32_t igmp_snoop_enable)
+{
+	tpm_db.igmp_def.igmp_snoop_enable = igmp_snoop_enable;
+	return (TPM_DB_OK);
+}
+
+/*******************************************************************************
+* tpm_db_igmp_get_snoop_enable()
+*
+* DESCRIPTION:      Get IGMP snoop enable
+*
+* INPUTS:
+*
+* OUTPUTS:
+* igmp_snoop_enable       - IGMP snoop enable
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_igmp_get_snoop_enable(uint32_t *igmp_snoop_enable)
+{
+	*igmp_snoop_enable = tpm_db.igmp_def.igmp_snoop_enable;
+	return (TPM_DB_OK);
+}
+
 /*******************************************************************************
 * tpm_db_omci_type_set()
 *
@@ -2897,7 +3043,7 @@ int32_t tpm_db_pon_type_get(tpm_db_pon_type_t *pon_type)
 }
 
 /*******************************************************************************
-* tpm_db_backup_wan_set()
+* tpm_db_active_wan_set()
 *
 * DESCRIPTION:      Set WAN technology
 *
@@ -2912,14 +3058,14 @@ int32_t tpm_db_pon_type_get(tpm_db_pon_type_t *pon_type)
 * COMMENTS:
 *
 *******************************************************************************/
-int32_t tpm_db_backup_wan_set(tpm_gmacs_enum_t backup_wan)
+int32_t tpm_db_active_wan_set(tpm_gmacs_enum_t active_wan)
 {
-	tpm_db.init_misc.backup_wan = backup_wan;
+	tpm_db.init_misc.active_wan = active_wan;
 	return (TPM_DB_OK);
 }
 
 /*******************************************************************************
-* tpm_db_backup_wan_get()
+* tpm_db_active_wan_get()
 *
 * DESCRIPTION:      Set WAN technology
 *
@@ -2934,36 +3080,9 @@ int32_t tpm_db_backup_wan_set(tpm_gmacs_enum_t backup_wan)
 * COMMENTS:
 *
 *******************************************************************************/
-int32_t tpm_db_backup_wan_get(tpm_gmacs_enum_t *backup_wan)
-{
-	*backup_wan = tpm_db.init_misc.backup_wan;
-	return (TPM_DB_OK);
-}
-
 tpm_gmacs_enum_t tpm_db_active_wan_get()
 {
-	switch (tpm_db.eth_cmplx_profile) {
-	case TPM_PON_G1_WAN_G0_INT_SWITCH:
-		return (tpm_db.init_misc.backup_wan == TPM_ENUM_PMAC) ? TPM_ENUM_GMAC_1 : TPM_ENUM_PMAC;
-
-	case TPM_PON_G0_WAN_G1_INT_SWITCH:
-		return (tpm_db.init_misc.backup_wan == TPM_ENUM_PMAC) ? TPM_ENUM_GMAC_0 : TPM_ENUM_PMAC;
-
-	case TPM_PON_G0_WAN_G1_SINGLE_PORT:
-		return (tpm_db.init_misc.backup_wan == TPM_ENUM_PMAC) ? TPM_ENUM_GMAC_0 : TPM_ENUM_PMAC;
-
-	case TPM_PON_G1_WAN_G0_SINGLE_PORT:
-		return (tpm_db.init_misc.backup_wan == TPM_ENUM_PMAC) ? TPM_ENUM_GMAC_1 : TPM_ENUM_PMAC;
-
-	case TPM_G0_WAN_G1_INT_SWITCH:
-		return TPM_ENUM_GMAC_0;
-
-	case TPM_G1_WAN_G0_INT_SWITCH:
-		return TPM_ENUM_GMAC_1;
-
-	default:
-		return TPM_ENUM_PMAC;
-	}
+	return tpm_db.init_misc.active_wan;
 }
 
 /*******************************************************************************
@@ -4214,10 +4333,10 @@ int32_t tpm_db_api_entry_set(tpm_api_sections_t api_section,
 			     tpm_db_mod_conn_t *mod_con, tpm_db_pnc_conn_t *pnc_con, uint32_t *rule_idx)
 {
 	int32_t ind;
-	static uint32_t l_rule_idx = 1000;
 	tpm_pnc_ranges_t range_id = 0;
 	tpm_db_pnc_range_conf_t rangConf;
 	int32_t ret_code;
+	uint32_t l_rule_idx;
 
 	TPM_OS_DEBUG(TPM_DB_MOD, " api_section(%d), - rule_num(%d)\n", api_section, rule_num);
 
@@ -4240,6 +4359,7 @@ int32_t tpm_db_api_entry_set(tpm_api_sections_t api_section,
 	memcpy(&(API_ENT_I(api_section, ind).pnc_tbl_conn), pnc_con, sizeof(tpm_db_pnc_conn_t));
 
 	API_ENT_I(api_section, ind).bi_dir = bi_dir;
+	l_rule_idx = tpm_db_rule_index_get();
 	if (TPM_RANGE_TYPE_ACL == rangConf.range_type)
 		API_ENT_I(api_section, ind).rule_idx = l_rule_idx;
 	else
@@ -4262,7 +4382,7 @@ int32_t tpm_db_api_entry_set(tpm_api_sections_t api_section,
 
 	if (TPM_RANGE_TYPE_ACL == rangConf.range_type) {
 		*rule_idx = l_rule_idx;
-		l_rule_idx++;
+		tpm_db_rule_index_incrs();
 	} else
 		*rule_idx = rule_num;
 
@@ -4671,6 +4791,34 @@ int32_t tpm_db_api_tcam_num_get(tpm_api_sections_t api_section, uint32_t rule_id
 	/* Get TCAM number, always return the first TCAM number even there are multiple  */
 	/* TCAM entries to one rule index                                                */
 	*tcam_num = pnc_con.pnc_conn_tbl[0].pnc_index;
+
+	return (TPM_DB_OK);
+}
+
+int32_t tpm_db_api_entry_update_rule_idx(tpm_api_sections_t api_section,
+			     			uint32_t rule_idx_pre,
+			     			uint32_t rule_idx_new)
+{
+	int32_t ind;
+	int32_t ret_code;
+	uint32_t rule_num = 0;
+
+	TPM_OS_DEBUG(TPM_DB_MOD, " api_section(%d), - rule_num(%d)\n", api_section, rule_num);
+
+	/* Get the rule_num */
+	ret_code = tpm_db_api_rulenum_get(api_section, rule_idx_pre, &rule_num);
+	if (ret_code == TPM_DB_ERR_REC_NOT_EXIST) {
+		TPM_OS_ERROR(TPM_DB_MOD, " The rule non-exist!\n");
+		return ERR_RULE_IDX_INVALID;
+	}
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "with rule_num(%d)\n", rule_num);
+
+	tpm_db_api_entry_ind_get(api_section, rule_num, &ind);
+	if (ind == -1)
+		return (TPM_DB_ERR_REC_NOT_EXIST);
+
+	/* update rule_index */
+	API_ENT_I(api_section, ind).rule_idx = rule_idx_new;
 
 	return (TPM_DB_OK);
 }
@@ -5514,7 +5662,7 @@ int32_t tpm_db_increase_mc_mac_port_user_num(uint8_t *mac_addr, uint32_t uni_por
 {
 	uint32_t entry_id, first_free = TPM_MC_MAX_MAC_NUM;
 	uint32_t port_nr;
-	
+
 	for (entry_id = 0; entry_id < TPM_MC_MAX_MAC_NUM; entry_id++) {
 		if (tpm_db_mc_mac_table[entry_id] != NULL) {
 			if (!memcmp(tpm_db_mc_mac_table[entry_id]->mac_addr, mac_addr, 6 * sizeof(uint8_t)))
@@ -5616,12 +5764,12 @@ uint8_t tpm_db_get_mc_mac_port_user_num(uint8_t *mac_addr, uint32_t uni_port)
 	default:
 		return 0;
 	}
-	
+
 	if (TRG_UNI(uni_port)) {
 		if (port_nr < TPM_MAX_NUM_UNI_PORTS)
 			return tpm_db_mc_mac_table[entry_id]->user_num[port_nr];
 	}
-	
+
 	return 0;
 }
 
@@ -5910,7 +6058,7 @@ void tpm_db_mc_rule_reset(void)
 
 	/* reset IPv6 MC rule */
 	memset(tpm_db.ipv6_mc_stream, 0, sizeof(tpm_db.ipv6_mc_stream));
-	
+
 }
 int32_t tpm_db_mc_vlan_get_ai_bit_by_vid(uint32_t mc_vlan, uint32_t *ai_bit)
 {
@@ -6550,7 +6698,7 @@ int32_t tpm_db_mod2_del_jump_entry(tpm_gmacs_enum_t gmac_port, uint16_t entry_id
 	if (tpm_db_mod2_jump_split_mod_all_entry_bm[gmac_port][i] & mask) {
 		/* this is a split mod pmt entry */
 		tpm_db_mod2_jump_split_mod_occupied_entry_bm[gmac_port][i] &= ~mask;
-	} 
+	}
 	else {
 		tpm_db_mod2_jump_occupied_entry_bm[gmac_port][i] &= ~mask;
 	}
@@ -7257,7 +7405,7 @@ uint32_t tpm_db_mod2_split_mod_get_vlan_num_in_use(tpm_gmacs_enum_t gmac_port)
 
 	for (i = 0; i < TPM_DB_SPLIT_MOD_NUM_VLANS_MAX; i++) {
 		if (tpm_db.split_mod_conf.gmac_vlan_conf[gmac_port].split_mod_vlan[i].valid)
-			vlan_num++; 
+			vlan_num++;
 	}
 
 	return vlan_num;
@@ -7289,7 +7437,7 @@ uint16_t tpm_db_mod2_get_next_split_mod_free_jump_entry(tpm_gmacs_enum_t gmac_po
 		vlan_out = &mod_data->vlan_mod.vlan2_out;
 	else
 		vlan_out = &mod_data->vlan_mod.vlan1_out;
-	
+
 	if (0 == vlan_out->pbit_mask)
 		/* pbit AS_IS */
 		pbit_index = 0;
@@ -7298,9 +7446,9 @@ uint16_t tpm_db_mod2_get_next_split_mod_free_jump_entry(tpm_gmacs_enum_t gmac_po
 		if (next_free != 1)
 			pbit_index++;
 	}
-	
+
 	next_free += pbit_index;
-	
+
 	if (next_free != TPM_MOD2_NULL_ENT_IDX) {
 		tpm_db_mod2_jump_pmt_info[gmac_port][next_free].status = TPM_MOD_ENTRY_BOOKED;
 
@@ -7325,17 +7473,17 @@ int32_t tpm_db_mod2_split_mod_insert_vlan(tpm_gmacs_enum_t port, tpm_pkt_mod_t *
 		TPM_OS_ERROR(TPM_DB_MOD, "already has %d num_vlans\n", vlan_num - TPM_DB_SPLIT_MOD_INIT_VLANS_NUM);
 		return TPM_DB_ERR_DB_TBL_FULL;
 	}
-	
+
 	for (i = 0; i < TPM_DB_SPLIT_MOD_NUM_VLANS_MAX; i++) {
-		if (tpm_db.split_mod_conf.gmac_vlan_conf[port].split_mod_vlan[i].valid) 
+		if (tpm_db.split_mod_conf.gmac_vlan_conf[port].split_mod_vlan[i].valid)
 			continue;
 
 		//here finds a spot
 		tpm_db.split_mod_conf.gmac_vlan_conf[port].split_mod_vlan[i].valid = 1;
-		
+
 		if (mod_data->vlan_mod.vlan1_out.vid_mask)
 			tpm_db.split_mod_conf.gmac_vlan_conf[port].split_mod_vlan[i].vlan_1 = mod_data->vlan_mod.vlan1_out.vid;
-		
+
 		if (mod_data->vlan_mod.vlan2_out.vid_mask)
 			tpm_db.split_mod_conf.gmac_vlan_conf[port].split_mod_vlan[i].vlan_2 = mod_data->vlan_mod.vlan2_out.vid;
 
@@ -7356,11 +7504,11 @@ int32_t tpm_db_mod2_split_mod_insert_vlan(tpm_gmacs_enum_t port, tpm_pkt_mod_t *
 int32_t tpm_db_mod2_split_mod_get_vlan_index(tpm_gmacs_enum_t port, tpm_pkt_mod_t *mod_data, uint32_t *index)
 {
 	uint32_t i;
-	//printk("input: port: %d, vlan_op: %d, vlan1: %d(%d), vlan2: %d(%d)\n", 
+	//printk("input: port: %d, vlan_op: %d, vlan1: %d(%d), vlan2: %d(%d)\n",
 		//port, mod_data->vlan_mod.vlan_op, mod_data->vlan_mod.vlan1_out.vid, mod_data->vlan_mod.vlan1_out.vid_mask,
 		//mod_data->vlan_mod.vlan2_out.vid, mod_data->vlan_mod.vlan2_out.vid_mask);
 	for (i = 0; i < TPM_DB_SPLIT_MOD_NUM_VLANS_MAX; i++) {
-		//printk("output: port: %d, vlan_op: %d, vlan1: %d, vlan2: %d\n", 
+		//printk("output: port: %d, vlan_op: %d, vlan1: %d, vlan2: %d\n",
 			//tpm_db.split_mod_conf.gmac_vlan_conf[i].gmac_port, tpm_db.split_mod_conf.gmac_vlan_conf[i].vlan_op,
 			//tpm_db.split_mod_conf.gmac_vlan_conf[i].vlan_1, tpm_db.split_mod_conf.gmac_vlan_conf[i].vlan_2);
 		if (!tpm_db.split_mod_conf.gmac_vlan_conf[port].split_mod_vlan[i].valid)
@@ -7424,7 +7572,7 @@ int32_t tpm_db_mod2_split_mod_increase_vlan_user_num(tpm_gmacs_enum_t port, tpm_
 	return TPM_DB_OK;
 }
 
-int32_t tpm_db_mod2_split_mod_decrease_vlan_user_num(tpm_gmacs_enum_t port, 
+int32_t tpm_db_mod2_split_mod_decrease_vlan_user_num(tpm_gmacs_enum_t port,
 						     uint32_t       vlan_index,
 						     uint32_t      *user_num)
 {
@@ -7432,12 +7580,12 @@ int32_t tpm_db_mod2_split_mod_decrease_vlan_user_num(tpm_gmacs_enum_t port,
 		TPM_OS_ERROR(TPM_DB_MOD, "Invalid port: %d\n", port);
 		return TPM_DB_ERR_INV_INPUT;
 	}
-	
+
 	if (vlan_index >= TPM_DB_SPLIT_MOD_NUM_VLANS_MAX) {
 		TPM_OS_ERROR(TPM_DB_MOD, "Invalid vlan_index: %d\n", vlan_index);
 		return TPM_DB_ERR_INV_INPUT;
 	}
-	
+
 	if (!tpm_db.split_mod_conf.gmac_vlan_conf[port].split_mod_vlan[vlan_index].valid) {
 		TPM_OS_ERROR(TPM_DB_MOD, "Invalid vlan entry: %d\n", vlan_index);
 		return TPM_DB_ERR_INV_INPUT;
@@ -7755,7 +7903,7 @@ int32_t tpm_db_mod2_validate_chain_config(void)
 		split_jump_entries = 16 * 2/*init added*/ +
 					(split_vlan_num - 1) * 16/*internal VLAN*/ +
 					split_pbit_num + 1/*last VLAN*/;
-		split_jump_free_entries = 2 * (15 - split_pbit_num)/*init occupy*/ + 
+		split_jump_free_entries = 2 * (15 - split_pbit_num)/*init occupy*/ +
 					(split_vlan_num - 1) * (16 - split_pbit_num - 1)/*internal VLAN*/;
 	}
 
@@ -7955,7 +8103,7 @@ int32_t tpm_db_mod2_setup_jump_area(tpm_gmacs_enum_t port)
 		}
 		memset(tpm_db_mod2_jump_occupied_entry_bm[port], 0, bm_size);
 		tpm_db_mod2_jump_occupied_entry_bm[port][0] |= 0x1;
-		
+
 		if (tpm_db_mod2_jump_split_mod_occupied_entry_bm[port] != NULL) {
 			vfree(tpm_db_mod2_jump_split_mod_occupied_entry_bm[port]);
 			tpm_db_mod2_jump_split_mod_occupied_entry_bm[port] = NULL;
@@ -7986,11 +8134,11 @@ int32_t tpm_db_mod2_setup_jump_area(tpm_gmacs_enum_t port)
 		TPM_OS_DEBUG(TPM_MODZ2_HM_MOD, "SPLIT_MOD_DISABLED\n");
 		return(TPM_OK);
 	}
-	
+
 	vlan_nums = tpm_db_split_mod_get_num_vlans();
 	p_bits_nums = TPM_DB_SPLIT_MOD_P_BIT_NUM_MAX;
 
-	
+
 	tpm_db_mod2_jump_area_cfg.next_free[port] = p_bits_nums + 1;
 	//tpm_db_mod2_jump_area_cfg.next_split[port] = 16;
 
@@ -9156,7 +9304,7 @@ int32_t tpm_db_del_ipv6_dip_key(uint32_t key_id)
 	if (key_array[key_id].valid == TPM_FALSE)
 		return TPM_DB_ERR_REC_STATUS_ERR;
 
-	user_num = tpm_db_get_ipv6_gen_key_user_num(key_id);
+	user_num = tpm_db_get_ipv6_dip_key_user_num(key_id);
 
 	if (user_num == 0)
 		memset(&key_array[key_id], 0, sizeof(tpm_db_ipv6_dip_key_t));
@@ -10262,9 +10410,41 @@ int32_t tpm_db_del_ipv4_pre_filter_key(tpm_src_port_type_t src_port, uint32_t ke
 }
 
 int32_t tpm_db_set_gmac_rate_limit(tpm_db_tx_mod_t gmac_i,
+				   uint32_t bucket_size,
+				   uint32_t rate_limit,
+				   uint32_t prio)
+{
+	/*check param*/
+	if (gmac_i >= TPM_MAX_NUM_TX_PORTS)
+		return (TPM_DB_ERR_INV_INPUT);
+
+	tpm_db.gmac_tx[gmac_i].bucket_size = bucket_size;
+	tpm_db.gmac_tx[gmac_i].rate_limit = rate_limit;
+	tpm_db.gmac_tx[gmac_i].prio = prio;
+
+	return TPM_DB_OK;
+}
+
+int32_t tpm_db_get_gmac_rate_limit(tpm_gmacs_enum_t gmac_i,
+				   uint32_t *bucket_size,
+				   uint32_t *rate_limit,
+				   uint32_t *prio)
+{
+	/*check param*/
+	if (gmac_i >= TPM_MAX_NUM_TX_PORTS)
+		return (TPM_DB_ERR_INV_INPUT);
+
+	*bucket_size = tpm_db.gmac_tx[gmac_i].bucket_size;
+	*rate_limit = tpm_db.gmac_tx[gmac_i].rate_limit;
+	*prio = tpm_db.gmac_tx[gmac_i].prio;
+
+	return TPM_DB_OK;
+}
+int32_t tpm_db_set_gmac_q_rate_limit(tpm_db_tx_mod_t gmac_i,
 				   uint32_t queue,
 				   uint32_t bucket_size,
-				   uint32_t rate_limit)
+				   uint32_t rate_limit,
+				   uint32_t wrr)
 {
 	/*check param*/
 	if (gmac_i >= TPM_MAX_NUM_TX_PORTS)
@@ -10275,14 +10455,16 @@ int32_t tpm_db_set_gmac_rate_limit(tpm_db_tx_mod_t gmac_i,
 
 	tpm_db.gmac_tx[gmac_i].tx_queue[queue].bucket_size = bucket_size;
 	tpm_db.gmac_tx[gmac_i].tx_queue[queue].rate_limit = rate_limit;
+	tpm_db.gmac_tx[gmac_i].tx_queue[queue].wrr = wrr;
 
 	return TPM_DB_OK;
 }
 
-int32_t tpm_db_get_gmac_rate_limit(tpm_gmacs_enum_t gmac_i,
+int32_t tpm_db_get_gmac_q_rate_limit(tpm_gmacs_enum_t gmac_i,
 				   uint32_t queue,
 				   uint32_t *bucket_size,
-				   uint32_t *rate_limit)
+				   uint32_t *rate_limit,
+				   uint32_t *wrr)
 {
 	/*check param*/
 	if (gmac_i >= TPM_MAX_NUM_TX_PORTS)
@@ -10293,6 +10475,7 @@ int32_t tpm_db_get_gmac_rate_limit(tpm_gmacs_enum_t gmac_i,
 
 	*bucket_size = tpm_db.gmac_tx[gmac_i].tx_queue[queue].bucket_size;
 	*rate_limit = tpm_db.gmac_tx[gmac_i].tx_queue[queue].rate_limit;
+	*wrr = tpm_db.gmac_tx[gmac_i].tx_queue[queue].wrr;
 
 	return TPM_DB_OK;
 }
@@ -10312,9 +10495,9 @@ int32_t tpm_db_get_ipv4_pre_filter_key_num(tpm_src_port_type_t src_port, uint32_
 	return TPM_DB_OK;
 }
 
-int32_t tpm_db_get_ipv4_pre_filter_key(tpm_src_port_type_t src_port, 
-				       uint32_t key_idx, 
-				       tpm_parse_fields_t *parse_rule_bm, 
+int32_t tpm_db_get_ipv4_pre_filter_key(tpm_src_port_type_t src_port,
+				       uint32_t key_idx,
+				       tpm_parse_fields_t *parse_rule_bm,
 				       tpm_ipv4_acl_key_t *ipv4_key)
 {
 	tpm_db_cnm_ipv4_pre_filter_key_t *key = NULL;
@@ -10466,6 +10649,354 @@ int32_t tpm_db_get_ipv4_pre_filter_key_user_num(tpm_src_port_type_t src_port, ui
 	return TPM_DB_OK;
 }
 
+
+/*******************************************************************************
+* tpm_db_mac_learn_mod_idx_set()
+*
+* DESCRIPTION: Set mac leanring pmt mod index, just for mac learning
+*
+* INPUTS:
+* mod_idx
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_mac_learn_mod_idx_set(uint32_t mod_idx)
+{
+	tpm_db.mac_learn_mod_idx = mod_idx;
+
+	return (TPM_DB_OK);
+}
+
+/*******************************************************************************
+* tpm_db_mac_learn_mod_idx_get()
+*
+* DESCRIPTION: Get mac leanring pmt mod index, just for mac learning
+*
+* INPUTS:
+* mod_idx
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_mac_learn_mod_idx_get(uint32_t *mod_idx)
+{
+	*mod_idx = tpm_db.mac_learn_mod_idx;
+
+	return (TPM_DB_OK);
+}
+
+/*******************************************************************************
+* tpm_db_ds_mac_based_trunk_enable_set()
+*
+* DESCRIPTION: Set ds_mac_based_trunk_enable
+*
+* INPUTS:
+* enable       -   ds_mac_based_trunk_enable
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_ds_mac_based_trunk_enable_set(tpm_db_ds_mac_based_trunk_enable_t enable)
+{
+	tpm_db.ds_mac_based_trunk_enable = enable;
+
+	return (TPM_DB_OK);
+}
+
+/*******************************************************************************
+* tpm_db_ds_mac_based_trunk_enable_get()
+*
+* DESCRIPTION: Get ds_mac_based_trunk_enable
+*
+* INPUTS:
+*
+* OUTPUTS:
+* enable       -   ds_mac_based_trunk_enable
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_ds_mac_based_trunk_enable_get(tpm_db_ds_mac_based_trunk_enable_t *enable)
+{
+	*enable = tpm_db.ds_mac_based_trunk_enable;
+
+	return (TPM_DB_OK);
+}
+int32_t tpm_db_api_data_backup(void)
+{
+	memcpy(hot_swap_bak_db.api_ent_mem_area_bak, tpm_db.api_ent_mem_area, sizeof(tpm_db.api_ent_mem_area));
+	memcpy(hot_swap_bak_db.api_section_bak, tpm_db.api_section, sizeof(tpm_db.api_section));
+	memcpy(hot_swap_bak_db.mc_vid_port_cfg_bak, tpm_db.mc_vid_port_cfg, sizeof(tpm_db.mc_vid_port_cfg));
+	memcpy(hot_swap_bak_db.gmac_tx_bak, tpm_db.gmac_tx, sizeof(tpm_db.gmac_tx));
+	memcpy(hot_swap_bak_db.igmp_proxy_sa_mac, tpm_db_mc_igmp_proxy_sa_mac, 6);
+	hot_swap_bak_db.igmp_proxy_sa_mac_valid = tpm_db_mc_igmp_proxy_sa_mac_valid;
+	hot_swap_bak_db.switch_init = tpm_db.func_profile.switch_init;
+
+	return (TPM_DB_OK);
+}
+int32_t tpm_db_api_data_rcvr(void)
+{
+	memcpy(tpm_db.mc_vid_port_cfg, hot_swap_bak_db.mc_vid_port_cfg_bak, sizeof(tpm_db.mc_vid_port_cfg));
+	memcpy(tpm_db.gmac_tx, hot_swap_bak_db.gmac_tx_bak, sizeof(tpm_db.gmac_tx));
+	memcpy(tpm_db_mc_igmp_proxy_sa_mac, hot_swap_bak_db.igmp_proxy_sa_mac, 6);
+	tpm_db_mc_igmp_proxy_sa_mac_valid = hot_swap_bak_db.igmp_proxy_sa_mac_valid;
+	tpm_db.func_profile.switch_init = hot_swap_bak_db.switch_init;
+
+	return (TPM_DB_OK);
+}
+void tpm_db_exchange_value(uint32_t *v1, uint32_t *v2)
+{
+	uint32_t tmp;
+
+	tmp = *v1;
+	*v1 = *v2;
+	*v2 = tmp;
+
+	return;
+}
+int32_t tpm_db_wan_lan_rate_limit_exchange_db(tpm_db_gmac_tx_t *gmac_tx)
+{
+	int32_t queue;
+
+	for (queue = 0; queue < TPM_MAX_NUM_TX_QUEUE; queue++) {
+		tpm_db_exchange_value(&(gmac_tx[TPM_TX_MOD_GMAC0].tx_queue[queue].bucket_size),
+					&(gmac_tx[TPM_TX_MOD_GMAC1].tx_queue[queue].bucket_size));
+		tpm_db_exchange_value(&(gmac_tx[TPM_TX_MOD_GMAC0].tx_queue[queue].rate_limit),
+					&(gmac_tx[TPM_TX_MOD_GMAC1].tx_queue[queue].rate_limit));
+		tpm_db_exchange_value(&(gmac_tx[TPM_TX_MOD_GMAC0].tx_queue[queue].wrr),
+					&(gmac_tx[TPM_TX_MOD_GMAC1].tx_queue[queue].wrr));
+	}
+
+	tpm_db_exchange_value(&(gmac_tx[TPM_TX_MOD_GMAC0].bucket_size),
+				&(gmac_tx[TPM_TX_MOD_GMAC1].bucket_size));
+	tpm_db_exchange_value(&(gmac_tx[TPM_TX_MOD_GMAC0].rate_limit),
+				&(gmac_tx[TPM_TX_MOD_GMAC1].rate_limit));
+	tpm_db_exchange_value(&(gmac_tx[TPM_TX_MOD_GMAC0].prio),
+				&(gmac_tx[TPM_TX_MOD_GMAC1].prio));
+
+	return (TPM_DB_OK);
+}
+int32_t tpm_db_wan_lan_rate_limit_exchange(void)
+{
+	tpm_db_wan_lan_rate_limit_exchange_db(tpm_db.gmac_tx);
+	tpm_db_wan_lan_rate_limit_exchange_db(hot_swap_bak_db.gmac_tx_bak);
+	return (TPM_DB_OK);
+}
+
+int32_t tpm_db_api_section_bak_num_entries_get(tpm_api_sections_t api_section, uint32_t *num_entries)
+{
+	if (hot_swap_bak_db.api_section_bak[api_section].valid == TPM_DB_INVALID) {
+		printk("api_section: %d is not valid\n", api_section);
+		*num_entries = 0;
+	} else
+		*num_entries = hot_swap_bak_db.api_section_bak[api_section].num_valid_entries;
+
+	printk("api_section: %d, number_valid: %d\n", api_section, *num_entries);
+	return (TPM_DB_OK);
+}
+int32_t tpm_db_api_section_bak_ent_tbl_get(tpm_api_sections_t api_sec, tpm_db_api_entry_t *api_ent_mem_area, uint32_t index)
+{
+	if (ILLEGAL_API_SEC(api_sec))
+		IF_ERROR_I(TPM_DB_ERR_REC_NOT_EXIST, api_sec);
+
+	if (NULL == api_ent_mem_area)
+		return (TPM_DB_ERR_INV_INPUT);
+
+	memcpy(api_ent_mem_area,
+		&hot_swap_bak_db.api_ent_mem_area_bak[(hot_swap_bak_db.api_section_bak[api_sec].table_start) + index],
+		sizeof(tpm_db_api_entry_t));
+
+	return (TPM_DB_OK);
+}
+int32_t tpm_db_api_entry_bak_get_next(tpm_api_sections_t api_section,
+				      int32_t cur_rule,
+				      int32_t *next_rule)
+{
+	int32_t ind = -1;
+	int32_t i;
+	uint32_t min_rule, l_next_rule = ~0;
+	tpm_db_api_entry_t *api_tbl;
+
+	api_tbl = &(hot_swap_bak_db.api_ent_mem_area_bak[hot_swap_bak_db.api_section_bak[api_section].table_start]);
+
+	if (cur_rule <= -1)
+		min_rule = 0;
+	else
+		min_rule = cur_rule + 1;
+
+	/*TPM_OS_DEBUG(TPM_DB_MOD, "min_rule(%d) \n", min_rule); */
+
+	for (i = 0; i <= hot_swap_bak_db.api_section_bak[api_section].last_valid_index; i++) {
+		if (((api_tbl + i)->valid == TPM_DB_VALID) &&
+		    ((api_tbl + i)->rule_num >= min_rule) && ((api_tbl + i)->rule_num < l_next_rule)) {
+			l_next_rule = (api_tbl + i)->rule_num;
+			ind = i;
+			TPM_OS_INFO(TPM_DB_MOD, "rule_num(%d), rule_idx(%d) update\n", (api_tbl + i)->rule_num, (api_tbl + i)->rule_idx);
+		} else
+			TPM_OS_INFO(TPM_DB_MOD, "rule_num(%d), rule_idx(%d) \n", (api_tbl + i)->rule_num, (api_tbl + i)->rule_idx);
+	}
+
+	/*TPM_OS_DEBUG(TPM_DB_MOD, "l_next_rule(%d) ind(%d) \n", l_next_rule, ind); */
+
+	if ((l_next_rule < (uint32_t) (~0)) && (ind != -1)) {
+		*next_rule = ind;
+	} else		/* Not found */
+		*next_rule = -1;
+
+	TPM_OS_INFO(TPM_DB_MOD, "next_rule(%d) \n", *next_rule);
+	return (TPM_DB_OK);
+}
+
+/*******************************************************************************
+* tpm_db_max_uni_port_nr_get()
+*
+* DESCRIPTION: Get max UNI port number
+*
+* INPUTS:
+*
+* OUTPUTS:
+* max_uni_port_nr       -   max UNI port number
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_max_uni_port_nr_get(uint32_t *max_uni_port_nr)
+{
+	*max_uni_port_nr = tpm_db.max_uni_port_nr + 1;
+
+	return (TPM_DB_OK);
+}
+
+/*******************************************************************************
+* tpm_db_gmac_uni_egr_rate_limit_set()
+*
+* DESCRIPTION: Set GMAC UNI egress rate limit
+*
+* INPUTS:
+*        port - GMAC UNI port to do rate limit
+*        rate_limit - rate limit value
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_gmac_uni_egr_rate_limit_set(tpm_src_port_type_t port, uint32_t rate_limit)
+{
+	tpm_db.gmac_uni_egr_rate_limit[port] = rate_limit;
+
+	return (TPM_DB_OK);
+}
+
+/*******************************************************************************
+* tpm_db_gmac_uni_egr_rate_limit_get()
+*
+* DESCRIPTION: Get GMAC UNI egress rate limit
+*
+* INPUTS:
+*        port - GMAC UNI port to do rate limit
+* OUTPUTS:
+*        rate_limit - rate limit value, if value got is 0, means no rate limit set
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_gmac_uni_egr_rate_limit_get(tpm_src_port_type_t port, uint32_t *rate_limit)
+{
+	if (NULL == rate_limit)
+		return (TPM_DB_ERR_INV_INPUT);
+
+	*rate_limit = tpm_db.gmac_uni_egr_rate_limit[port];
+
+	return (TPM_DB_OK);
+}
+
+/*******************************************************************************
+* tpm_db_gmac_lpk_uni_ingr_rate_limit_set()
+*
+* DESCRIPTION: Set GMAC UNI ingress rate limit only with loopback mode
+*
+* INPUTS:
+*        port - GMAC UNI port to do rate limit
+*        rate_limit - rate limit value
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_gmac_lpk_uni_ingr_rate_limit_set(tpm_src_port_type_t port, tpm_db_gmac_lpk_uni_ingr_rate_limit_t rate_limit)
+{
+	tpm_db.gmac_lpk_uni_ingr_rate_limit[port].count_mode = rate_limit.count_mode;
+	tpm_db.gmac_lpk_uni_ingr_rate_limit[port].cir = rate_limit.cir;
+	tpm_db.gmac_lpk_uni_ingr_rate_limit[port].cbs = rate_limit.cbs;
+	tpm_db.gmac_lpk_uni_ingr_rate_limit[port].ebs = rate_limit.ebs;
+
+	return (TPM_DB_OK);
+}
+
+/*******************************************************************************
+* tpm_db_gmac_lpk_uni_ingr_rate_limit_get()
+*
+* DESCRIPTION: Get GMAC UNI ingress rate limit with loopback mode
+*
+* INPUTS:
+*        port - GMAC UNI port to do rate limit
+* OUTPUTS:
+*        rate_limit - rate limit value, if value got is 0, means no rate limit set
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t tpm_db_gmac_lpk_uni_ingr_rate_limit_get(tpm_src_port_type_t port, tpm_db_gmac_lpk_uni_ingr_rate_limit_t *rate_limit)
+{
+	if (NULL == rate_limit)
+		return (TPM_DB_ERR_INV_INPUT);
+
+	memcpy(rate_limit,
+	       &tpm_db.gmac_lpk_uni_ingr_rate_limit[port],
+	       sizeof(tpm_db_gmac_lpk_uni_ingr_rate_limit_t));
+
+	return (TPM_DB_OK);
+}
+
 /*******************************************************************************
 * tpm_db_init()
 *
@@ -10514,6 +11045,7 @@ int32_t tpm_db_init(void)
 	for (i = TPM_SRC_PORT_UNI_0; i <= TPM_SRC_PORT_UNI_7; i++)
 		 tpm_db.igmp_def.frwd_mode[i] = TPM_IGMP_FRWD_MODE_DROP;
 	tpm_db.igmp_def.cpu_queue = 0;
+	tpm_db.igmp_def.igmp_snoop_enable = TPM_FALSE;
 
 	tpm_db.igmp_def.mc_lpbk_enable[TPM_IP_VER_4] = TPM_FALSE;
 	tpm_db.igmp_def.mc_lpbk_enable[TPM_IP_VER_6] = TPM_FALSE;

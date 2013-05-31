@@ -515,9 +515,6 @@ GT_STATUS gvtuAddEntry
     GT_STATUS       	retVal;
     GT_U8       	port; 
     GT_LPORT       	lport; 
-    GT_VTU_ENTRY 	tmpVtuEntry;
-	GT_BOOL		 	found;
-	int				count = 5000;
     GT_VTU_ENTRY    	entry;
 
     DBG_INFO(("gvtuAddEntry Called.\n"));
@@ -610,25 +607,6 @@ GT_STATUS gvtuAddEntry
 		DBG_INFO(("Failed (vtuOperationPerform returned GT_FAIL).\n"));
         return retVal;
     }
-
-	/* verify that the given entry has been added */
-	tmpVtuEntry.vid = vtuEntry->vid;
-	tmpVtuEntry.DBNum = vtuEntry->DBNum;
-
-	if((retVal = gvtuFindVidEntry(dev,&tmpVtuEntry,&found)) != GT_OK)
-	{
-		while(count--);
-		if((retVal = gvtuFindVidEntry(dev,&tmpVtuEntry,&found)) != GT_OK)
-		{
-			DBG_INFO(("Added entry cannot be found\n"));
-			return retVal;
-		}
-	}
-	if(found == GT_FALSE)
-	{
-		DBG_INFO(("Added entry cannot be found\n"));
-		return GT_FAIL;
-	}
 
     DBG_INFO(("OK.\n"));
     return GT_OK;

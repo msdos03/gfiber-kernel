@@ -79,6 +79,51 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "tpm_common.h"
 #include "tpm_header.h"
 
+uint32_t tpm_tm_lan_gmac_get(uint32_t *lan_gmac)
+{
+	int32_t  db_ret;
+	tpm_pnc_trg_t pnc_target;
+
+	db_ret = tpm_db_to_lan_gmac_get(TPM_TRG_PORT_UNI_ANY, &pnc_target);
+	if (db_ret != TPM_DB_OK) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,
+			"can not get GMAC that works as LAN\n\r");
+		return ERR_GENERAL;
+	}
+	if (pnc_target == TPM_PNC_TRG_GMAC0)
+		*lan_gmac = SW_GMAC_0;
+	else if (pnc_target == TPM_PNC_TRG_GMAC1)
+		*lan_gmac = SW_GMAC_1;
+	else {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,
+			"GMAC works as LAN is not valid: (%d)\n\r", pnc_target);
+		return ERR_GENERAL;
+	}
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "GMAC works as LAN is: (%d)\n\r", *lan_gmac);
+
+	return TPM_OK;
+}
+uint32_t tpm_tm_wan_gmac_get(uint32_t *wan_gmac)
+{
+	tpm_gmacs_enum_t wan_gmac_tmp;
+
+	wan_gmac_tmp = tpm_db_active_wan_get();
+
+	if (wan_gmac_tmp == TPM_ENUM_GMAC_0)
+		*wan_gmac = SW_GMAC_0;
+	else if (wan_gmac_tmp == TPM_ENUM_GMAC_1)
+		*wan_gmac = SW_GMAC_1;
+	else if (wan_gmac_tmp == TPM_ENUM_PMAC)
+		*wan_gmac = PON_PORT;
+	else {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,
+			"GMAC works as WAN is not valid: (%d)\n\r", wan_gmac_tmp);
+		return ERR_GENERAL;
+	}
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "GMAC works as WAN is: (%d)\n\r", *wan_gmac);
+
+	return TPM_OK;
+}
 /*******************************************************************************
 * tpm_tm_set_wan_egr_queue_sched()
 *
@@ -108,13 +153,14 @@ tpm_error_code_t tpm_tm_set_wan_egr_queue_sched(IN uint32_t owner_id,
 	tpm_error_code_t retVal = TPM_RC_OK;
 	uint32_t i = 0;
 	uint32_t num_tcont_llid = 0;
+	uint32_t wan_gmac = 0;
 
-	printk(KERN_INFO "==ENTER==%s: owner_id[%d],sched_ent[%d],sched_mode[%d],"
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==ENTER==%s: owner_id[%d],sched_ent[%d],sched_mode[%d],"
 		"             queue_id[%d], wrr_weight[%d]\n\r",
 		__func__, owner_id, sched_ent, sched_mode, queue_id, wrr_weight);
 
 	if (queue_id >= TPM_MAX_NUM_TX_QUEUE) {
-		printk(KERN_INFO "==ERROE==%s: Invalid queue number: owner_id[%d],sched_ent[%d],sched_mode[%d],"
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "==ERROE==%s: Invalid queue number: owner_id[%d],sched_ent[%d],sched_mode[%d],"
 			"                                    queue_id[%d], wrr_weight[%d]\n\r",
 			__func__, owner_id, sched_ent, sched_mode, queue_id, wrr_weight);
 		return ERR_SW_TM_QUEUE_INVALID;
@@ -122,10 +168,14 @@ tpm_error_code_t tpm_tm_set_wan_egr_queue_sched(IN uint32_t owner_id,
 
 	if ((sched_mode == TPM_PP_SCHED_WRR) && (wrr_weight > TPM_MAX_WRR_WEIGHT)) {
 
-		printk(KERN_INFO "==ERROE==%s: WRR weight is out of rage: owner_id[%d],sched_mode[%d],"
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "==ERROE==%s: WRR weight is out of rage: owner_id[%d],sched_mode[%d],"
 			"                                   queue_id[%d], wrr_weight[%d]\n\r",
 			__func__, owner_id, sched_mode, queue_id, wrr_weight);
 		return ERR_SW_TM_QUEUE_INVALID;
+	}
+	retVal = tpm_tm_wan_gmac_get(&wan_gmac);
+	if (retVal != TPM_OK) {
+		return ERR_SRC_PORT_INVALID;
 	}
 
 	tpm_db_num_tcont_llid_get(&num_tcont_llid);
@@ -133,11 +183,11 @@ tpm_error_code_t tpm_tm_set_wan_egr_queue_sched(IN uint32_t owner_id,
 		if (sched_ent & 0x1) {
 			switch (sched_mode) {
 			case TPM_PP_SCHED_STRICT:
-				mvNetaTxqFixPrioSet(PON_PORT, i, queue_id);
+				mvNetaTxqFixPrioSet(wan_gmac, i, queue_id);
 				break;
 
 			case TPM_PP_SCHED_WRR:
-				mvNetaTxqWrrPrioSet(PON_PORT, i, queue_id, wrr_weight);
+				mvNetaTxqWrrPrioSet(wan_gmac, i, queue_id, wrr_weight);
 				break;
 
 			default:
@@ -150,9 +200,9 @@ tpm_error_code_t tpm_tm_set_wan_egr_queue_sched(IN uint32_t owner_id,
 			break;
 	}
 	if ((sched_ent != 0) && (i == num_tcont_llid - 1))
-		printk(KERN_INFO "TCONT doesn't not exist\n");
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "TCONT doesn't not exist\n");
 
-	printk(KERN_INFO "==EXIT== %s:\n\r", __func__);
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==EXIT== %s:\n\r", __func__);
 
 	return retVal;
 }
@@ -184,31 +234,38 @@ tpm_error_code_t tpm_tm_set_wan_sched_egr_rate_lim(IN uint32_t owner_id,
 {
 	uint32_t i = 0;
 	uint32_t num_tcont_llid = 0;
+	uint32_t wan_gmac = 0;
+	uint32_t tpm_ret = 0;
 
-	printk(KERN_INFO "==ENTER==%s: owner_id[%d],sched_ent[%d],rate_limit_val[%d], bucket_size[%d]\n\r",
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==ENTER==%s: owner_id[%d],sched_ent[%d],rate_limit_val[%d], bucket_size[%d]\n\r",
 		__func__, owner_id, sched_ent, rate_limit_val, bucket_size);
+
+	tpm_ret = tpm_tm_wan_gmac_get(&wan_gmac);
+	if (tpm_ret != TPM_OK) {
+		return ERR_SRC_PORT_INVALID;
+	}
 
 	tpm_db_num_tcont_llid_get(&num_tcont_llid);
 	for (i = 0; i < num_tcont_llid; i++) {
 		if (sched_ent & 0x1) {
 
-			if (mvNetaTxpBurstSet(PON_PORT, i, bucket_size) != MV_OK) {
-				printk(KERN_INFO
+			if (mvNetaTxpBurstSet(wan_gmac, i, bucket_size) != MV_OK) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, 
 					"==ERROE==%s: Invalid bucket size value: "
 					"owner_id[%d],sched_ent[%d] bucket_size[%d]\n\r",
 					__func__, owner_id, i, bucket_size);
 				return ERR_SW_TM_BUCKET_SIZE_INVALID;
 			}
-			mvNetaTxpRateSet(PON_PORT, i, rate_limit_val);
+			mvNetaTxpRateSet(wan_gmac, i, rate_limit_val);
 		}
 		sched_ent = sched_ent >> 1;
 		if (sched_ent == 0)
 			break;
 	}
 	if ((sched_ent != 0) && (i == num_tcont_llid - 1))
-		printk(KERN_INFO "TCONT doesn't not exist\n");
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "TCONT doesn't not exist\n");
 
-	printk(KERN_INFO "==EXIT== %s: \n\r", __func__);
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==EXIT== %s: \n\r", __func__);
 
 	return TPM_RC_OK;
 
@@ -244,8 +301,10 @@ tpm_error_code_t tpm_tm_set_wan_queue_egr_rate_lim(IN uint32_t owner_id,
 {
 	uint32_t i = 0;
 	uint32_t num_tcont_llid = 0;
+	uint32_t wan_gmac = 0;
+	uint32_t tpm_ret = 0;
 
-	printk(KERN_INFO "==ENTER==%s: owner_id[%d],sched_ent[%d],queue_id[%d]"
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==ENTER==%s: owner_id[%d],sched_ent[%d],queue_id[%d]"
 		"             rate_limit_val[%d], bucket_size[%d] \n\r",
 		__func__, owner_id, sched_ent, queue_id, rate_limit_val, bucket_size);
 
@@ -253,32 +312,37 @@ tpm_error_code_t tpm_tm_set_wan_queue_egr_rate_lim(IN uint32_t owner_id,
 
 	if (queue_id >= TPM_MAX_NUM_TX_QUEUE) {
 
-		printk(KERN_INFO "==ERROE==%s: Invalid queue number: owner_id[%d],sched_ent[%d],queue_id[%d]"
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "==ERROE==%s: Invalid queue number: owner_id[%d],sched_ent[%d],queue_id[%d]"
 			"                                   rate_limit_val[%d], bucket_size[%d] \n\r",
 			__func__, owner_id, sched_ent, queue_id, rate_limit_val, bucket_size);
 		return ERR_SW_TM_QUEUE_INVALID;
 	}
 
+	tpm_ret = tpm_tm_wan_gmac_get(&wan_gmac);
+	if (tpm_ret != TPM_OK) {
+		return ERR_SRC_PORT_INVALID;
+	}
+
 	for (i = 0; i < num_tcont_llid; i++) {
 		if (sched_ent & 0x1) {
 
-			if (mvNetaTxqBurstSet(PON_PORT, i, queue_id, bucket_size) != MV_OK) {
-				printk(KERN_INFO
+			if (mvNetaTxqBurstSet(wan_gmac, i, queue_id, bucket_size) != MV_OK) {
+				TPM_OS_ERROR(TPM_TPM_LOG_MOD, 
 					"==ERROE==%s: Invalid bucket size value: owner_id[%d], sched_ent[%d], queue_id[%d]"
 					"             rate_limit_val[%d], bucket_size[%d] \n\r", __func__, owner_id,
 					i, queue_id, rate_limit_val, bucket_size);
 				return ERR_SW_TM_BUCKET_SIZE_INVALID;
 			}
-			mvNetaTxqRateSet(PON_PORT, i, queue_id, rate_limit_val);
+			mvNetaTxqRateSet(wan_gmac, i, queue_id, rate_limit_val);
 		}
 		sched_ent = sched_ent >> 1;
 		if (sched_ent == 0)
 			break;
 	}
 	if ((sched_ent != 0) && (i == num_tcont_llid - 1))
-		printk(KERN_INFO "TCONT doesn't not exist\n");
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "TCONT doesn't not exist\n");
 
-	printk(KERN_INFO "==EXIT== %s: \n\r", __func__);
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==EXIT== %s: \n\r", __func__);
 
 	return TPM_RC_OK;
 }
@@ -309,14 +373,21 @@ tpm_error_code_t tpm_tm_set_wan_ingr_queue_sched(IN uint32_t owner_id,
 						IN uint16_t wrr_weight)
 {
 	uint32_t tmp_tcont = 0;
+	uint32_t lan_gmac = 0;
+	uint32_t tpm_ret = 0;
 
-	printk(KERN_INFO "==ENTER==%s: owner_id[%d],sched_mode[%d],"
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==ENTER==%s: owner_id[%d],sched_mode[%d],"
 		"             queue_id[%d], wrr_weight[%d]\n\r",
 		__func__, owner_id, sched_mode, queue_id, wrr_weight);
 
+	tpm_ret = tpm_tm_lan_gmac_get(&lan_gmac);
+	if (tpm_ret != TPM_OK) {
+		return ERR_SRC_PORT_INVALID;
+	}
+
 	if (queue_id >= TPM_MAX_NUM_TX_QUEUE) {
 
-		printk(KERN_INFO "==ERROE==%s: Invalid queue number: owner_id[%d],sched_mode[%d],"
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "==ERROE==%s: Invalid queue number: owner_id[%d],sched_mode[%d],"
 			"                                   queue_id[%d], wrr_weight[%d]\n\r",
 			__func__, owner_id, sched_mode, queue_id, wrr_weight);
 		return ERR_SW_TM_QUEUE_INVALID;
@@ -324,7 +395,7 @@ tpm_error_code_t tpm_tm_set_wan_ingr_queue_sched(IN uint32_t owner_id,
 
 	if ((sched_mode == TPM_PP_SCHED_WRR) && (wrr_weight > TPM_MAX_WRR_WEIGHT)) {
 
-		printk(KERN_INFO "==ERROE==%s: WRR weight is out of rage: owner_id[%d],sched_mode[%d],"
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "==ERROE==%s: WRR weight is out of rage: owner_id[%d],sched_mode[%d],"
 			"                                   queue_id[%d], wrr_weight[%d]\n\r",
 			__func__, owner_id, sched_mode, queue_id, wrr_weight);
 		return ERR_SW_TM_QUEUE_INVALID;
@@ -332,20 +403,20 @@ tpm_error_code_t tpm_tm_set_wan_ingr_queue_sched(IN uint32_t owner_id,
 
 	switch (sched_mode) {
 	case TPM_PP_SCHED_STRICT:
-		mvNetaTxqFixPrioSet(SW_GMAC_0, tmp_tcont, queue_id);
+		mvNetaTxqFixPrioSet(lan_gmac, tmp_tcont, queue_id);
 		break;
 
 	case TPM_PP_SCHED_WRR:
-		mvNetaTxqWrrPrioSet(SW_GMAC_0, tmp_tcont, queue_id, wrr_weight);
+		mvNetaTxqWrrPrioSet(lan_gmac, tmp_tcont, queue_id, wrr_weight);
 		break;
 
 	default:
-		printk(KERN_ERR " Unknown TXQ command \n");
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD," Unknown TXQ command \n");
 		return ERR_GENERAL;
 
 	}
 
-	printk(KERN_INFO "==EXIT== %s:\n\r", __func__);
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==EXIT== %s:\n\r", __func__);
 
 	return TPM_RC_OK;
 
@@ -375,20 +446,27 @@ tpm_error_code_t tpm_tm_set_wan_ingr_rate_lim(IN uint32_t owner_id,
 						IN uint32_t bucket_size)
 {
 	uint32_t tmp_tcont = 0;
+	uint32_t lan_gmac = 0;
+	uint32_t tpm_ret = 0;
 
-	printk(KERN_INFO "==ENTER==%s: owner_id[%d],rate_limit_val[%d] bucket_size[%d]\n\r",
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==ENTER==%s: owner_id[%d],rate_limit_val[%d] bucket_size[%d]\n\r",
 		__func__, owner_id, rate_limit_val, bucket_size);
 
-	if (mvNetaTxpBurstSet(SW_GMAC_0, tmp_tcont, bucket_size) != MV_OK) {
-		printk(KERN_INFO
+	tpm_ret = tpm_tm_lan_gmac_get(&lan_gmac);
+	if (tpm_ret != TPM_OK) {
+		return ERR_SRC_PORT_INVALID;
+	}
+
+	if (mvNetaTxpBurstSet(lan_gmac, tmp_tcont, bucket_size) != MV_OK) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, 
 			"==ERROE==%s: Invalid bucket size value: owner_id[%d],rate_limit_val[%d] bucket_size[%d]\n\r",
 			__func__, owner_id, rate_limit_val, bucket_size);
 		return ERR_SW_TM_BUCKET_SIZE_INVALID;
 	}
 
-	mvNetaTxpRateSet(SW_GMAC_0, tmp_tcont, rate_limit_val);
+	mvNetaTxpRateSet(lan_gmac, tmp_tcont, rate_limit_val);
 
-	printk(KERN_INFO "==EXIT== %s: \n\r", __func__);
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==EXIT== %s: \n\r", __func__);
 
 	return TPM_RC_OK;
 }
@@ -420,28 +498,35 @@ tpm_error_code_t tpm_tm_set_wan_q_ingr_rate_lim(IN uint32_t owner_id,
 						IN uint32_t bucket_size)
 {
 	uint32_t tmp_tcont = 0;
+	uint32_t lan_gmac = 0;
+	uint32_t tpm_ret = 0;
 
-	printk(KERN_INFO "==ENTER==%s: owner_id[%d], queue_id[%d]"
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==ENTER==%s: owner_id[%d], queue_id[%d]"
 		"             rate_limit_val[%d], bucket_size[%d] \n\r",
 		__func__, owner_id, queue_id, rate_limit_val, bucket_size);
 
 	if (queue_id >= TPM_MAX_NUM_TX_QUEUE) {
-		printk(KERN_INFO "==ERROE==%s: Invalid queue number: owner_id[%d], queue_id[%d]"
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "==ERROE==%s: Invalid queue number: owner_id[%d], queue_id[%d]"
 			"                                   rate_limit_val[%d], bucket_size[%d] \n\r",
 			__func__, owner_id, queue_id, rate_limit_val, bucket_size);
 		return ERR_SW_TM_QUEUE_INVALID;
 	}
 
-	if (mvNetaTxqBurstSet(SW_GMAC_0, tmp_tcont, queue_id, bucket_size) != MV_OK) {
-		printk(KERN_INFO "==ERROE==%s: Invalid bucket size value: owner_id[%d], queue_id[%d]"
+	tpm_ret = tpm_tm_lan_gmac_get(&lan_gmac);
+	if (tpm_ret != TPM_OK) {
+		return ERR_SRC_PORT_INVALID;
+	}
+
+	if (mvNetaTxqBurstSet(lan_gmac, tmp_tcont, queue_id, bucket_size) != MV_OK) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "==ERROE==%s: Invalid bucket size value: owner_id[%d], queue_id[%d]"
 			"              rate_limit_val[%d], bucket_size[%d] \n\r",
 			__func__, owner_id, queue_id, rate_limit_val, bucket_size);
 		return ERR_SW_TM_BUCKET_SIZE_INVALID;
 	}
 
-	mvNetaTxqRateSet(SW_GMAC_0, tmp_tcont, queue_id, rate_limit_val);
+	mvNetaTxqRateSet(lan_gmac, tmp_tcont, queue_id, rate_limit_val);
 
-	printk(KERN_INFO "==EXIT== %s: \n\r", __func__);
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==EXIT== %s: \n\r", __func__);
 
 	return TPM_RC_OK;
 }
@@ -473,17 +558,19 @@ tpm_error_code_t tpm_tm_set_gmac0_ingr_rate_lim(IN uint32_t owner_id,
 	uint32_t queue_id;
 	tpm_gmacs_enum_t lpk_gmac;
 
-	printk(KERN_INFO "==ENTER==%s: owner_id[%d], rate_limit_val[%d], bucket_size[%d] \n\r",
+	TPM_OS_INFO(TPM_TPM_LOG_MOD, "==ENTER==%s: owner_id[%d], rate_limit_val[%d], bucket_size[%d] \n\r",
 		__func__, owner_id, rate_limit_val, bucket_size);
 
 	/*Get Tx queue on loopback gmac*/
-	if (TPM_DB_OK != tpm_db_gmac_lpk_queue_get(&lpk_gmac, &queue_id)) {
-		printk(KERN_INFO "==ERROR==%s: loopback gmac queue get failed \n\r", __func__);
+	if (TPM_DB_OK != tpm_db_gmac_lpk_queue_get(&lpk_gmac,
+						   &queue_id,
+						   TPM_GMAC1_QUEUE_DATA_TRAFFIC)) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "==ERROR==%s: loopback gmac queue get failed \n\r", __func__);
 		return ERR_GENERAL;
 	}
 
 	if (mvNetaTxqBurstSet((int)lpk_gmac, tmp_tcont, queue_id, bucket_size) != MV_OK) {
-		printk(KERN_INFO "==ERROR==%s: Invalid bucket size value: owner_id[%d], queue_id[%d]"
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD,  "==ERROR==%s: Invalid bucket size value: owner_id[%d], queue_id[%d]"
 			"              rate_limit_val[%d], bucket_size[%d] \n\r",
 			__func__, owner_id, queue_id, rate_limit_val, bucket_size);
 		return ERR_SW_TM_BUCKET_SIZE_INVALID;
@@ -491,9 +578,56 @@ tpm_error_code_t tpm_tm_set_gmac0_ingr_rate_lim(IN uint32_t owner_id,
 
 	mvNetaTxqRateSet(SW_GMAC_1, tmp_tcont, queue_id, rate_limit_val);
 
-	printk(KERN_INFO "==EXIT== %s: \n\r", __func__);
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==EXIT== %s: \n\r", __func__);
 
 	return TPM_RC_OK;
 
 }
 EXPORT_SYMBOL(tpm_tm_set_gmac0_ingr_rate_lim);
+
+/*******************************************************************************
+* tpm_tm_set_tx_port_rate_lim()
+*
+* DESCRIPTION:      Configures the rate limit of tx port wanted.
+*
+* INPUTS:
+*       owner_id          - APP owner id  should be used for all API calls.
+*       port              - port want to do rate limit
+*       rate_limit_val    - ingress rate limit value
+*       bucket_size       - bucket size value, if set 0, use the current bucket size
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success, the function returns TPM_RC_OK. On error different types are returned
+*       according to the case - see tpm_error_code_t.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_tm_set_tx_port_rate_lim(IN uint32_t owner_id,
+					     IN uint32_t port,
+					     IN uint32_t rate_limit_val,
+					     IN uint32_t bucket_size)
+{
+	uint32_t tmp_tcont = 0;
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==ENTER==%s: owner_id[%d],port[%d],rate_limit_val[%d] bucket_size[%d]\n\r",
+		__func__, owner_id, port, rate_limit_val, bucket_size);
+
+	if (bucket_size) {
+		if (mvNetaTxpBurstSet(port, tmp_tcont, bucket_size) != MV_OK) {
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD,
+				"==ERROE==%s: Invalid bucket size value: owner_id[%d],rate_limit_val[%d] bucket_size[%d]\n\r",
+				__func__, owner_id, rate_limit_val, bucket_size);
+			return ERR_SW_TM_BUCKET_SIZE_INVALID;
+		}
+	}
+
+	mvNetaTxpRateSet(port, tmp_tcont, rate_limit_val);
+
+	TPM_OS_INFO(TPM_TPM_LOG_MOD,  "==EXIT== %s: \n\r", __func__);
+
+	return TPM_RC_OK;
+}
+EXPORT_SYMBOL(tpm_tm_set_tx_port_rate_lim);
+

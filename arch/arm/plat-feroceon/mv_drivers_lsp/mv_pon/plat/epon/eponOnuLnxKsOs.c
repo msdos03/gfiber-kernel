@@ -269,6 +269,19 @@ MV_STATUS onuEponRtosResourceInit(void)
 	}
   }
 
+  /* onu pon TX Power timer */
+  retcode = onuPonTimerCreate(&(onuPonResourceTbl_s.onuPonTxPwrTimerId),   /* timer Id */
+                               "pon_txPwr",                                /* timer description */
+                               (PTIMER_FUNCPTR)onuEponTimerTxPwrHndl,      /* timer function */
+                               ONU_PON_TIMER_NOT_ACTIVE,                   /* timer active (run) state */
+                               ONU_PON_TIMER_TX_PWR_INTERVAL,              /* init value */
+                               0);                                         /* periodic value */
+  if (retcode != MV_OK)
+  {
+    mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
+               "ERROR: (%s:%d) pon Tx Power timer create\n", __FILE_DESC__, __LINE__);
+    return(MV_ERROR);
+  }
 
   /* Interrupt */
   /* ========= */

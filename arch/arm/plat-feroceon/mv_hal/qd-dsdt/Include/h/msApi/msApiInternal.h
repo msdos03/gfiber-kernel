@@ -723,6 +723,8 @@ extern "C" {
 #define DEV_IP_MAPPING_TABLE		( DEV_88E6351_FAMILY )
 #define DEV_EEPROM					( DEV_88E6351_FAMILY )
 
+/*PIRL Alpha factor macro for 6510 internal switch*/
+#define PIRL_ALPHA 6250000
 
 /* Macros to utilize Device Group */
 

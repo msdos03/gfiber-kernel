@@ -165,8 +165,7 @@ void onuGponDbOnuGenTblInit(void)
   onuGponDbRateSet(GPON_FRAME_DELINEATION_FR);
 
   /* set gpon xvr polarity to default value */
-  onuGponDbXvrPolaritySet(ONU_PON_XVR_POLARITY_ACT_HIGH);
-
+  
   /* set onu init status to be MV_FALSE */
   onuGponDbInitSet(MV_FALSE);
 
@@ -900,46 +899,6 @@ MV_STATUS onuGponDbRateSet(MV_U32 rate)
 MV_U32 onuGponDbRateGet(void)
 {
   return(onuGponDb_s.onuGponGenTbl_s.onuGponRate);
-}
-
-/*******************************************************************************
-**
-**  onuGponDbXvrPolaritySet
-**  ____________________________________________________________________________
-**
-**  DESCRIPTION: The function set ONU XVR polarity in the database
-**
-**  PARAMETERS:  MV_U32 rate
-**
-**  OUTPUTS:     None
-**
-**  RETURNS:     MV_OK
-**
-*******************************************************************************/
-MV_STATUS onuGponDbXvrPolaritySet(MV_U32 polarity)
-{
-  onuGponDb_s.onuGponGenTbl_s.onuGponXvrPolarity = polarity;
-
-  return(MV_OK);
-}
-
-/*******************************************************************************
-**
-**  onuGponDbXvrPolarityGet
-**  ____________________________________________________________________________
-**
-**  DESCRIPTION: The function return onu polarity
-**
-**  PARAMETERS:  None
-**
-**  OUTPUTS:     None
-**
-**  RETURNS:     onu Rate
-**
-*******************************************************************************/
-MV_U32 onuGponDbXvrPolarityGet(void)
-{
-  return(onuGponDb_s.onuGponGenTbl_s.onuGponXvrPolarity);
 }
 
 /*******************************************************************************

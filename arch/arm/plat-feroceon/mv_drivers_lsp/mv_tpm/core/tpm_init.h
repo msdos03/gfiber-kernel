@@ -102,5 +102,12 @@ int32_t tpm_init_api_rng_init_all(void);
 int32_t tpm_module_init(void);
 int32_t tpm_module_start(tpm_init_t *tpm_init);
 void tpm_init_params_get(tpm_init_t *tpm_init_params);
+int32_t tpm_init_get_gmac_queue_rate_limit(void);
+int32_t tpm_init_mh(tpm_init_mh_src_t ds_mh_set_conf,
+			uint32_t gmac0_mh_en,
+			uint32_t gmac1_mh_en,
+			tpm_init_gmac_conn_conf_t *gmac_port_conf);
+int32_t tpm_init_ipg(int32_t mod_value);
+int32_t tpm_init_gmac_loopback(tpm_gmacs_enum_t port, uint8_t enable);
 
 #endif /* _TPM_INIT_H_ */

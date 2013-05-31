@@ -134,6 +134,7 @@ MV_VOID mvBoardEnvInit(MV_VOID)
 		mvOsPrintf("mvBoardEnvInit:Board unknown.\n");
 		return;
 	}
+
 	nandDev = boardGetDevCSNum(0, BOARD_DEV_NAND_FLASH);
 	if (nandDev != 0xFFFFFFFF) {
 		/* Set NAND interface access parameters */
@@ -152,29 +153,26 @@ MV_VOID mvBoardEnvInit(MV_VOID)
 	/* Set GPP Out value */
 	MV_REG_WRITE(GPP_DATA_OUT_REG(0), BOARD_INFO(boardId)->gppOutValLow);
 	MV_REG_WRITE(GPP_DATA_OUT_REG(1), BOARD_INFO(boardId)->gppOutValMid);
-	if ((boardId != DB_88F6601_BP_ID) && (boardId != RD_88F6601_MC_ID)
-		&& (boardId != GFLT200_ID) && (boardId != GFLT110_ID))
+	if (boardId != DB_88F6601_BP_ID && boardId != RD_88F6601_MC_ID &&
+	   boardId != RD_88F6601_MC2L_ID &&
+	   boardId != GFLT200_ID && boardId != GFLT110_ID)
 		MV_REG_WRITE(GPP_DATA_OUT_REG(2), BOARD_INFO(boardId)->gppOutValHigh);
 
 	/* set GPP polarity */
 	mvGppPolaritySet(0, 0xFFFFFFFF, BOARD_INFO(boardId)->gppPolarityValLow);
 	mvGppPolaritySet(1, 0xFFFFFFFF, BOARD_INFO(boardId)->gppPolarityValMid);
-	if ((boardId != DB_88F6601_BP_ID) && (boardId != RD_88F6601_MC_ID)
-		&& (boardId != GFLT200_ID) && (boardId != GFLT110_ID))
+	if (boardId != DB_88F6601_BP_ID && boardId != RD_88F6601_MC_ID &&
+	   boardId != RD_88F6601_MC2L_ID &&
+	   boardId != GFLT200_ID && boardId != GFLT110_ID)
 		mvGppPolaritySet(2, 0xFFFFFFFF, BOARD_INFO(boardId)->gppPolarityValHigh);
 
 	/* Set GPP Out Enable */
 	mvGppTypeSet(0, 0xFFFFFFFF, BOARD_INFO(boardId)->gppOutEnValLow);
 	mvGppTypeSet(1, 0xFFFFFFFF, BOARD_INFO(boardId)->gppOutEnValMid);
-	if ((boardId != DB_88F6601_BP_ID) && (boardId != RD_88F6601_MC_ID)
-		&& (boardId != GFLT200_ID) && (boardId != GFLT110_ID))
+	if (boardId != DB_88F6601_BP_ID && boardId != RD_88F6601_MC_ID &&
+	    boardId != RD_88F6601_MC2L_ID &&
+	    boardId != GFLT200_ID && boardId != GFLT110_ID)
 		mvGppTypeSet(2, 0xFFFFFFFF, BOARD_INFO(boardId)->gppOutEnValHigh);
-
-	/* Nand CE */
-#if 0
-	if (nandDev != 0xFFFFFFFF)
-		mvDevNandDevCsSet(nandDev, MV_TRUE);
-#endif
 }
 
 /*******************************************************************************
@@ -333,6 +331,7 @@ MV_U32 mvBoardPwrUpDelayGet(MV_VOID)
 *******************************************************************************/
 MV_BOOL mvBoardIsPortInSgmii(MV_U32 ethPortNum)
 {
+	MV_U32 boardId = mvBoardIdGet();
 	MV_U32 ethCompOpt;
 
 	if (ethPortNum >= BOARD_ETH_PORT_NUM) {
@@ -340,7 +339,7 @@ MV_BOOL mvBoardIsPortInSgmii(MV_U32 ethPortNum)
 		return MV_FALSE;
 	}
 	ethCompOpt = mvBoardEthComplexConfigGet();
-	if (DB_88F6601_BP_ID == mvBoardIdGet()) {
+	if (boardId == DB_88F6601_BP_ID) {
 		if (ethPortNum == 0) {
 			if (ethCompOpt & ESC_OPT_GEPHY_MAC0)
 				return MV_FALSE;
@@ -350,8 +349,8 @@ MV_BOOL mvBoardIsPortInSgmii(MV_U32 ethPortNum)
 			return MV_TRUE;
 		return MV_FALSE;
 	}
-	if ((RD_88F6601_MC_ID == mvBoardIdGet())
-		|| (GFLT200_ID == mvBoardIdGet()) || (GFLT110_ID == mvBoardIdGet()))
+	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
+	    GFLT200_ID == boardId || GFLT110_ID == boardId)
 		return MV_FALSE;
 
 	if ((ethPortNum > 0) || (ethCompOpt & ESC_OPT_SGMII_2_SW_P1))
@@ -649,11 +648,10 @@ MV_32 mvBoardSwitchNumPortsGet(MV_VOID)
 		mvOsPrintf("mvBoardSwitchNumPortsGet: Board unknown.\n");
 		return MV_ERROR;
 	}
-	if ((RD_88F6601_MC_ID == boardId) || (DB_88F6601_BP_ID == boardId)
-		|| (GFLT200_ID == boardId) || (GFLT110_ID == boardId))
-	{
+	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
+	    boardId == DB_88F6601_BP_ID ||
+            GFLT200_ID == boardId || GFLT110_ID == boardId)
 		return 0;
-	}
 
 
 	/* Check if internal switch is connected */
@@ -1250,10 +1248,11 @@ MV_U32 mvBoardTclkGet(MV_VOID)
 	MV_U32 boardId = mvBoardIdGet();
 
 	tmpTClkRate = MV_REG_READ(MPP_SAMPLE_AT_RESET(0));
-	if ((RD_88F6601_MC_ID == boardId) || (DB_88F6601_BP_ID == boardId)
-		|| (GFLT200_ID == boardId) || (GFLT110_ID == boardId)){
+	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
+	    boardId == DB_88F6601_BP_ID ||
+	    GFLT200_ID == boardId || GFLT110_ID == boardId) {
 		tmpTClkRate &= MSAR_TCLCK_6601_MASK;
-		if (tmpTClkRate )
+		if (tmpTClkRate)
 			return MV_BOARD_TCLK_200MHZ;
 		else
 			return MV_BOARD_TCLK_166MHZ;
@@ -1306,8 +1305,9 @@ MV_U32 mvBoardSysClkGet(MV_VOID)
 	sar0 = MV_REG_READ(MPP_SAMPLE_AT_RESET(0));
 	clockSatr = MSAR_CPU_DDR_L2_CLCK_EXTRACT(sar0);
 	i = 0;
-	if ((RD_88F6601_MC_ID == boardId) || (DB_88F6601_BP_ID == boardId)
-		|| (GFLT200_ID == boardId) || (GFLT110_ID == boardId)){
+	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
+	    boardId == DB_88F6601_BP_ID ||
+	    GFLT200_ID == boardId || GFLT110_ID == boardId) {
 		while (cpuDdrTbl6601[i].satrValue != -1) {
 			if (cpuDdrTbl6601[i].satrValue == clockSatr) {
 				res = i;
@@ -1715,9 +1715,10 @@ MV_VOID mvBoardEthComplexConfigSet(MV_U32 ethConfig)
 	/* Set ethernet complex configuration. */
 	BOARD_INFO(boardId)->pBoardMppTypeValue->ethSataComplexOpt = ethConfig;
 
-	if ((boardId != DB_88F6601_BP_ID) && (boardId != RD_88F6601_MC_ID)
-		&& (boardId != GFLT200_ID) && (boardId != GFLT110_ID))
-	{	/* KW2 only */
+	if (boardId != DB_88F6601_BP_ID && boardId != RD_88F6601_MC_ID &&
+	    boardId != RD_88F6601_MC2L_ID &&
+	    boardId != GFLT200_ID && boardId != GFLT110_ID) {
+		/* KW2 only */
 		/* Update link speed for MAC0 / 1 */
 		/* If MAC 0 is connected to switch, then set to speed 1000Mbps */
 		if (mvBoardIsInternalSwitchConnected(0))
@@ -2332,6 +2333,7 @@ MV_VOID mvBoardMppModuleTypePrint(MV_VOID)
 *******************************************************************************/
 MV_BOOL mvBoardIsGbEPortConnected(MV_U32 ethPortNum)
 {
+	MV_U32 boardId = mvBoardIdGet();
 	MV_U32 ethConfig;
 
 	ethConfig = mvBoardEthComplexConfigGet();
@@ -2339,15 +2341,15 @@ MV_BOOL mvBoardIsGbEPortConnected(MV_U32 ethPortNum)
 	if (ethConfig & ESC_OPT_ILLEGAL)
 		return MV_FALSE;
 
-	if (DB_88F6601_BP_ID == mvBoardIdGet()) {
+	if (boardId == DB_88F6601_BP_ID) {
 		if (ethPortNum == 0)
 			return MV_TRUE;
 		if (ethConfig & ESC_OPT_GEPHY_MAC0)
 			return MV_TRUE;
 		return MV_FALSE;
 	}
-	if ((RD_88F6601_MC_ID == mvBoardIdGet())
-		|| (GFLT200_ID == mvBoardIdGet()) || (GFLT110_ID == mvBoardIdGet())) {
+	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
+	    GFLT200_ID == boardId || GFLT110_ID == boardId) {
 		if (ethPortNum == 0)
 			return MV_TRUE;
 		return MV_FALSE;
@@ -2748,6 +2750,9 @@ MV_U32 mvBoardIdGet(MV_VOID)
 		tmpBoardId = DB_88F6601_BP_ID;
 #elif defined(RD_88F6601)
 		tmpBoardId = RD_88F6601_MC_ID;
+#elif defined(RD_88F6601MC2L)
+		tmpBoardId = RD_88F6601_MC2L_ID;
+
 #elif defined(DB_CUSTOMER)
 		tmpBoardId = DB_CUSTOMER_ID;
 #elif defined(GFLT200)
@@ -3122,7 +3127,7 @@ MV_STATUS mvBoardEthSataModulesScan(MV_U32 *modules, MV_ETH_COMPLEX_IF_SOURCES *
 	/* Avanta-MC */
 	mvOsPrintf(" mvBoardEthSataModulesScan: mvTwsiRead return jumper = 0x%x\n",boardCfg );
     	if (DB_88F6601_BP_ID == mvBoardIdGet()) {
-		MV_U8 xcvrValue = 0x4;
+		MV_U8 xcvrValue=4;
 		if (0 == MV_BOARD_6601_CFG_MAC_SRC(boardCfg))
 			ethSrcCfg->feGeSrc = EC_MAC0_SRC;   /* MAC0 --> GbE PHY, MAC1 --> LP SERDES */ 
 		else
@@ -3429,12 +3434,6 @@ MV_STATUS mvBoardTdmModulesScan(MV_VOID)
 		}
 	}
 
-#if 0
-	/* TDM-890 - no auto detection */
-	BOARD_INFO(boardId)->boardTdmInfoIndex = BOARD_TDM_SLIC_890;
-	result = 1;
-
-#endif
 	if (result == 0) {
 		/* No device is found */
 		BOARD_INFO(boardId)->boardTdmInfoIndex = (MV_8)-1;

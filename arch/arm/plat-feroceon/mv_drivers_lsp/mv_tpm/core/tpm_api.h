@@ -777,6 +777,45 @@ tpm_error_code_t tpm_add_ipv4_mc_stream(uint32_t		 owner_id,
 					tpm_trg_port_type_t 	dest_port_bm);
 
 /*******************************************************************************
+* tpm_add_ipv4_mc_stream_set_queue()
+*
+* DESCRIPTION:      Creates a new IPv4 MC stream with dest Queue.
+*                   It is APIs caller responsibility to maintain the correct number of
+*                   each stream number.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* stream_num         - MC stream number.
+* vid                - VLAN ID (0-4095). If set to 4096 - stream is untagged.
+*                      If set to 0xFFFF - do not care.
+* ipv4_src_add       - IPv4 source IP address in network order.
+* ipv4_src_add       - IPv4 destination IP address in network order.
+* ignore_ipv4_src    - when set to 1 - the IP source is not part of the key.
+* dest_queue          - destination queue number.
+* dest_port_bm       - bitmap which includes all destination UNI ports.
+*
+* OUTPUTS:
+*  None.
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_add_ipv4_mc_stream_set_queue(uint32_t owner_id,
+					uint32_t stream_num,
+					tpm_mc_igmp_mode_t igmp_mode,
+					uint8_t mc_stream_pppoe,
+					uint16_t vid,
+					uint8_t ipv4_src_add[4],
+					uint8_t ipv4_dst_add[4],
+					uint8_t ignore_ipv4_src,
+					uint16_t dest_queue,
+					tpm_trg_port_type_t dest_port_bm);
+
+/*******************************************************************************
 * tpm_updt_ipv4_mc_stream()
 *
 * DESCRIPTION:      Updates an existing IPv4 MC stream.
@@ -857,6 +896,45 @@ tpm_error_code_t tpm_add_ipv6_mc_stream(uint32_t owner_id,
 					uint8_t ipv6_src_add[16],
 					uint8_t ipv6_dst_add[16],
 					uint8_t ignore_ipv6_src,
+					tpm_trg_port_type_t dest_port_bm);
+
+/*******************************************************************************
+* tpm_add_ipv6_mc_stream_set_queue()
+*
+* DESCRIPTION:      Creates a new ipv6 MC stream with dest Queue.
+*                   It is APIs caller responsibility to maintain the correct number of
+*                   each stream number.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* stream_num         - MC stream number.
+* vid                - VLAN ID (0-4095). If set to 4096 - stream is untagged.
+*                      If set to 0xFFFF - do not care.
+* ipv6_src_add       - ipv6 source IP address in network order.
+* ipv6_dst_add       - ipv6 destination IP address in network order.
+* ignore_ipv6_src    - when set to 1 - the IP source is not part of the key.
+* dest_queue          - destination queue number.
+* dest_port_bm       - bitmap which includes all destination UNI ports.
+*
+* OUTPUTS:
+*  None.
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_add_ipv6_mc_stream_set_queue(uint32_t owner_id,
+					uint32_t stream_num,
+					tpm_mc_igmp_mode_t igmp_mode,
+					uint8_t mc_stream_pppoe,
+					uint16_t vid,
+					uint8_t ipv6_src_add[16],
+					uint8_t ipv6_dst_add[16],
+					uint8_t ignore_ipv6_src,
+					uint16_t dest_queue,
 					tpm_trg_port_type_t dest_port_bm);
 
 /*******************************************************************************
@@ -1155,7 +1233,27 @@ tpm_error_code_t tpm_oam_loopback_del_channel(uint32_t owner_id);
 * COMMENTS:
 *
 *******************************************************************************/
-tpm_error_code_t tpm_loop_detect_add_channel(uint32_t owner_id);
+tpm_error_code_t tpm_loop_detect_add_channel(uint32_t owner_id, tpm_ether_type_key_t ety);
+
+/*******************************************************************************
+* tpm_loop_detect_del_channel()
+*
+* DESCRIPTION:      remove a communication channel for loop detection management protocol.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+*
+* OUTPUTS:
+*  None.
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_loop_detect_del_channel(uint32_t owner_id);
 
 /******************************************************************************/
 /********************************** Configuration retrieval APIs **************/
@@ -1928,6 +2026,62 @@ tpm_error_code_t tpm_sw_set_port_mirror(uint32_t owner_id,
 					uint32_t dport,
 					tpm_sw_mirror_type_t mode,
 					bool enable);
+/*******************************************************************************
+* tpm_sw_set_trunk_ports
+*
+* DESCRIPTION:
+*       This function creates trunk ports and trunk id on switch
+*
+* INPUTS:
+*       owner_id    - APP owner id - should be used for all API calls.
+*       trunk_id    - valid from 0x0 to 0xf
+*       ports_mask  - mask for real switch port, not logical port like TPM_SRC_PORT_UNI_0.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success  - TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*       None.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_set_trunk_ports
+(
+    uint32_t owner_id,
+    uint32_t trunk_id,
+    uint32_t ports_mask
+);
+/*******************************************************************************
+* tpm_sw_set_trunk_mask
+*
+* DESCRIPTION:
+*       This function sets trunk mask on switch
+*
+* INPUTS:
+*       owner_id    - APP owner id - should be used for all API calls.
+*       mask_num    - trunk mask number, valid from 0 to 7.
+*       trunk_mask  - mask for real switch port, not logical port like TPM_SRC_PORT_UNI_0.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success  - TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*       None.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_set_trunk_mask
+(
+    uint32_t owner_id,
+    uint32_t mask_num,
+    uint32_t trunk_mask
+);
 
 /*******************************************************************************
 * tpm_sw_get_port_mirror
@@ -2061,7 +2215,7 @@ tpm_error_code_t tpm_get_mtu_size(uint32_t owner_id,
 * INPUTS:
 *       owner_id     - APP owner id should be used for all API calls.
 *       src_port     - Source port in UNI port index, UNI0, UNI1...UNI4.
-*       allow_tagged - set to 1 = discard tagged packets per lport
+*       drop_tagged - set to 1 = drop tagged packets per lport
 *                      set to 0 = allow tagged packets per lport.
 *
 * OUTPUTS:
@@ -2077,7 +2231,7 @@ tpm_error_code_t tpm_get_mtu_size(uint32_t owner_id,
 *******************************************************************************/
 tpm_error_code_t tpm_sw_set_port_tagged(uint32_t owner_id,
 					tpm_src_port_type_t src_port,
-					uint8_t allow_tagged);
+					uint8_t drop_tagged);
 
 /*******************************************************************************
 * tpm_sw_get_port_tagged
@@ -2113,7 +2267,7 @@ tpm_error_code_t tpm_sw_get_port_tagged(uint32_t owner_id,
 * INPUTS:
 *       owner_id       - APP owner id should be used for all API calls.
 *       src_port       - Source port in UNI port index, UNI0, UNI1...UNI4.
-*       allow_untagged - set to 1 = discard untagged packets per lport
+*       drop_untagged - set to 1 = drop untagged packets per lport
 *                        set to 0 = alow untagged packets per lport.
 *
 * OUTPUTS:
@@ -2129,7 +2283,7 @@ tpm_error_code_t tpm_sw_get_port_tagged(uint32_t owner_id,
 *******************************************************************************/
 tpm_error_code_t tpm_sw_set_port_untagged(uint32_t owner_id,
 					  tpm_src_port_type_t src_port,
-					  uint8_t allow_untagged);
+					  uint8_t drop_untagged);
 
 /*******************************************************************************
 * tpm_sw_get_port_untagged
@@ -3528,7 +3682,7 @@ tpm_error_code_t tpm_sw_pm_1_read(uint32_t owner_id,
 * INPUTS:
 *      owner_id          - APP owner id  should be used for all API calls.
 *       port              - The logical port number
-*      tpm_swport_pm_3   - Holds PM data
+*      tpm_swport_pm_3_all_t   - Holds PM data
 *
 * OUTPUTS:
 * PM data is supplied structure.
@@ -3540,7 +3694,7 @@ tpm_error_code_t tpm_sw_pm_1_read(uint32_t owner_id,
 *******************************************************************************/
 tpm_error_code_t tpm_sw_pm_3_read(uint32_t owner_id,
 				  tpm_src_port_type_t port,
-				  tpm_swport_pm_3_t *tpm_swport_pm_3);
+				  tpm_swport_pm_3_all_t *tpm_swport_pm_3);
 
 /*******************************************************************************
 * tpm_sw_clear_port_counter
@@ -3574,7 +3728,7 @@ tpm_error_code_t tpm_sw_clear_port_counter(uint32_t owner_id,
 * owner_id           - APP owner id  should be used for all API calls.
 * src_port           - The packet originating source port, could be any UNI port:
 * precedence         - precedence of this CnM rule, from 0 to 7
-* l2_parse_rule_bm   
+* l2_parse_rule_bm
 * ipv4_parse_rule_bm
 *                    - Bitmap containing the significant flags for parsing fields of the packet.
 * l2_key
@@ -3804,6 +3958,228 @@ tpm_error_code_t tpm_mac_learn_default_rule_act_set(uint32_t owner_id, tpm_unkno
 *
 *******************************************************************************/
 tpm_error_code_t tpm_mac_learn_entry_num_get(uint32_t *entry_num);
+
+/*******************************************************************************
+* tpm_add_ds_load_balance_rule()
+*
+* DESCRIPTION: The API adds DS load balance PnC rules to set target port to GMAC0 or GMAC1
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* rule_num           - Entry index to be added in the current ACL
+* parse_rule_bm      - Bitmap containing the significant flags for parsing fields of the packet.
+*                      possible values for L2 API:
+*                        TPM_L2_PARSE_MAC_DA|TPM_L2_PARSE_MAC_SA|TPM_L2_PARSE_ONE_VLAN_TAG
+*                        |TPM_L2_PARSE_TWO_VLAN_TAG|TPM_L2_PARSE_ETYPE|TPM_L2_PARSE_PPPOE_SES
+*                        |TPM_L2_PARSE_PPP_PROT|TPM_L2_PARSE_GEMPORT)
+* parse_flags_bm     - Bitmap containing the significant flags result of the primary ACL filtering.
+*                      possible values for L2 API:
+*                        TPM_PARSE_FLAG_TAG1_TRUE|TPM_PARSE_FLAG_TAG1_FLASE|
+*                        TPM_PARSE_FLAG_TAG2_TRUE|TPM_PARSE_FLAG_TAG2_FALSE
+* l2_key             - Information to create a parsing key for the rule.
+*                      Some pointers may be NULL depending on the parse_rule_bm.
+* tgrt_port          - target Port: GMAC0, GMAC1 or CPU
+*
+* OUTPUTS:
+*  rule_idx         - Unique rule identification number which is used when deleting the rule.
+*                     (this is not the rule_num)
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*           None
+*
+*******************************************************************************/
+tpm_error_code_t tpm_add_ds_load_balance_rule(uint32_t owner_id,
+						uint32_t rule_num,
+						uint32_t *rule_idx,
+						tpm_parse_fields_t parse_rule_bm,
+						tpm_parse_flags_t parse_flags_bm,
+						tpm_l2_acl_key_t *l2_key,
+						tpm_ds_load_balance_tgrt_t tgrt_port);
+
+/*******************************************************************************
+* tpm_del_ds_load_balance_rule()
+*
+* DESCRIPTION: The API delete CPU egress loopback modification and PnC rules for
+*              specific Tcont/queue/gem_port
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* rule_idx           - Unique rule idenitifcation number specifying the rule to be deleted.
+*
+* OUTPUTS:
+*           NONE
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*           None
+*
+*******************************************************************************/
+tpm_error_code_t tpm_del_ds_load_balance_rule(uint32_t owner_id, uint32_t rule_idx);
+
+/*******************************************************************************
+* tpm_set_active_wan()
+*
+* DESCRIPTION:      Set active WAN port
+*
+* INPUTS:
+* owner_id          - APP owner id  should be used for all API calls.
+* active_wan        - active wan, GMAC0, GMAC1, PON
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_set_active_wan(uint32_t owner_id,
+				    tpm_gmacs_enum_t active_wan);
+/*******************************************************************************
+* tpm_hot_swap_profile()
+*
+* DESCRIPTION:      Swap profile and update all the ACL rules according to
+*                   the new profile
+*
+* INPUTS:
+* owner_id          - APP owner id  should be used for all API calls.
+* profile_id        - the new profile that system is swapping to
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_DB_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_hot_swap_profile(uint32_t owner_id,
+				    tpm_eth_complex_profile_t profile_id);
+
+/*******************************************************************************
+* tpm_xlate_uni_2_switch_port()
+*
+* DESCRIPTION: The API translates TPM logic UNI port into Switch port.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* uni_port           - TPM logic port that need to be translated.
+*
+* OUTPUTS:
+* switch_port      - switch port.
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*           None
+*
+*******************************************************************************/
+tpm_error_code_t tpm_xlate_uni_2_switch_port (uint32_t		  owner_id,
+					     tpm_src_port_type_t  uni_port,
+					     uint32_t		 *switch_port);
+
+/*******************************************************************************
+* tpm_set_gmac_loopback()
+*
+* DESCRIPTION: The API enable/disable loopback mode of gmac.
+*
+* INPUTS:
+* owner_id           - APP owner id  should be used for all API calls.
+* gmac                 -
+* enable               - 1 for enable, 0 for disable
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_RC_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*           None
+*
+*******************************************************************************/
+tpm_error_code_t tpm_set_gmac_loopback (uint32_t	  owner_id,
+						tpm_gmacs_enum_t  gmac,
+						uint8_t		  enable);
+
+/*******************************************************************************
+* tpm_sw_port_add_vid_set_egrs_mode
+*
+* DESCRIPTION:
+*       The API adds a VID to the list of the allowed VIDs per UNI port,
+*       and sets the egress mode for the port.
+*
+* INPUTS:
+*       owner_id   - APP owner id should be used for all API calls.
+*       src_port   - Source port in UNI port index, UNI0, UNI1...UNI4.
+*       vid        - vlan id
+*       eMode      - egress mode
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success - TPM_RC_OK.
+*       On error different types are returned according to the case see tpm_error_code_t.
+*
+* COMMENTS:
+*       MEMBER_EGRESS_UNMODIFIED - 0
+*       NOT_A_MEMBER             - 1
+*       MEMBER_EGRESS_UNTAGGED   - 2
+*       MEMBER_EGRESS_TAGGED     - 3
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_port_add_vid_set_egrs_mode (uint32_t            owner_id,
+                                                    tpm_src_port_type_t port,
+                                                    uint16_t            vid,
+                                                    uint8_t             eMode);
+/*******************************************************************************
+* tpm_active_tcont()
+*
+* DESCRIPTION:    Function used to enable hwf to certain tcont.
+*
+* INPUTS:
+* tcont_num
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_active_tcont(uint32_t tcont_num);
+/*******************************************************************************
+* tpm_deactive_tcont()
+*
+* DESCRIPTION:    Function used to disable hwf to certain tcont.
+*
+* INPUTS:
+* tcont_num
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_deactive_tcont(uint32_t tcont_num);
 
 /* OLD API functions */
 #define tpm_add_l2_prim_acl_rule                            tpm_add_l2_rule

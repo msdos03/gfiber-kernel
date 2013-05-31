@@ -84,6 +84,9 @@ typedef struct {
 	unsigned int tx_miss;
 	unsigned int rx_over;
 	unsigned int tx_under;
+#ifdef CONFIG_MV_TDM_EXT_STATS
+	MV_TDM_EXTENDED_STATS tdm_ext_stats;
+#endif
 } tdm_if_stats_t;
 
 typedef struct {

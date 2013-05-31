@@ -364,6 +364,7 @@ void onuGponPonMngPloamProcess(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
   MV_U32          onuState;
   GPONFUNCPTR     ptrFunc;
   S_OnuGponGenTbl *onuGponGenTbl_p = &(onuGponDb_s.onuGponGenTbl_s);
+  MV_U32          *msgData_p = msgData;
 
   /* get onu Id */
   appOnuId = onuGponDbOnuIdGet();
@@ -389,6 +390,9 @@ void onuGponPonMngPloamProcess(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
       {
         (*ptrFunc)(onuId, msgId, msgData);
       }           
+
+      onuGponSyncLog(ONU_GPON_LOG_MSG, onuId, msgId, 0);
+      onuGponSyncLog(ONU_GPON_LOG_MSG_CONTENT, *(msgData_p), *(msgData_p + 1), *(msgData_p + 2));
     }
     /* handle invalid messages */
     else
@@ -535,12 +539,6 @@ void onuGponTimerFifoAuditHndl(unsigned long data)
   spin_lock_irqsave(&onuPonIrqLock, flags);
 
   onuPonResourceTbl_s.onuPonSwFIFOTimerId.onuPonTimerActive = ONU_PON_TIMER_NOT_ACTIVE;
-
-  if (onuGponDbOnuStateGet() == ONU_GPON_05_OPERATION)
-  {
-    spin_unlock_irqrestore(&onuPonIrqLock, flags);
-    return;
-  }
 
   /* Call PM handler */
   mvOnuGponFifoAuditTimerExpireHndl();

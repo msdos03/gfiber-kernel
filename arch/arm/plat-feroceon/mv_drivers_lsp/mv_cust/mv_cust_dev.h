@@ -63,13 +63,6 @@ int     mvcust_netdev_init     (void);
 int     mvcust_sysfs_init      (void);
 void    mvcust_sysfs_delete    (void);
 
-void    mv_cust_omci_print         (void);
-void    mv_cust_eoam_print         (void);
-#ifdef CONFIG_MV_CUST_IGMP_HANDLE
-void    mv_cust_igmp_print         (void);
-#endif
-void    mv_cust_loopdet_print      (void);
-
 #ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE
 void    mv_cust_udp_spec_print_all (void);
 #endif

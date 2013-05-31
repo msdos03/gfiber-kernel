@@ -2009,6 +2009,49 @@ MV_U32 onuEponDbModeGet(void)
 
 /*******************************************************************************
 **
+**  onuEponDbP2PForceModeSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets EPON P2P Force mode in the database
+**
+**  PARAMETERS:  MV_U32 mode
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuEponDbP2PForceModeSet(MV_U32  forceMode)
+{
+    if (forceMode >= E_EPON_IOCTL_MAX_MODE_NUM)
+      return(MV_ERROR);
+
+    onuEponDb_s.onuEponGenTbl_s.onuEponP2PForceMode = forceMode;
+
+    return(MV_OK);
+}
+
+/*******************************************************************************
+**
+**  onuEponDbP2PForceModeGet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function returns current EPON P2P Force mode
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_U32 mode
+**
+*******************************************************************************/
+MV_U32 onuEponDbP2PForceModeGet(void)
+{
+    return(onuEponDb_s.onuEponGenTbl_s.onuEponP2PForceMode);
+}
+
+/*******************************************************************************
+**
 **  onuEponDbPcsCfgSet
 **  ____________________________________________________________________________
 ** 
@@ -2089,10 +2132,10 @@ MV_U32 onuEponDbOverheadGet(void)
 
 /*******************************************************************************
 **
-**  onuEponDbXvrPolaritySet
+**  onuEponDbBurstEnablePolaritySet
 **  ____________________________________________________________________________
 ** 
-**  DESCRIPTION: The function sets EPON XVR polarity register value in the database
+**  DESCRIPTION: The function sets EPON XVR burst enable polarity value in the database
 **               
 **  PARAMETERS:  MV_U32 val
 **
@@ -2101,30 +2144,30 @@ MV_U32 onuEponDbOverheadGet(void)
 **  RETURNS:     MV_OK or error
 **                   
 *******************************************************************************/
-MV_STATUS onuEponDbXvrPolaritySet(MV_U32   val)
+MV_STATUS onuEponDbBurstEnablePolaritySet(MV_U32 val)
 {
-    onuEponDb_s.onuEponGenTbl_s.onuEponXvrPolarity = val;
+    onuEponDb_s.onuEponGenTbl_s.onuEponXvrBurstEnPolarity = val;
 
     return(MV_OK);
 }
 
 /*******************************************************************************
 **
-**  onuEponDbXvrPolarityGet
+**  onuEponDbBurstEnablePolarityGet
 **  ____________________________________________________________________________
 ** 
-**  DESCRIPTION: The function returns EPON XVR polarity register value
+**  DESCRIPTION: The function gets EPON XVR burst enable polarity value in the database
 **               
 **  PARAMETERS:  None
 **
 **  OUTPUTS:     None
 **
-**  RETURNS:     MV_U32 mode
+**  RETURNS:     polarity
 **                   
 *******************************************************************************/
-MV_U32 onuEponDbXvrPolarityGet(void)
+MV_U32 onuEponDbBurstEnablePolarityGet(void)
 {
-    return(onuEponDb_s.onuEponGenTbl_s.onuEponXvrPolarity);
+    return onuEponDb_s.onuEponGenTbl_s.onuEponXvrBurstEnPolarity;
 }
 
 /*******************************************************************************

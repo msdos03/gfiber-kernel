@@ -46,6 +46,66 @@ static sw_vlan_tbl_type    sw_vlan_tbl[SW_MAX_VLAN_NUM];
 static uint8_t   weight_arr[4] = {0};
 extern GT_QD_DEV *qd_dev;
 
+/*******************************************************************************
+* mv_switch_find_vid_entry_sw
+*
+* DESCRIPTION:
+*       The API find expected VTU entry in sw_vlan_tbl.
+*
+* INPUTS:
+*       vtuEntry      - VTU entry, supply VID
+*
+* OUTPUTS:
+*       vtuEntry      - VTU entry, store entry info if found
+*       found         - find expected entry or not
+*
+* RETURNS:
+*       On success -  GT_OK.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t mv_switch_find_vid_entry_sw(GT_VTU_ENTRY *vtuEntry, GT_BOOL *found)
+{
+    if (vtuEntry == NULL || found == NULL)
+        return GT_BAD_PARAM;
+
+    if (sw_vlan_tbl[vtuEntry->vid].members) {/* if members not 0, this vid entry exist in HW andd SW */
+        memcpy(vtuEntry, &sw_vlan_tbl[vtuEntry->vid].vtu_entry, sizeof(GT_VTU_ENTRY));
+        *found = GT_TRUE;
+    } else {
+        *found = GT_FALSE;
+    }
+
+    return GT_OK;
+}
+
+/*******************************************************************************
+* mv_switch_record_vid_entry_sw
+*
+* DESCRIPTION:
+*       The API store expected VTU entry in sw_vlan_tbl.
+*
+* INPUTS:
+*       vtuEntry      - VTU entry
+*
+* OUTPUTS:
+*       None
+*
+* RETURNS:
+*       On success -  GT_OK.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t mv_switch_record_vid_entry_sw(GT_VTU_ENTRY *vtuEntry)
+{
+    if (vtuEntry == NULL)
+        return GT_BAD_PARAM;
+    memcpy(&sw_vlan_tbl[vtuEntry->vid].vtu_entry, vtuEntry, sizeof(GT_VTU_ENTRY));
+
+    return GT_OK;
+}
 
 /*******************************************************************************
 * mv_switch_prv_port_add_vid
@@ -54,7 +114,10 @@ extern GT_QD_DEV *qd_dev;
 *       The API adds a VID to the list of the allowed VIDs per lport.
 *
 * INPUTS:
-*       vid      - VLAN id.
+*       lport     - logic port id to set
+*       vid       - vlan id
+*       gmac0Idx  - port GMAC0 connects to, if its value is 0xFFFF, do not care GMAC0 port
+*       eMode     - egress mode
 *
 * OUTPUTS:
 *       None.
@@ -69,7 +132,10 @@ extern GT_QD_DEV *qd_dev;
 *******************************************************************************/
 int32_t mv_switch_prv_port_add_vid
 (
-    uint16_t vid
+    uint32_t lport,
+    uint16_t vid,
+    uint16_t gmac0Idx,
+    uint8_t  eMode
 )
 {
     GT_STATUS    rc = GT_OK;
@@ -80,16 +146,13 @@ int32_t mv_switch_prv_port_add_vid
     memset(&tmpVtuEntry,0,sizeof(GT_VTU_ENTRY));
     tmpVtuEntry.vid   = vid;
 
-    rc = gvtuFindVidEntry(qd_dev, &tmpVtuEntry, &found);
-    if ( (rc != GT_OK) && (rc != GT_NO_SUCH) )
-    {
-        printk(KERN_ERR "%s:%d:==ERROR==gvtuFindVidEntry failed rc[0x%x]\r\n",
+    rc = mv_switch_find_vid_entry_sw(&tmpVtuEntry, &found);
+    if (rc != GT_OK) {
+        printk(KERN_ERR "%s:%d:==ERROR==mv_switch_find_vid_entry_sw failed rc[0x%x]\r\n",
                __FUNCTION__, __LINE__, rc);
 
         return GT_FAIL;
     }
-
-    printk(KERN_DEBUG "%s: found[%d]\n\r", __FUNCTION__,found);
 
     if (found == GT_FALSE)/* VTU entry does not exist */
     {
@@ -115,7 +178,16 @@ int32_t mv_switch_prv_port_add_vid
     for (port=0; port < qd_dev->numOfPorts; port++)
     {
         if (sw_vlan_tbl[vid].members & (1 << port)){
-            tmpVtuEntry.vtuData.memberTagP[port] = sw_vlan_tbl[vid].egr_mode[port];
+            if (port == lport)
+                tmpVtuEntry.vtuData.memberTagP[port] = eMode;/* update egress mode only */
+            else
+                tmpVtuEntry.vtuData.memberTagP[port] = sw_vlan_tbl[vid].egr_mode[port];
+        }
+        else if (port == lport) {
+            tmpVtuEntry.vtuData.memberTagP[port] = eMode;
+        }
+        else if (gmac0Idx == port) {/* add GMAC_0 to VLAN if gmac0Idx valid */
+            tmpVtuEntry.vtuData.memberTagP[port] = MEMBER_EGRESS_UNMODIFIED;
         }
         else{
             tmpVtuEntry.vtuData.memberTagP[port] = NOT_A_MEMBER;
@@ -127,6 +199,15 @@ int32_t mv_switch_prv_port_add_vid
     if (rc != GT_OK)
     {
         printk(KERN_ERR "%s:%d:==ERROR==gvtuAddEntry failed rc[0x%x]\r\n",
+               __FUNCTION__, __LINE__, rc);
+
+        return GT_FAIL;
+    }
+
+    /* Record HW VT entry info to sw_vlan_tbl */
+    rc = mv_switch_record_vid_entry_sw(&tmpVtuEntry);
+    if (rc != GT_OK) {
+        printk(KERN_ERR "%s:%d:==ERROR==mv_switch_record_vid_entry_sw failed rc[0x%x]\r\n",
                __FUNCTION__, __LINE__, rc);
 
         return GT_FAIL;
@@ -168,21 +249,25 @@ int32_t mv_switch_prv_del_vid_per_port
     GT_U8        port_idx;
     uint32_t     isVlanMember = 0;
 
-    memset(&tmpVtuEntry,0,sizeof(GT_VTU_ENTRY));
-    tmpVtuEntry.vid = vid;
-
-    rc = gvtuFindVidEntry(qd_dev, &tmpVtuEntry, &found);
-    if ( (rc != GT_OK) && (rc != GT_NO_SUCH) )
-    {
-        printk(KERN_ERR "%s:%d:==ERROR==gvtuFindVidEntry failed rc[0x%x]\r\n",
-               __FUNCTION__, __LINE__, rc);
-
-        rc = GT_FAIL;
-        goto out_func;
-    }
+    /* Find vid in sw_vlan_tbl first */
+    if (!(sw_vlan_tbl[vid].members & (1 << port)))
+            found = GT_FALSE;
 
     if (found == GT_TRUE) /* VTU entry exist */
     {
+        memset(&tmpVtuEntry,0,sizeof(GT_VTU_ENTRY));
+        tmpVtuEntry.vid = vid;
+        /* Read SW VT to get necessary entry info */
+        rc = mv_switch_find_vid_entry_sw(&tmpVtuEntry, &found);
+        if ( (rc != GT_OK) && (rc != GT_NO_SUCH) )
+        {
+            printk(KERN_ERR "%s:%d:==ERROR==mv_switch_find_vid_entry_sw failed rc[0x%x]\r\n",
+                   __FUNCTION__, __LINE__, rc);
+
+            rc = GT_FAIL;
+            goto out_func;
+        }
+
         /* 1. Mark the lport as NOT_A_MEMBER. */
         tmpVtuEntry.vtuData.memberTagP[port] = NOT_A_MEMBER;
 
@@ -210,6 +295,15 @@ int32_t mv_switch_prv_del_vid_per_port
                 goto out_func;
             }
 
+            /* Record HW VT entry info to sw_vlan_tbl */
+            rc = mv_switch_record_vid_entry_sw(&tmpVtuEntry);
+            if (rc != GT_OK) {
+                printk(KERN_ERR "%s:%d:==ERROR==mv_switch_record_vid_entry_sw failed rc[0x%x]\r\n",
+                       __FUNCTION__, __LINE__, rc);
+
+                return GT_FAIL;
+            }
+
             sw_vlan_tbl[vid].members &= ~(((uint32_t)0x1) << (port));/* Delete port from VID DB */
         }
         else/* Delete VTU */
@@ -229,7 +323,7 @@ int32_t mv_switch_prv_del_vid_per_port
     }
     else /* VTU entry does not exist in search */
     {
-        printk(KERN_ERR "%s:%d:==ERROR== No Such VID\r\n",__FUNCTION__,__LINE__);
+        printk(KERN_ERR "%s:%d:==ERROR== No Such VID in Port(%d) Vlan List\r\n",__FUNCTION__,__LINE__, port);
 
         rc = GT_FAIL;
         goto out_func;
@@ -1249,60 +1343,8 @@ int32_t mv_switch_port_add_vid
 )
 {
     GT_STATUS rc = GT_OK;
-    uint32_t  port;
-    uint32_t  port_bm;
 
-    /* Verify whether the port is already a member of this VID */
-    port_bm = (uint32_t)(1 << lport);
-    if ( !(sw_vlan_tbl[vid].members & port_bm) )
-    {
-        /* All fallback ports are also added to this VLAN in order
-           to support traffic on this VLAN with all fallback ports */
-        for(port = 0; port < qd_dev->numOfPorts; port++)
-        {
-            if (port == lport)
-            {
-                sw_vlan_tbl[vid].members |= port_bm;
-                sw_vlan_tbl[vid].egr_mode[port] = MEMBER_EGRESS_UNMODIFIED;
-            }
-            else
-            {
-                #if 0
-                if (sw_ports_tbl[port].port_mode == GT_FALLBACK && \
-                    !(sw_vlan_tbl[vid].members & (1 << port)))
-                {
-                    sw_vlan_tbl[vid].members |= (uint32_t)(1 << port);
-                    sw_vlan_tbl[vid].egr_mode[port] = MEMBER_EGRESS_UNMODIFIED;
-                }
-                #endif
-            }
-        }
-
-        /*if (sw_ports_tbl[gmac0Idx].port_mode == GT_FALLBACK &&
-            !(sw_vlan_tbl[vid].members & (1 << gmac0Idx)))*/
-        /* Always add GMAC_0 to VLAN */
-        if (!(sw_vlan_tbl[vid].members & (1 << gmac0Idx)))
-        {
-            sw_vlan_tbl[vid].members |= (uint32_t)(1 << gmac0Idx);
-            sw_vlan_tbl[vid].egr_mode[gmac0Idx] = MEMBER_EGRESS_UNMODIFIED;
-        }
-
-        rc = mv_switch_prv_port_add_vid(vid);
-        if (rc != GT_OK)
-        {
-            printk(KERN_ERR "%s:%d:==ERROR== failed rc[0x%x]\r\n",
-                   __FUNCTION__, __LINE__, rc);
-
-            rc = GT_FAIL;
-        }
-    }
-
-    /* Add the specified port to the SW Port table */
-    if (sw_ports_tbl[lport].vlan_blong[vid] == SW_PORT_NOT_BELONG)
-    {
-        sw_ports_tbl[lport].cnt++;
-        sw_ports_tbl[lport].vlan_blong[vid] = SW_PORT_BELONG;
-    }
+    rc = mv_switch_port_add_vid_set_egrs_mode(lport, vid, gmac0Idx, MEMBER_EGRESS_UNMODIFIED);
 
     return rc;
 }
@@ -1410,14 +1452,14 @@ int32_t mv_switch_set_port_vid_egress_mode
         memset(&vtuEntry, 0, sizeof(GT_VTU_ENTRY));
         vtuEntry.vid = vid;
 
-        rc = gvtuFindVidEntry(qd_dev, &vtuEntry, &found);
+        rc = mv_switch_find_vid_entry_sw(&vtuEntry, &found);
         if (rc != GT_OK && rc != GT_NO_SUCH)
         {
-            printk(KERN_ERR"%s:%d:==ERROR==gvtuFindVidEntry failed rc[0x%x]\r\n",
+            printk(KERN_ERR"%s:%d:==ERROR==mv_switch_find_vid_entry_sw failed rc[0x%x]\r\n",
                    __FUNCTION__, __LINE__, rc);
 
             return GT_FAIL;
-    }
+        }
 
         printk(KERN_DEBUG "%s: found[%d]\n\r", __FUNCTION__, found);
 
@@ -1427,6 +1469,15 @@ int32_t mv_switch_set_port_vid_egress_mode
         if (rc != GT_OK)
         {
             printk(KERN_ERR"%s:%d:==ERROR==gvtuAddEntry failed rc[0x%x]\r\n",
+                   __FUNCTION__, __LINE__, rc);
+
+            return GT_FAIL;
+        }
+
+        /* Record HW VT entry info to sw_vlan_tbl */
+        rc = mv_switch_record_vid_entry_sw(&vtuEntry);
+        if (rc != GT_OK) {
+            printk(KERN_ERR "%s:%d:==ERROR==mv_switch_record_vid_entry_sw failed rc[0x%x]\r\n",
                    __FUNCTION__, __LINE__, rc);
 
             return GT_FAIL;
@@ -1614,18 +1665,20 @@ int32_t mv_switch_prv_set_fallback_mode
         if ( sw_vlan_tbl[vlan_idx].members &&
              !(sw_vlan_tbl[vlan_idx].members & port_bm))
         {
-            sw_vlan_tbl[vlan_idx].members |= port_bm;
-            sw_vlan_tbl[vlan_idx].egr_mode[port] = MEMBER_EGRESS_UNMODIFIED;
-
             /* Update VTU table */
-            rc |= mv_switch_prv_port_add_vid(vlan_idx);
+            rc |= mv_switch_prv_port_add_vid(port, vlan_idx, 0xFFFF, MEMBER_EGRESS_UNMODIFIED);
 
             if (rc != GT_OK)
             {
                 printk(KERN_ERR
                        "%s:%d:==ERROR== failed to add port [%d] to VLAN [%d]\r\n",
                        __FUNCTION__,__LINE__,port, vlan_idx);
+                return rc;
             }
+
+            sw_vlan_tbl[vlan_idx].members |= port_bm;
+            sw_vlan_tbl[vlan_idx].egr_mode[port] = MEMBER_EGRESS_UNMODIFIED;
+
         }
     }
 
@@ -4978,6 +5031,7 @@ int32_t mv_switch_flush_vtu(void)
 		return rc;
 	}
 	memset(sw_vlan_tbl,  0,  sizeof(sw_vlan_tbl));
+
 	for(port = 0; port < qd_dev->numOfPorts; port++)
 	{
 		memset(&(sw_ports_tbl[port].vlan_blong), 0, sizeof(sw_ports_tbl[port].vlan_blong));
@@ -5018,6 +5072,205 @@ int32_t mv_switch_flush_atu
 	}
 
 	return rc;
+}
+
+/*******************************************************************************
+* mv_switch_set_port_speed_duplex_mode
+*
+* DESCRIPTION:
+*       This routine will disable auto-negotiation and set the PHY port speed and duplex mode.
+*
+* INPUTS:
+*		port -	The logical port number, unless SERDES device is accessed
+*
+*		speed -    PHY_SPEED_10_MBPS -10 Mbps
+*				PHY_SPEED_100_MBPS -100 Mbps
+* 				PHY_SPEED_1000_MBPS -100 Mbps.
+*		enable - Enable/Disable full duplex mode.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success -  TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t mv_switch_set_port_speed_duplex_mode
+(
+IN GT_LPORT port,
+IN GT_PHY_SPEED speed,
+IN GT_BOOL enable
+)
+{
+    GT_STATUS     rc = GT_OK;
+
+    rc = gprtSetPortSpeedDuplexMode(qd_dev, port, speed, enable);
+    if (rc != GT_OK)
+    {
+        printk(KERN_ERR "%s:%d:==ERROR==gprtSetPortSpeedDuplexMode failed rc[0x%x]\r\n",
+               __FUNCTION__, __LINE__, rc);
+
+        rc = GT_FAIL;
+    }
+
+    return rc;
+}
+
+/*******************************************************************************
+* mv_switch_set_port_forced_fc_value
+*
+* DESCRIPTION:
+*       This routine will set forced flow control value when forced flow control enabled.
+*
+* INPUTS:
+*		port -	The logical port number, unless SERDES device is accessed
+*
+*		enable-
+*
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success -  TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t mv_switch_set_port_forced_fc_value
+(
+IN GT_LPORT  port,
+IN GT_BOOL   enable
+)
+{
+    GT_STATUS     rc = GT_OK;
+
+    rc = gpcsSetFCValue(qd_dev, port, enable);
+    if (rc != GT_OK)
+    {
+        printk(KERN_ERR "%s:%d:==ERROR==gpcsSetFCValue failed rc[0x%x]\r\n",
+               __FUNCTION__, __LINE__, rc);
+
+        rc = GT_FAIL;
+    }
+
+    return rc;
+}
+
+/*******************************************************************************
+* mv_switch_set_port_forced_flow_control
+*
+* DESCRIPTION:
+*       This routine will enable/disable forced flow control state.
+*
+* INPUTS:
+*		port -	The logical port number, unless SERDES device is accessed
+*
+*		enable-
+*
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success -  TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+* COMMENTS:
+*
+*******************************************************************************/
+int32_t mv_switch_set_port_forced_flow_control
+(
+IN GT_LPORT  port,
+IN GT_BOOL   enable
+)
+{
+    GT_STATUS     rc = GT_OK;
+
+    rc = gpcsSetForcedFC(qd_dev, port, enable);
+    if (rc != GT_OK)
+    {
+        printk(KERN_ERR "%s:%d:==ERROR==gpcsSetForcedFC failed rc[0x%x]\r\n",
+               __FUNCTION__, __LINE__, rc);
+
+        rc = GT_FAIL;
+    }
+
+    return rc;
+}
+
+/*******************************************************************************
+* mv_switch_port_add_vid_set_egrs_mode
+*
+* DESCRIPTION:
+*       The API adds a VID to the list of the allowed VIDs per lport
+*       and sets the egress mode for the port.
+*
+* INPUTS:
+*       lport     - logic port id to set
+*       vid       - vlan id
+*       gmac0Idx  - port GMAC0 connects to
+*       eMode     - egress mode
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success -  TPM_RC_OK.
+*       On error different types are returned according to the case see tpm_error_code_t.
+*
+* COMMENTS:
+*       MEMBER_EGRESS_UNMODIFIED - 0
+*       NOT_A_MEMBER             - 1
+*       MEMBER_EGRESS_UNTAGGED   - 2
+*       MEMBER_EGRESS_TAGGED     - 3
+*
+*******************************************************************************/
+int32_t mv_switch_port_add_vid_set_egrs_mode
+(
+    IN uint32_t lport,
+    IN uint16_t vid,
+    IN uint16_t gmac0Idx,
+    IN uint8_t  eMode
+)
+{
+    GT_STATUS rc = GT_OK;
+    uint32_t  port_bm;
+
+    /* Verify whether the port is already a member of this VID */
+    port_bm = (uint32_t)(1 << lport);
+    if (!((sw_vlan_tbl[vid].members & port_bm) && (sw_vlan_tbl[vid].egr_mode[lport] == eMode)))
+    {
+        rc = mv_switch_prv_port_add_vid(lport, vid, gmac0Idx, eMode);
+        if (rc != GT_OK)
+        {
+            printk(KERN_ERR "%s:%d:==ERROR== failed rc[0x%x]\r\n",
+                   __FUNCTION__, __LINE__, rc);
+
+            return GT_FAIL;
+        }
+
+        /* add port to vid's member bit map and set port egress mode */
+        sw_vlan_tbl[vid].members |= port_bm;
+        sw_vlan_tbl[vid].egr_mode[lport] = eMode;
+
+        /* Always add GMAC_0 to VLAN */
+        if (!(sw_vlan_tbl[vid].members & (1 << gmac0Idx)))
+        {
+            sw_vlan_tbl[vid].members |= (uint32_t)(1 << gmac0Idx);
+            sw_vlan_tbl[vid].egr_mode[gmac0Idx] = MEMBER_EGRESS_UNMODIFIED;
+        }
+    }
+
+    /* Add the specified port to the SW Port table */
+    if (sw_ports_tbl[lport].vlan_blong[vid] == SW_PORT_NOT_BELONG)
+    {
+        sw_ports_tbl[lport].cnt++;
+        sw_ports_tbl[lport].vlan_blong[vid] = SW_PORT_BELONG;
+    }
+
+    return rc;
 }
 
 /*******************************************************************************

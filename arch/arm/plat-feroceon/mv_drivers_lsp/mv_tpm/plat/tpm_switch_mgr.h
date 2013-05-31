@@ -89,6 +89,35 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define INT_GE_PHY_SWITCH_PORT   (0)
 
+#define SW_TRUNK_ID_MAX          (0xf)
+#define SW_TRUNK_MASK_NUM_MAX    (0x7)
+#define SW_TRUNK_MASK_MAX        (0x7f)
+
+#define SW_TRUNK_ID_REG          (5)
+#define SW_TRUNK_ID_BIT_OFF      (8)
+#define SW_TRUNK_BIT_OFF         (14)
+#define SW_TRUNK_ID_BIT_LEN      (4)
+
+#define SW_TRUNK_MAPPING_REG     (8)
+#define SW_TRUNK_MAPPING_BIT_OFF (0)
+#define SW_TRUNK_MAPPING_BIT_LEN (7)
+#define SW_TRUNK_MAPPING_ID_BIT_OFF     (11)
+#define SW_REG_UPDATE_BIT_OFF    (15)
+
+#define SW_TRUNK_MASK_REG         (7)
+#define SW_TRUNK_MASK_NUM_BIT_OFF (12)
+#define SW_TRUNK_MASK_NUM_BIT_LEN (3)
+#define SW_TRUNK_MASK_BIT_OFF     (0)
+#define SW_TRUNK_MASK_BIT_LEN     (7)
+
+#define SW_CLEAR_REG_BIT(REG, OFF, LEN) (REG) = (~((0xFFFF >> (16 - (LEN))) << OFF) & (REG))
+
+/* enum of PHY access way */
+typedef enum {
+        PHY_SMI_MASTER_CPU,/*Phy directly accessed through LSP function*/
+        PHY_SMI_MASTER_SWT,/*Phy accessed through switch*/
+} tpm_phy_ctrl_t;
+
 /*******************************************************************************
 * tpm_sw_set_static_mac_w_ports_mask
 *
@@ -897,7 +926,7 @@ tpm_error_code_t tpm_sw_pm_1_read
 * INPUTS:
 *       owner_id        - APP owner id should be used for all API calls.
 *       src_port        - Source port in UNI port index, UNI0, UNI1...UNI4.
-*       tpm_swport_pm_3 - Holds PM data
+*       tpm_swport_pm_3_all_t - Holds PM data
 *
 * OUTPUTS:
 *       PM data is supplied structure.
@@ -910,7 +939,7 @@ tpm_error_code_t tpm_sw_pm_3_read
 (
     uint32_t            owner_id,
     tpm_src_port_type_t src_port,
-    tpm_swport_pm_3_t  *tpm_swport_pm_3
+    tpm_swport_pm_3_all_t  *tpm_swport_pm_3
 );
 
 /*******************************************************************************
@@ -1014,6 +1043,72 @@ tpm_error_code_t tpm_sw_flush_vtu(uint32_t owner_id);
 tpm_error_code_t tpm_sw_flush_atu(uint32_t owner_id, tpm_flush_atu_type_t flush_type, uint16_t db_num);
 
 /*******************************************************************************
+* tpm_phy_set_port_speed_duplex_mode
+*
+* DESCRIPTION:
+*       This routine will disable auto-negotiation and set the PHY port speed and duplex mode.
+*
+* INPUTS:
+*       owner_id    - APP owner id  should be used for all API calls.
+*       src_port    - Source port in UNI port index, UNI0, UNI1...UNI4.
+*       speed       -    PHY_SPEED_10_MBPS   - 10Mbps
+*                        PHY_SPEED_100_MBPS  - 100Mbps
+*                        PHY_SPEED_1000_MBPS - 1000Mbps.
+*       enable      - Enable/Disable full dulpex mode
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success - TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_phy_set_port_speed_duplex_mode
+(
+    uint32_t            owner_id,
+    tpm_src_port_type_t src_port,
+    tpm_phy_speed_t     speed,
+    bool                enable
+);
+
+/*******************************************************************************
+* tpm_sw_port_add_vid_set_egrs_mode
+*
+* DESCRIPTION:
+*       The API adds a VID to the list of the allowed VIDs per UNI port,
+*       and sets the egress mode for the port.
+*
+* INPUTS:
+*       owner_id   - APP owner id should be used for all API calls.
+*       src_port   - Source port in UNI port index, UNI0, UNI1...UNI4.
+*       vid        - vlan id
+*       eMode      - egress mode
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success - TPM_RC_OK.
+*       On error different types are returned according to the case see tpm_error_code_t.
+*
+* COMMENTS:
+*       MEMBER_EGRESS_UNMODIFIED - 0
+*       NOT_A_MEMBER             - 1
+*       MEMBER_EGRESS_UNTAGGED   - 2
+*       MEMBER_EGRESS_TAGGED     - 3
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_port_add_vid_set_egrs_mode
+(
+    uint32_t            owner_id,
+    tpm_src_port_type_t src_port,
+    uint16_t            vid,
+    uint8_t             eMode
+);
+
+/*******************************************************************************
 * tpm_sw_init
 *
 * DESCRIPTION:
@@ -1061,5 +1156,20 @@ tpm_error_code_t tpm_sw_set_debug_trace_flag
      uint32_t            enDis
 );
 
+/*******************************************************************************
+* tpm_sw_pm_print_from_gmac
+*
+*
+* INPUTS:
+*       port        - GMAC port.
+* OUTPUTS:
+*       tpm_swport_pm_1 - Holds PM data1
+*       tpm_swport_pm_3 - Holds PM data all
+*
+* RETURNS:
+* TPM_RC_OK - on success, else error code
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_pm_print_from_gmac(int port);
 
 #endif

@@ -85,7 +85,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define TPM_CHECK_DIV_BY_32(x)   ((x) >> 5)
 #define TPM_CHECK_MOD_32(x)      ((x) & 0x1f)
 
-extern char *tpm_db_api_type_str[TPM_MAX_API_TYPES];
 extern char *opCodeOperationStr[30];
 
 /*******************************************************************************
@@ -872,6 +871,7 @@ int32_t api_data2pnc_data_ipv4_mc(tpm_db_pon_type_t pon_type, tpm_rule_entry_t *
 	tpm_mc_filter_mode_t filter_mode;
 	uint8_t mc_stream_pppoe, ignore_ipv4_src, ipv4_src_add[4], ipv4_dst_add[4];
 	uint16_t mc_vid;
+	uint16_t dest_queue;
 	uint32_t stream_num, igmp_mode, dest_port_bm;
 	int32_t tpm_ret = 0;
 
@@ -893,6 +893,7 @@ int32_t api_data2pnc_data_ipv4_mc(tpm_db_pon_type_t pon_type, tpm_rule_entry_t *
 	mc_vid = tpm_rule->ipv4_mc_key.vid;
 	ignore_ipv4_src = tpm_rule->ipv4_mc_key.ignore_ipv4_src;
 	*mod_entry = mod_con->mod_cmd_ind;
+	dest_queue = tpm_rule->ipv4_mc_key.dest_queue;
 
 	/*******************generate PnC Rule Start********************/
 	/*generate tcam entry*/
@@ -906,11 +907,13 @@ int32_t api_data2pnc_data_ipv4_mc(tpm_db_pon_type_t pon_type, tpm_rule_entry_t *
 					      &(pnc_data->pncl_tcam));
 	IF_ERROR(tpm_ret);
 	/* Build SRAM Entry */
-	tpm_ret = tpm_proc_ipv4_mc_sram_build(filter_mode,
+	tpm_ret = tpm_proc_ipvx_mc_sram_build(filter_mode,
 					      igmp_mode,
+					      dest_queue,
 					      dest_port_bm,
 					      mod_con->mod_cmd_ind,
-					      &(pnc_data->pncl_sram));
+					      &(pnc_data->pncl_sram),
+					      TPM_IP_VER_4 );
 	IF_ERROR(tpm_ret);
 
 	return TPM_OK;
@@ -1206,6 +1209,7 @@ int32_t api_data2pnc_data_ipv6_mc(tpm_db_pon_type_t pon_type, tpm_rule_entry_t *
 	uint8_t ipv6_dst_add[16];
 	int32_t tpm_ret = 0;
 	uint8_t sip_index = 0;
+	uint16_t dest_queue;
 
 	/*params check*/
 	tpm_ret = tpm_check_param_check(pon_type, tpm_rule, mod_con, api_ent_mem_area, pnc_data, mod_entry,
@@ -1223,6 +1227,7 @@ int32_t api_data2pnc_data_ipv6_mc(tpm_db_pon_type_t pon_type, tpm_rule_entry_t *
 	rule_action->pkt_act = 0;
 	mc_vid = tpm_rule->ipv6_mc_key.vid;
 	*mod_entry = mod_con->mod_cmd_ind;
+	dest_queue = tpm_rule->ipv6_mc_key.dest_queue;
 
 	/* get sip_index */
 	if (0 == ipv6_mc_stream_entry.ignore_src_addr) {
@@ -1246,11 +1251,13 @@ int32_t api_data2pnc_data_ipv6_mc(tpm_db_pon_type_t pon_type, tpm_rule_entry_t *
 					      &(pnc_data->pncl_tcam));
 	IF_ERROR(tpm_ret);
 	/*generate sram*/
-	tpm_ret = tpm_proc_ipv6_mc_sram_build(filter_mode,
+	tpm_ret = tpm_proc_ipvx_mc_sram_build(filter_mode,
 					      igmp_mode,
+					      dest_queue,
 					      dest_port_bm,
 					      mod_con->mod_cmd_ind,
-					      &(pnc_data->pncl_sram));
+					      &(pnc_data->pncl_sram),
+					      TPM_IP_VER_6);
 	IF_ERROR(tpm_ret);
 
 	return TPM_OK;
@@ -1659,10 +1666,10 @@ int32_t tpm_pmt_rebuild_and_check(tpm_api_type_t api_type,
 	if (tpm_check_main_chain_type(trg_gmac, pkt_mod_bm, int_mod_bm, *mod_entry,
 				      &main_chain_check)) {
 		printk("(Warn) main chain type check failed, API: %s, PnC index %d\n",
-			tpm_db_api_type_str[api_type], rule_index);
+			api_type_to_str(api_type), rule_index);
 	} else if (main_chain_check) {
 		printk("main chain type mismatch, API: %s, PnC index %d\n",
-			tpm_db_api_type_str[api_type], rule_index);
+			api_type_to_str(api_type), rule_index);
 	}
 
 	/*clear structure*/
@@ -1681,11 +1688,11 @@ int32_t tpm_pmt_rebuild_and_check(tpm_api_type_t api_type,
 	if (tpm_pmt_check(trg_gmac, &pattern_data, &pmt_check_result,
 			  TPM_CHECK_WITH_DB)) {
 		printk("SW PMT check error, API type: %s, PnC rule index %d\n",
-			tpm_db_api_type_str[api_type], rule_index);
+			api_type_to_str(api_type), rule_index);
 	} else if (pmt_check_result) {
 		*pmt_sw_error_count = *pmt_sw_error_count + 1;
 		printk("SW PMT mismatch, API type: %s, PnC rule index %d\n",
-			tpm_db_api_type_str[api_type], rule_index);
+			api_type_to_str(api_type), rule_index);
 	}
 	/*clear structure*/
 	memset(&pattern_data, 0, sizeof(tpm_mod_pattern_data_t));
@@ -1703,11 +1710,11 @@ int32_t tpm_pmt_rebuild_and_check(tpm_api_type_t api_type,
 	if (tpm_pmt_check(trg_gmac, &pattern_data, &pmt_check_result,
 			  TPM_CHECK_WITH_HW)) {
 		printk("HW PMT check error, API type: %s, PnC rule index %d\n",
-			tpm_db_api_type_str[api_type], rule_index);
+			api_type_to_str(api_type), rule_index);
 	} else if (pmt_check_result) {
 		*pmt_hw_error_count = *pmt_hw_error_count + 1;
 		printk("HW PMT mismatch, API type: %s, PnC rule index %d\n",
-			tpm_db_api_type_str[api_type], rule_index);
+			api_type_to_str(api_type), rule_index);
 	}
 
 	return TPM_OK;
@@ -1785,7 +1792,7 @@ tpm_error_code_t tpm_self_check(uint32_t owner_id, tpm_self_check_level_enum_t c
 		/* Get the api_section */
 		tpm_ret = tpm_db_api_section_get_from_api_type(api_type, &api_section);
 		if (tpm_ret != TPM_RC_OK) {
-			printk("Get API_SECTION Failed-%s\n", tpm_db_api_type_str[api_type]);
+			printk("Get API_SECTION Failed-%s\n", api_type_to_str(api_type));
 			continue;
 		}
 
@@ -1842,7 +1849,7 @@ tpm_error_code_t tpm_self_check(uint32_t owner_id, tpm_self_check_level_enum_t c
 										   &rule_action);
 				if (tpm_ret) {
 					printk("API type: %s, the %d th PnC Rule Rebuild Failed\n",
-						tpm_db_api_type_str[api_type], rule_index);
+						api_type_to_str(api_type), rule_index);
 					unnormal_end_count++;
 					break;
 				}
@@ -1873,7 +1880,7 @@ tpm_error_code_t tpm_self_check(uint32_t owner_id, tpm_self_check_level_enum_t c
 				tpm_check_update_sram(&shadow_pnc.sram_entry, &rule_action);
 				if (memcmp(&pnc_out, &read_pnc, sizeof(tpm_pnc_all_t))) {
 					printk("HW PNC mismatch, API type: %s, PnC rule index %d\n",
-						tpm_db_api_type_str[api_type], rule_index);
+						api_type_to_str(api_type), rule_index);
 					pnc_mismatch_info_show(&pnc_out, &read_pnc);
 					pnc_hw_error_count++;
 					/*correct the bad tpm rule, TODO done in future*/
@@ -1881,7 +1888,7 @@ tpm_error_code_t tpm_self_check(uint32_t owner_id, tpm_self_check_level_enum_t c
 				}
 				if (memcmp(&pnc_out, &shadow_pnc, sizeof(tpm_pnc_all_t))) {
 					printk("SW PNC mismatch, API type: %s, PnC rule index %d\n",
-						tpm_db_api_type_str[api_type], rule_index);
+						api_type_to_str(api_type), rule_index);
 					pnc_mismatch_info_show(&pnc_out, &shadow_pnc);
 					pnc_sw_error_count++;
 				}

@@ -851,7 +851,7 @@ MV_STATUS mvCommUnitRx(MV_U8 *pTdmRxBuff)
 }
 
 /* Low level TDM interrupt service routine */
-MV_VOID mvCommUnitIntLow(MV_TDM_INT_INFO *pTdmIntInfo)
+MV_32 mvCommUnitIntLow(MV_TDM_INT_INFO *pTdmIntInfo)
 {
 	MV_U32 causeReg, maskReg, causeAndMask;
 	MV_U32 intAckBits = 0, currDesc;
@@ -895,7 +895,7 @@ MV_VOID mvCommUnitIntLow(MV_TDM_INT_INFO *pTdmIntInfo)
 	if (tdmEnable == MV_FALSE) {
 		MV_TRC_REC("TDM is disabled - quit low level ISR\n");
 		MV_REG_WRITE(TDM_CAUSE_REG, ~intAckBits);
-		return;
+		return 0;
 	}
 
 	/* Handle TDM Error/s */
@@ -943,7 +943,7 @@ MV_VOID mvCommUnitIntLow(MV_TDM_INT_INFO *pTdmIntInfo)
 	MV_REG_WRITE(TDM_CAUSE_REG, ~intAckBits);
 
 	TRC_REC("<-%s\n", __func__);
-	return;
+	return 0;
 }
 
 static MV_VOID mvCommUnitDescChainBuild(MV_VOID)

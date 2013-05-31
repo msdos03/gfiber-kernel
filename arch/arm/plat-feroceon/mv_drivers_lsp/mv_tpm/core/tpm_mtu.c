@@ -109,7 +109,7 @@ int32_t tpm_mtu_del_acl_pnc_entry(uint32_t ethertype, uint32_t pnc_index)
 		pnc_range_id = TPM_PNC_IPV4_LEN;
 		pnc_index_cfg = &(g_tpm_mtu_cfg.ipv4_mtu_cfg.pncIndex_cfg);
 	} else {
-		/*pnc_range_id = TPM_PNC_IPV6_LEN; 
+		/*pnc_range_id = TPM_PNC_IPV6_LEN;
 		pnc_index_cfg = &(g_tpm_mtu_cfg.ipv6_mtu_cfg.pncIndex_cfg);*/
 		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "there is no length check for IPv6\n");
 		return ERR_GENERAL;
@@ -169,7 +169,7 @@ int32_t tpm_mtu_create_acl_pnc_entry(uint32_t rule_num, uint32_t ethertype,
 	} else {
 		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "there is no length check for IPv6\n");
 		return ERR_GENERAL;
-		/*pnc_range_id = TPM_PNC_IPV6_LEN; 
+		/*pnc_range_id = TPM_PNC_IPV6_LEN;
 		pnc_index_cfg = &(g_tpm_mtu_cfg.ipv6_mtu_cfg.pncIndex_cfg);*/
 	}
 
@@ -295,7 +295,7 @@ tpm_error_code_t tpm_mtu_ipv6_default_pnc_entry_insert(void)
 
 	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "\n");
 
-	int_ret_code = tpm_db_pnc_rng_get(TPM_PNC_TCP_FLAG, &nextphase_range_data);
+	int_ret_code = tpm_db_pnc_rng_get(TPM_PNC_IPV4_TCP_FLAG, &nextphase_range_data);
 	IF_ERROR(int_ret_code);
 	ipv6_frag_type_lu = nextphase_range_data.pnc_range_conf.base_lu_id;
 

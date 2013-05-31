@@ -103,6 +103,7 @@ MV_STATUS onuGponAllocIdDeAssign(MV_U32 allocId);
 MV_STATUS onuGponAllocIdTcontSet(MV_U32 allocId, MV_U32 tcontNum);
 MV_STATUS onuGponAllocIdTcontClear(MV_U32 tcontNum);
 MV_STATUS onuGponAllocIdDeAssignAll(void);
+MV_STATUS onuGponAllocIdFreeAllBuffers(void);
 MV_STATUS onuGponAllocIdTcontClearAll(void);
 MV_U32    onuGponIdleAllocIdTcontGet(void);
 

@@ -142,6 +142,7 @@ MV_STATUS onuGponSetup(void)
     return(MV_ERROR);
   }
 
+  ponXvrFunc = GponXvrSDPolarityHighStatus;
   /* init onu database */
   rcode = onuGponDbInit();
   if (rcode != MV_OK)
@@ -514,9 +515,6 @@ MV_STATUS onuGponAsicBurstEnableInit(void)
     return(rcode);
   }
 
-  onuGponDbXvrPolaritySet(GPON_BURST_EN_P);
-  mvOnuPonMacBurstEnablePolarityInit(GPON_BURST_EN_P);
-
   rcode = mvOnuGponMacTxTxEnableCounterThresholdSet(GPON_BURST_THRESHOLD);
   if (rcode != MV_OK)
   {
@@ -661,6 +659,72 @@ MV_STATUS onuGponAsicBoardInit(void)
 
 /*******************************************************************************
 **
+**  onuGponAsicUtmBitmapInit
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function init UTM Active TX Bitmap
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuGponAsicUtmBitmapInit(void)
+{
+	MV_STATUS status;
+
+	status =  mvOnuGponMacUtmActiveTxBitmapSet(GPON_UTM_ACTIVE_TX_BITMAP);
+	if (status == MV_OK) {
+		status =  mvOnuGponMacUtmActiveTxBitmapValidSet(GPON_UTM_ACTIVE_TX_BITMAP_VALID);
+		if (status != MV_OK)
+			mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
+				   "ERROR: (%s:%d) mvOnuGponMacUtmActiveTxBitmapValidSet\n\r", __FILE_DESC__, __LINE__);
+	} else
+		mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
+			   "ERROR: (%s:%d) mvOnuGponMacUtmActiveTxBitmapSet\n\r", __FILE_DESC__, __LINE__);
+
+	return(status);
+}
+
+/*******************************************************************************
+**
+**  onuGponAsicGseTransmitThresholdInit
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function init GSE Transmit Threshold
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuGponAsicGseTransmitThresholdInit(void)
+{
+	MV_STATUS status;
+	MV_U32 threshold;
+
+	threshold = ((GPON_GST_TX_DATA_THRESHOLD << GPON_GST_TX_DATA_SHIFT) |
+						    GPON_GST_TX_IDLE_THRESHOLD);
+
+
+	status =  mvOnuGponMacTxGseTransCounterThresholdSet(threshold);
+	if (status != MV_OK)
+	{
+		mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
+				   "ERROR: (%s:%d) mvOnuGponMacUtmActiveTxBitmapValidSet\n\r", __FILE_DESC__, __LINE__);
+		return(status);
+	}
+
+	return(MV_OK);
+
+}
+
+/*******************************************************************************
+**
 **  onuGponAsicInit
 **  ____________________________________________________________________________
 **
@@ -776,7 +840,21 @@ MV_STATUS onuGponAsicInit(MV_BOOL initTime)
 		return(rcode);
 	}
 
+	rcode = onuGponAsicGseTransmitThresholdInit();
+	if (rcode != MV_OK) {
+		mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
+			   "ERROR: (%s:%d) onuGponAsicGseTransmitThresholdInit\n\r", __FILE_DESC__, __LINE__);
+		return(rcode);
+	}
+
 	if (devId == MV_6601_DEV_ID) {
+		rcode = onuGponAsicUtmBitmapInit();
+		if (rcode != MV_OK) {
+			mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
+				   "ERROR: (%s:%d) onuGponAsicUtmBitmapInit\n", __FILE_DESC__, __LINE__);
+			return(MV_ERROR);
+		}
+
 		/* GPON is always works in legacy mode */
 		MV_REG_WRITE(NETA_LEGACY_DBA_REG(MV_PON_PORT_ID), 0);
 	}
@@ -1036,7 +1114,7 @@ MV_STATUS onuGponOperate(void)
   /* ================ Init App Section ===================== */
   /* ======================================================= */
   onuGponApiSnMaskConfig(MV_FALSE, MV_FALSE);
-  onuGponApiInit(serialNumber, password, disabledSnState,0);
+  onuGponApiInit(serialNumber, password, disabledSnState,0, 1, 0);
 
   /* XVR reset sequence */
   mvOnuGponMacXvrReset(0);
@@ -1127,7 +1205,12 @@ MV_STATUS onuGponStart(S_GponIoctlInfo *onuInit)
   /* ======================================================= */
   /* ================ Init App Section ===================== */
   /* ======================================================= */
-  onuGponApiInit(onuInit->serialNum, onuInit->password, disabledSnState, onuInit->serialNumSource);
+  onuGponApiInit(onuInit->serialNum,
+                 onuInit->password,
+                 disabledSnState,
+                 onuInit->serialNumSource,
+                 onuInit->fecHyst,
+                 onuInit->couplingMode);
   onuGponDbGemResetSet(onuInit->clearGem == 0 ? MV_FALSE : MV_TRUE);
   onuGponDbTcontResetSet(onuInit->clearTcont  == 0 ? MV_FALSE : MV_TRUE);
   onuGponDbGemRestoreSet(onuInit->restoreGem  == 0 ? MV_FALSE : MV_TRUE);
@@ -1148,7 +1231,7 @@ MV_STATUS onuGponStart(S_GponIoctlInfo *onuInit)
   /* ======================================================= */
   /* ================ PON XVR polarity Section ============= */
   /* ======================================================= */
-  rcode = mvOnuGponMacTxBurstEnPolaritySet(onuInit->xvrPolarity);
+  rcode = mvOnuGponMacTxBurstEnPolaritySet(onuInit->ponXvrBurstEnPolarity);
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
@@ -1156,8 +1239,9 @@ MV_STATUS onuGponStart(S_GponIoctlInfo *onuInit)
     return(rcode);
   }
 
-  onuGponDbXvrPolaritySet(onuInit->xvrPolarity);
-  mvOnuPonMacBurstEnablePolarityInit(onuInit->xvrPolarity);
+    ponXvrFunc = funcGponXvrSDStatus(onuInit->ponXvrPolarity);
+
+    onuP2PDbXvrBurstEnablePolaritySet(onuInit->p2pXvrBurstEnPolarity);
 
 #ifndef PON_FPGA
   /* ========================================================== */
@@ -1209,9 +1293,9 @@ MV_STATUS mvOnuPonMacAcCouplingInit(void)
 	if (devId != MV_6601_DEV_ID)
 		return(MV_OK);
 
-	return(mvOnuGponMacTxConfigAcCouplingSet(GPON_TX_AC_COUPL_BUST_MODE_0,
-						 GPON_TX_AC_COUPL_PREACT_BURST_TIME,
-						 GPON_TX_AC_COUPL_DATA_PATTERN_1,
-						 GPON_TX_AC_COUPL_DATA_PATTERN_2));
+	return (mvOnuGponMacTxConfigAcCouplingSet(GPON_TX_AC_COUPL_BUST_MODE_0,
+						                      GPON_TX_AC_COUPL_PREACT_BURST_TIME,
+						                      GPON_TX_AC_COUPL_DATA_PATTERN_1,
+						                      GPON_TX_AC_COUPL_DATA_PATTERN_2));
 }
 

@@ -221,15 +221,16 @@ MV_CPU_DEC_WIN* mv_sys_map(void)
 		case RD_88F6560_GW_ID:
 		case RD_88F6530_MDU_ID:
 			return SYSMAP_88F6500;
- 		case DB_88F6601_BP_ID:
+		case DB_88F6601_BP_ID:
 		case RD_88F6601_MC_ID:
+		case RD_88F6601_MC2L_ID:
 		case GFLT200_ID:
 		case GFLT110_ID:
 			return SYSMAP_88F6601;
 		default:
 			printk("ERROR: can't find system address map\n");
 			return NULL;
-        }
+	}
 }
 
 #if defined(CONFIG_MV_INCLUDE_CESA)

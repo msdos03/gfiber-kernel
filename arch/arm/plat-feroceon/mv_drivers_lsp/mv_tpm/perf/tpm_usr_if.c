@@ -792,7 +792,7 @@ void sfs_tpm_sw_get_port_speed_status
 
     tpm_phy_get_port_speed_mode(owner_id, (tpm_src_port_type_t)lport, &speed);
 
-    printk(KERN_INFO "The speed status of lport[%d] is [%d]('0'-10M, '1'-100M, '2'-1000M)\n", lport, speed);
+    printk(KERN_INFO "The speed status of lport[%d] is [%d]('0'-10M, '1'-100M, '2'-1000M, '3'-UNKOWN)\n", lport, speed);
 
     return;
 
@@ -3441,6 +3441,145 @@ void sfs_tpm_sw_set_port_mirror
     tpm_sw_set_port_mirror(owner_id, src_port, dst_port, mirror_mode, mirror_state);
 }
 
+
+/*******************************************************************************
+* sfs_tpm_sw_set_trunk_ports
+*
+* DESCRIPTION:
+*       This function set port mirror.
+*
+* INPUTS:
+*       owner_id    - APP owner id - should be used for all API calls.
+*       trunk_id    - valid from 0x0 to 0xf
+*       ports_mask  - mask for real switch port, not logical port like TPM_SRC_PORT_UNI_0.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       None.
+*
+*
+*******************************************************************************/
+void sfs_tpm_sw_set_trunk_ports
+(
+    IN  uint32_t  owner_id,
+    IN  uint32_t  trunk_id,
+    IN  uint32_t  ports_mask
+)
+{
+    tpm_sw_set_trunk_ports(owner_id, trunk_id, ports_mask);
+}
+/*******************************************************************************
+* sfs_tpm_sw_set_trunk_mask
+*
+* DESCRIPTION:
+*       This function set port mirror.
+*
+* INPUTS:
+*       owner_id    - APP owner id - should be used for all API calls.
+*       mask_num    - trunk mask number, valid from 0 to 7.
+*       trunk_mask  - mask for real switch port, not logical port like TPM_SRC_PORT_UNI_0.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       None.
+*
+*
+*******************************************************************************/
+void sfs_tpm_sw_set_trunk_mask
+(
+    IN	uint32_t  owner_id,
+    IN	uint32_t  mask_num,
+    IN	uint32_t  trunk_mask
+)
+{
+    tpm_sw_set_trunk_mask(owner_id, mask_num, trunk_mask);
+}
+
+/*******************************************************************************
+* sfs_tpm_sw_set_port_speed_duplex
+*
+* DESCRIPTION:
+*       This function set the port speed and duplex together
+*
+* INPUTS:
+*       owner_id      - APP owner id - should be used for all API calls.
+*       lport         - Packet origination.
+*       speed_mode    - speed mode, '0'-10M, '1'-100M, '2'-1000M.
+*       mode          - duplex mode, 1:enable, 0:disable.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       None
+*
+* COMMENTS:
+*       None.
+*
+*******************************************************************************/
+void sfs_tpm_sw_set_port_speed_duplex
+(
+    MV_U32               owner_id,
+    MV_U32               lport,
+    MV_U32               speed_mode,
+    MV_U32               mode
+)
+{
+    tpm_phy_speed_t speed;
+    bool duplex_mode;
+
+    if((tpm_phy_speed_t)speed_mode > TPM_PHY_SPEED_1000_MBPS)
+        speed = (tpm_phy_speed_t)TPM_PHY_SPEED_1000_MBPS;
+    else
+        speed = (tpm_phy_speed_t)speed_mode;
+
+    duplex_mode = ((1 == mode) ? true: false);
+
+    tpm_phy_set_port_speed_duplex_mode(owner_id, (tpm_src_port_type_t)lport, speed, duplex_mode);
+
+    return;
+}
+
+/*******************************************************************************
+* sfs_tpm_sw_port_add_vid_set_egrs_mode
+*
+* DESCRIPTION:
+*       The API adds a VID to the list of allowed VIDs per lport,
+*       and set the port's egress mode.
+*
+* INPUTS:
+*       owner_id - APP owner id - should be used for all API calls.
+*       lport    -  lport for adding the vid.
+*       vid      - VLAN id.
+*       eMode    - port egress mode
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       None
+*
+* COMMENTS:
+*       None.
+*
+*******************************************************************************/
+void sfs_tpm_sw_port_add_vid_set_egrs_mode
+(
+    MV_U32    owner_id,
+    MV_U32    lport,
+    MV_U16    vid,
+    MV_U8     eMode
+)
+{
+    tpm_sw_port_add_vid_set_egrs_mode(owner_id,(tpm_src_port_type_t)lport,vid,eMode);
+
+    return;
+}
+
 #ifdef CONFIG_MV_TPM_SYSFS_HELP
 /*******************************************************************************
 **
@@ -3483,9 +3622,10 @@ int sfs_tpm_sw_set_help_show_1(char* buf)
     off += sprintf(buf+off, "echo [owner_id] [UNI port %.1d-%.1d] [allow_flood ('1'-permit,'0'-not)]                 > set_port_flooding           - permit flooding of unknown DA\n", TPM_SRC_PORT_UNI_0, TPM_SRC_PORT_UNI_3);
     off += sprintf(buf+off, "echo [owner_id] [UNI port %.1d-%.1d] [allow_flood ('1'-permit,'0'-not)]                 > set_port_mc_flooding        - permit flooding of unknown multicast\n", TPM_SRC_PORT_UNI_0, TPM_SRC_PORT_UNI_3);
     off += sprintf(buf+off, "echo [owner_id] [always_on ('1'-permit,'0'-use mc rules)]                         > set_bc_flooding             - permit flooding of broadcast\n");
-    off += sprintf(buf+off, "echo [owner_id] [UNI port %.1d-%.1d] [allow_tagged('1'-drop,  '0'-not)]                 > set_port_tagged             - allows or drops tagged packets\n", TPM_SRC_PORT_UNI_0, TPM_SRC_PORT_UNI_3);
-    off += sprintf(buf+off, "echo [owner_id] [UNI port %.1d-%.1d] [allow_untagged('1'-drop,'0'-not)]                 > set_port_untagged           - allows or drops untagged packets\n", TPM_SRC_PORT_UNI_0, TPM_SRC_PORT_UNI_3);
+    off += sprintf(buf+off, "echo [owner_id] [UNI port %.1d-%.1d] [drop_tagged('1'-drop,  '0'-not)]                  > set_port_tagged             - allows or drops tagged packets\n", TPM_SRC_PORT_UNI_0, TPM_SRC_PORT_UNI_3);
+    off += sprintf(buf+off, "echo [owner_id] [UNI port %.1d-%.1d] [drop_untagged('1'-drop,'0'-not)]                  > set_port_untagged           - allows or drops untagged packets\n", TPM_SRC_PORT_UNI_0, TPM_SRC_PORT_UNI_3);
     off += sprintf(buf+off, "echo [owner_id] [UNI port %.1d-%.1d] [vid_filter('1'-Drop,'0'-not)]                     > set_vid_filter_per_port     - set the filtering mod VID\n", TPM_SRC_PORT_UNI_0, TPM_SRC_PORT_UNI_3);
+    off += sprintf(buf+off, "echo [owner_id] [UNI port %.1d-%.1d] [speed('0'-10M,'1'-100M,'2'-1000M)] [duplex('1'-enable,'0'-disable)]  > set_port_speed_duplex - set port speed and duplex mode\n", TPM_SRC_PORT_UNI_0, TPM_SRC_PORT_UNI_3);
     off += sprintf(buf+off, "====================================================================================================================================================\n");
 
     return(off);
@@ -3531,6 +3671,9 @@ int sfs_tpm_sw_set_help_show_2(char* buf)
     off += sprintf(buf+off, "echo [owner_id] [dscp 0-63] [q 0-3]                                               > set_ip_pri_mapping          - map ip pri to queue\n");
     off += sprintf(buf+off, "echo [owner_id] [gmac('0'-GMAC0, '1'-GMAC1, '2'-PMAC, '3'-switch)] [mtu]          > set_gmac_mtu                - set GMAC MTU\n");
     off += sprintf(buf+off, "echo [owner_id] [src port] [dst port] [mode('0'-ingress), '1'-egress] [state]     > set_port_mirror             - set port mirror, src/dst port is UNI port(1-4), state('1'-enable,'0'-disable)\n");
+    off += sprintf(buf+off, "echo [owner_id] [trunk_id] [port mask]                                            > set_trunk_ports             - set trunk ID and port mask\n");
+    off += sprintf(buf+off, "echo [owner_id] [mask num] [trunk mask]                                           > set_trunk_mask              - set trunk mask\n");
+    off += sprintf(buf+off, "echo [owner_id] [UNI port %.1d-%.1d] [vid(1-4094)] [egr_mode]                           > add_port_vid_set_egr_mode   - add a VID to lport and set the egress mode('0'-AS_IS, '2'-RM_TAG, '3'-ADD_TAG)\n", TPM_SRC_PORT_UNI_0, TPM_SRC_PORT_UNI_3);
     off += sprintf(buf+off, "====================================================================================================================================================\n");
 
     return(off);
@@ -3666,15 +3809,15 @@ static ssize_t set_sw_store(struct device *dev,
 {
     const char* name = attr->attr.name;
 //     unsigned long flags  = 0;
-    unsigned int  param1 = 0;
-    unsigned int  param2 = 0;
-    unsigned int  param3 = 0;
-    unsigned int  param4 = 0;
-    unsigned int  param5 = 0;
-    unsigned int  param6 = 0;
-    unsigned int  param7 = 0;
-    unsigned int  param8 = 0;
-    unsigned int  param9 = 0;
+    int  param1 = 0;
+    int  param2 = 0;
+    int  param3 = 0;
+    int  param4 = 0;
+    int  param5 = 0;
+    int  param6 = 0;
+    int  param7 = 0;
+    int  param8 = 0;
+    int  param9 = 0;
     MV_U8         static_mac[6] = {0,0,0,0,0,0};
     MV_U32        memPorts[6];
 
@@ -3787,6 +3930,18 @@ static ssize_t set_sw_store(struct device *dev,
     printk(KERN_INFO "param1[%d],param2[%d],param3[%d],param4[%d],param5[%d],param6[%d],param7[%d],param8[%d] param9[%d] \n",
           param1,param2,param3,param4,
           param5,param6,param7,param8,param9);
+    if (param1 < 0 ||
+        param2 < 0 ||
+        param3 < 0 ||
+        param4 < 0 ||
+        param5 < 0 ||
+        param6 < 0 ||
+        param7 < 0 ||
+        param8 < 0 ||
+        param9 < 0) {
+            printk("ERROR %s: illegal negative parameter <%s>\n", __FUNCTION__, attr->attr.name);
+            return (len);
+    }
 
 //     raw_local_irq_save(flags);
 
@@ -3917,6 +4072,18 @@ static ssize_t set_sw_store(struct device *dev,
     else if
         (!strcmp(name, "set_port_mirror"))
                 sfs_tpm_sw_set_port_mirror((MV_U32)param1,(MV_U32)param2,(MV_U32)param3,(MV_U32)param4,(MV_U32)param5);
+    else if
+        (!strcmp(name, "set_trunk_mask"))
+                sfs_tpm_sw_set_trunk_mask((MV_U32)param1,(MV_U32)param2,(MV_U32)param3);
+    else if
+        (!strcmp(name, "set_trunk_ports"))
+                sfs_tpm_sw_set_trunk_ports((MV_U32)param1,(MV_U32)param2,(MV_U32)param3);
+    else if
+        (!strcmp(name, "set_port_speed_duplex"))
+                sfs_tpm_sw_set_port_speed_duplex((MV_U32)param1,(MV_U32)param2, (MV_U32)param3, (MV_U32)param4);
+    else if
+        (!strcmp(name, "add_port_vid_set_egr_mode"))
+                sfs_tpm_sw_port_add_vid_set_egrs_mode((MV_U32)param1,(MV_U32)param2, (MV_U16)param3, (MV_U8)param4);
     else
         printk("%s: illegal operation <%s>\n", __FUNCTION__, attr->attr.name);
 
@@ -4099,6 +4266,8 @@ static DEVICE_ATTR(set_tag_pri_mapping,             S_IWUSR, set_sw_show, set_sw
 static DEVICE_ATTR(set_ip_pri_mapping,              S_IWUSR, set_sw_show, set_sw_store);
 static DEVICE_ATTR(set_gmac_mtu,                    S_IWUSR, set_sw_show, set_sw_store);
 static DEVICE_ATTR(set_port_mirror,                 S_IWUSR, set_sw_show, set_sw_store);
+static DEVICE_ATTR(set_trunk_mask,                  S_IWUSR, set_sw_show, set_sw_store);
+static DEVICE_ATTR(set_trunk_ports,                 S_IWUSR, set_sw_show, set_sw_store);
 #ifdef CONFIG_MV_TPM_SYSFS_HELP
 static DEVICE_ATTR(help_sw_set_cfg_1,               S_IRUSR, set_sw_show, set_sw_store);
 static DEVICE_ATTR(help_sw_set_cfg_2,               S_IRUSR, set_sw_show, set_sw_store);
@@ -4106,7 +4275,8 @@ static DEVICE_ATTR(help_sw_set_cfg_2,               S_IRUSR, set_sw_show, set_sw
 static DEVICE_ATTR(rate_limit_menu,                 S_IRUSR, set_sw_show, set_sw_store);
 static DEVICE_ATTR(egr_rate_limit_menu,             S_IRUSR, set_sw_show, set_sw_store);
 static DEVICE_ATTR(init_pri_menu,                   S_IRUSR, set_sw_show, set_sw_store);
-
+static DEVICE_ATTR(set_port_speed_duplex,           S_IWUSR, set_sw_show, set_sw_store);
+static DEVICE_ATTR(add_port_vid_set_egr_mode,       S_IWUSR, set_sw_show, set_sw_store);
 
 static struct attribute *set_sw_attrs[] = {
     &dev_attr_set_port_admin.attr,
@@ -4149,6 +4319,9 @@ static struct attribute *set_sw_attrs[] = {
     &dev_attr_set_ip_pri_mapping.attr,
     &dev_attr_set_gmac_mtu.attr,
     &dev_attr_set_port_mirror.attr,
+    &dev_attr_set_trunk_mask.attr,
+    &dev_attr_set_trunk_ports.attr,
+    &dev_attr_set_port_speed_duplex.attr,
 #ifdef CONFIG_MV_TPM_SYSFS_HELP
     &dev_attr_help_sw_set_cfg_1.attr,
     &dev_attr_help_sw_set_cfg_2.attr,
@@ -4156,6 +4329,7 @@ static struct attribute *set_sw_attrs[] = {
     &dev_attr_rate_limit_menu.attr,
     &dev_attr_egr_rate_limit_menu.attr,
     &dev_attr_init_pri_menu.attr,
+    &dev_attr_add_port_vid_set_egr_mode.attr,
     NULL
 };
 

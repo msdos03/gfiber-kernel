@@ -107,10 +107,20 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DB_88F6560_PCAC_ID		(BOARD_ID_BASE+0x4)
 #define DB_88F6601_BP_ID		(BOARD_ID_BASE+0x5)
 #define RD_88F6601_MC_ID		(BOARD_ID_BASE+0x6)
+// TODO(jnewlin): These ids need to match what is in UBOOT
+// and because Marvell added a new id, things are sort of broken
+// I am leaving the ids the way they were so that _out_ boards
+// work.
 #define DB_CUSTOMER_ID			(BOARD_ID_BASE+0x7)
 #define GFLT200_ID			DB_CUSTOMER_ID
-#define GFLT110_ID			DB_CUSTOMER_ID + 1
-#define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 2)
+#define GFLT110_ID			(BOARD_ID_BASE+0x8)
+#define RD_88F6601_MC2L_ID		(BOARD_ID_BASE+0x9)
+#define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 3)
+// These are Marvells defines, we should switch to match these in
+// uboot to make future merges easier.
+//#define DB_CUSTOMER_ID			(BOARD_ID_BASE+0x8)
+//#define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 1)
+
 
 /***************************************************************************
 ** RD-88F6510-SFU
@@ -347,7 +357,6 @@ MPP#	NAME			IN/OUT
 #define DB_88F6535_GPP_POL_MID		0x0
 #define DB_88F6535_GPP_POL_HIGH		0x0
 
-
 /***************************************************************************
 ** DB-CUSTOMER
 ****************************************************************************/
@@ -421,9 +430,6 @@ MPP#	NAME			IN/OUT
 #define DB_88F6601_GPP_POL_LOW		0x0
 #define DB_88F6601_GPP_POL_MID		0x0
 
-
-
-
 /***************************************************************************
 ** RD-88F6601
 ****************************************************************************/
@@ -435,7 +441,7 @@ MPP#	NAME			IN/OUT
 
 /* GPPs
  1 SPI0_MOSI (out)
- 2 SPI0_SCK (out)	
+ 2 SPI0_SCK (out)
  3 SPI0_CSn[0] (out)
  4 SPI0_MISO (in)
  5 I2C0_SDA (inout)
@@ -446,15 +452,14 @@ MPP#	NAME			IN/OUT
 21 PON_BEN (out)
 24 XVR_Tx_IND
 25 LED_G
-26 LED_Y 
+26 LED_Y
 28 NF&SPI_WP
 29 XVR_SD (in)
 33 TX_Fault/TX_indication
 37 TX_PD
-
-
 */
-#define RD_88F6601_GPP_OUT_ENA_LOW	(BIT0 | BIT13 | BIT14 | BIT16 | BIT17 | BIT18 | BIT19 | BIT22 | BIT23 | BIT24 | BIT27| BIT30 | BIT31) 
+
+#define RD_88F6601_GPP_OUT_ENA_LOW	(BIT0 | BIT13 | BIT14 | BIT16 | BIT17 | BIT18 | BIT19 | BIT22 | BIT23 | BIT24 | BIT27| BIT30 | BIT31)
 #define RD_88F6601_GPP_OUT_ENA_MID	(BIT0 | BIT3 | BIT4)
 
 #define RD_88F6601_GPP_OUT_VAL_LOW	0x0
@@ -510,5 +515,51 @@ MPP#	NAME			IN/OUT
 
 #define GFLT200_GPP_POL_LOW		0x0
 #define GFLT200_GPP_POL_MID		0x0
+
+/***************************************************************************
+** RD-88F6601MC2L
+****************************************************************************/
+#define RD_88F6601MC2L_MPP0_7		0x22222222
+#define RD_88F6601MC2L_MPP8_15		0x02222222
+#define RD_88F6601MC2L_MPP16_23		0x00005555
+#define RD_88F6601MC2L_MPP24_31		0x04000550
+#define RD_88F6601MC2L_MPP32_37		0x00050020
+
+/* GPPs
+ 0 NC
+ 1 SPI0_MOSI (out)
+ 2 SPI0_SCK (out)
+ 3 SPI0_CSn[0] (out)
+ 4 SPI0_MISO (in)
+ 5 I2C0_SDA (inout)
+ 6 I2C0_SCK (inout)
+ 7 UA0_TXD (out)
+ 8 UA0_RXD (in)
+15 TXfault_RST (GPI)
+16 TDM_SPI
+17 TDM_SPI
+18 TDM_SPI
+19 TDM_SPI
+20-24 NC SET at GPI
+25 LED_G  MPP = 5
+26 LED_Y  MPP = 5
+27 PON LED (GPO)
+28-29, 31, 32, 34 NC SET at GPI
+30 XVR_SD (in)
+
+33 Dying Gasp
+35 NC (because of bug on board)
+36 PON_BEN
+37 TX_PD (GPO)
+*/
+
+#define RD_88F6601MC2L_GPP_OUT_ENA_LOW		(0xffffffff^(BIT27))
+#define RD_88F6601MC2L_GPP_OUT_ENA_MID		(0xfffffff^(BIT5))
+
+#define RD_88F6601MC2L_GPP_OUT_VAL_LOW		0x0
+#define RD_88F6601MC2L_GPP_OUT_VAL_MID		0x0
+
+#define RD_88F6601MC2L_GPP_POL_LOW		(BIT15)
+#define RD_88F6601MC2L_GPP_POL_MID		0x0
 
 #endif /* __INCmvBoardEnvSpech */

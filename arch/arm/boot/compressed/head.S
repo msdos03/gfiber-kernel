@@ -130,6 +130,102 @@ start:
 1:		mov	r7, r1			@ save architecture ID
 		mov	r8, r2			@ save atags pointer
 
+#ifndef CONFIG_MV_DRAM_DEFAULT_ACCESS_CFG
+		b	2f
+internal_regs:	.word 	0xf1000000
+2:		mov	r0, #0
+		mcr	p15, 0, r0, c7, c5, 0	@ invalidate I-Cache
+		mrc 	p15, 0, r0, c1, c0, 0	@ read cr
+		orr	r0, r0, #0x5000		@ I-cache enable, RR cache replacement
+		orr	r0, r0, #0x4		@ D-cache enable
+		mcr 	p15, 0, r0, c1, c0, 0	@ update cr
+		
+		ldr	r0, internal_regs
+		add	r5, r0, #0x18000
+		add	r5, r5, #0x200		@ device and vendor ID register(A-MC)
+
+		ldr	r5, [r5]
+		mov	r5, r5, lsr #16
+		mov	r4, #0x6600
+		add	r4, r4, #0x1
+		cmp	r5, r4			@ check for 88F6601 SoC
+		bne	5f
+
+		add	r1, r0, #0x20000	@ mbus ctrl address register
+		add	r2, r1, #0x4		@ mbus base address register
+		add	r3, r0, #0x1500		@ ddr base address register
+		add	r4, r3, #0x4		@ ddr size address register
+		mov	r0, #0
+		ldr     r5, 6f			@ we must run from I-Cache
+		mcr p15,0,r5,c7,c13,1		@ when DRAM window is disabled,
+		ldr     r5, 7f			@ so preloading 2 consective cache
+		mcr p15,0,r5,c7,c13,1		@ lines will do the job.
+
+#ifdef CONFIG_MV_DRAM_XBAR_ACCESS_CFG
+		ldr	r5, [r1]
+		tst	r5, #1
+		bne	5f			@ test if xbar window already enabled
+
+		ldr	r5, [r3]		@ ddr base register value
+		and	r5, r5, #0xff000000	@ extract window base
+		str	r5, [r2]
+
+		ldr	r5, [r4]
+		mov	r5, r5, lsr #16
+		mov	r5, r5, lsl #16		@ extract window size
+		orr	r5, r5, #0x0e00		@ set target id
+		orr	r5, r5, #1		@ set window enable
+		str	r5, [r1]
+		mcr 	p15, 0, r0, c7, c10, 4	@ drain write-buffer
+
+3:		ldr	r5, [r1]
+		tst	r5, #1
+		beq	3b
+
+		ldr	r5, [r4]
+6:		bic	r5, r5, #1
+		.align 5
+7:		str	r5, [r4]
+
+4:		ldr	r5, [r4]
+		tst	r5, #1
+		bne	4b
+#else
+		ldr	r5, [r4]
+		tst	r5, #1
+		bne	5f			@ test if ddr window already enabled
+
+		ldr	r5, [r2]		@ ddr base register value
+		and	r5, r5, #0xff000000	@ extract window base
+		str	r5, [r3]
+
+		ldr	r5, [r1]
+		mov	r5, r5, lsr #16
+		mov	r5, r5, lsl #16		@ extract window size
+		orr	r5, r5, #1		@ set window enable
+		str	r5, [r4]
+		mcr 	p15, 0, r0, c7, c10, 4	@ drain write-buffer
+
+3:		ldr	r5, [r4]
+		tst	r5, #1
+		beq	3b
+
+		ldr	r5, [r1]
+6:		bic	r5, r5, #1
+		.align 5
+7:		str	r5, [r1]
+
+4:		ldr	r5, [r1]
+		tst	r5, #1
+		bne	4b
+#endif
+5:		mcr 	p15, 0, r0, c7, c10, 4	@ drain write-buffer
+		mrc 	p15, 0, r0, c1, c0, 0	@ read cr 
+		bic	r0, r0, #0x5000		@ disable I-cache and RR cache replacement
+		bic	r0, r0, #0x4		@ disable D-cache
+		mcr 	p15, 0, r0, c1, c0, 0	@ update cr
+#endif
+
 #ifndef __ARM_ARCH_2__
 		/*
 		 * Booting from Angel - need to enter SVC mode and disable

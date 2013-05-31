@@ -88,8 +88,10 @@ extern void sfs_tpm_cfg_set_l3_rule_add                  (const char *buf, size_
 extern void sfs_tpm_cfg_set_ipv4_rule_add                (const char *buf, size_t len);
 extern void sfs_tpm_cfg_set_ipv6_gen_rule_add            (const char *buf, size_t len);
 extern void sfs_tpm_cfg_set_mc_ipv4_stream_add           (const char *buf, size_t len);
+extern void sfs_tpm_cfg_set_mc_ipv4_stream_set_queue_add           (const char *buf, size_t len);
 extern void sfs_tpm_cfg_set_mc_ipv4_stream_update        (const char *buf, size_t len);
 extern void sfs_tpm_cfg_set_mc_ipv6_stream_add           (const char *buf, size_t len);
+extern void sfs_tpm_cfg_set_mc_ipv6_stream_set_queue_add           (const char *buf, size_t len);
 extern void sfs_tpm_cfg_set_mc_ipv6_stream_update        (const char *buf, size_t len);
 
 extern void sfs_tpm_cfg_set_igmp_port_forward_mode_cfg   (const char *buf, size_t len);
@@ -107,6 +109,9 @@ extern void sfs_tpm_cfg_set_no_oam_channel               (const char *buf, size_
 extern void sfs_tpm_cfg_set_no_omci_channel              (const char *buf, size_t len);
 extern void sfs_tpm_cfg_setup                            (const char *buf, size_t len);
 extern void sfs_tpm_cfg_set_mib_reset                    (const char *buf, size_t len);
+extern void sfs_tpm_cfg_set_active_wan                   (const char *buf, size_t len);
+extern void sfs_tpm_cfg_set_port_hwf_admin        (const char *buf, size_t len);
+extern void sfs_tpm_cfg_hot_swap_profile            (const char *buf, size_t len);
 extern void sfs_tpm_cfg_add_cpu_lpbk                     (const char *buf, size_t len);
 extern void sfs_tpm_cfg_del_cpu_lpbk                     (const char *buf, size_t len);
 extern void sfs_tpm_cfg_dump_cpu_lpbk                    (const char *buf, size_t len);
@@ -166,6 +171,8 @@ extern void sfs_tpm_cfg_set_mac_learn_rule_add           (const char *buf, size_
 extern void sfs_tpm_cfg_set_no_rule_add_mac_learn        (const char *buf, size_t len);
 extern void sfs_tpm_cfg_set_mac_learn_default_rule_action(const char *buf, size_t len);
 extern void sfs_tpm_cfg_set_gmac0_ingr_rate_limit        (const char *buf, size_t len);
+extern void sfs_tpm_cfg_set_ds_load_balance_rule_add     (const char *buf, size_t len);
+extern void sfs_tpm_cfg_set_no_rule_add_ds_load_balance  (const char *buf, size_t len);
 
 /* KostaP */
 extern void sfs_tpm_cfg_set_fc(const char *buf, size_t len);

@@ -98,6 +98,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/ioctl.h>
+#include <linux/workqueue.h>
 
 #include "mvTypes.h"
 #include "mvCommon.h"
@@ -177,7 +178,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define ONU_PON_TIMER_PM_INTERVAL            (1000)  /* 1 sec */
 #define ONU_PON_TIMER_PEE_INTERVAL           (3000)  /* 3 sec */
 #define ONU_PON_TIMER_PON_EVT_CLEAN_INTERVAL (5000)  /* 5 sec */
-#define ONU_PON_TIMER_XVR_RST_INTERVAL       (450)   /* 450 msec */
+#define ONU_PON_TIMER_XVR_RST_INTERVAL       (10)    /* 10 msec */
 #define ONU_PON_TIMER_MPCP_INTERVAL          (1000)  /* 1 sec */
 #define ONU_PON_TIMER_RPRT_INTERVAL          (1)     /* 1 msec */
 #define ONU_PON_TIMER_HW_RPRT_T0_INTERVAL    (2)     /* 2 msec */
@@ -186,6 +187,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define ONU_PON_TIMER_SILENCE_INTERVAL       (60000) /* 60 sec */
 #define ONU_PON_TIMER_TX_MOD_INTERVAL        (1)   /* 1 msec */
 #define ONU_PON_TIMER_EVENT_MISS_INTERVAL    (10)   /* 10 msec */
+#define ONU_PON_TIMER_TX_PWR_INTERVAL        (1000)  /* 1 sec */
 
 #define ONU_PON_TIMER_ACTIVE                 (1)
 #define ONU_PON_TIMER_NOT_ACTIVE             (0)
@@ -221,6 +223,20 @@ typedef struct
   struct tasklet_struct onuPonTasklet;
 }S_onuPonIrq;
 
+
+/* Work queue */
+typedef struct
+{
+  struct work_struct ponWork;
+  int    action;
+  int    param;
+}S_onuPonWork;
+
+typedef struct
+{
+  struct workqueue_struct *ponWq;
+}S_onuPonWorkQueue;
+
 /* ONU GPON resource table */
 typedef struct
 {
@@ -236,7 +252,8 @@ typedef struct
   S_OnuPonTimer onuPonIsrMissTimerId;       /* ONU EPON ISR Miss timer */
   S_OnuPonTimer onuPonHoldoverTimerId;      /* ONU EPON Holdover timer */
   S_OnuPonTimer onuPonSilenceTimerId[8];    /* ONU EPON Silence timer */
-                                            
+
+  S_OnuPonTimer onuPonTxPwrTimerId;         /* ONU PON TX Power timer */
   S_OnuPonTimer onuPonPmTimerId;            /* ONU PON PM timer */
   S_OnuPonTimer onuPonPatternBurstTimerId;  /* ONU PON Pattern Burst timer */
 #ifndef PON_FPGA                            

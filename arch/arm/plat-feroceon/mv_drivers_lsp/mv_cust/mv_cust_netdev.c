@@ -39,6 +39,9 @@
 #include <linux/if_vlan.h>
 #include <net/ip.h>
 #include <net/ipv6.h>
+#ifdef CONFIG_MV_CUST_MLD_HANDLE
+#include <linux/icmpv6.h>
+#endif
 
 #include <mvOs.h>
 #include <ctrlEnv/mvCtrlEnvLib.h>
@@ -48,167 +51,179 @@
 #include "mv_cust_flow_map.h"
 #include "mv_cust_mng_if.h"
 
+/*----------------------------------------------------------------------------*/
+/* External  declaration                                                      */
+/*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*/
+/* Global static definition                                                   */
+/*----------------------------------------------------------------------------*/
 /* YUVAL - update to pnc define */
 #define     MH_GEM_PORT_MASK                (0x0FFF)
 #define     MH_EPON_OAM_TYPE                (0x8809)
 #define     ETY_IPV4                        (0x0800)
 #define     IPV4_PROTO_OFFSET               (9)
+#define     MV_CUST_SWF_TX_QUEUE            (6)
 
 #define     CUST_TBL_NUM_ENTRIES(a)         (sizeof(a)/sizeof(a[0]))
 
 /*Static Declarations */
-static int    mv_eth_ports_num = 0;
+static int    mv_eth_ports_num     = 0;
+static int    mv_cust_debug_code   = 0;
+
 static int    mv_cust_omci_gemport = 0;
-
-static int    mv_cust_omci_valid = 0;
-static int    mv_cust_eoam_valid = 0;
-#ifdef CONFIG_MV_CUST_IGMP_HANDLE
-static int    mv_cust_igmp_detect = 1;
-static uint16_t mv_cust_igmp_type;
-static struct mv_eth_tx_spec     igmp_tx_spec = {0, MV_ETH_F_MH, 0, 0};
-#endif
-static int    mv_cust_port_loopback_detect = 1;
-static int    mv_cust_debug_code = 0;
-static int    mv_cust_xpon_oam_rx_gh = 0;
-
-static uint16_t mv_cust_xpon_oam_type;
-static uint16_t mv_cust_loopdet_type;
+static int    mv_cust_omci_rx_gh   = 0;
+static int    mv_cust_oam_rx_gh    = 0;
 
 /* Protocol definitions */
-static struct mv_eth_tx_spec     omci_mgmt_tx_spec = {0};
+static struct mv_eth_tx_spec     omci_mgmt_tx_spec = {0, 0, 0, MV_CUST_SWF_TX_QUEUE};
 static struct mv_eoam_llid_spec  epon_mgmt_tx_spec[MV_CUST_NUM_LLID];
+#define EPON_MGMT_ENTRIES   CUST_TBL_NUM_ENTRIES(epon_mgmt_tx_spec)
 
 #ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE
-static struct mv_port_tx_spec    port_spec_cfg[CONFIG_MV_ETH_PORTS_NUM];
+static struct mv_port_tx_spec    udp_port_spec_cfg[CONFIG_MV_ETH_PORTS_NUM];
+#define PORT_ENTRIES        CUST_TBL_NUM_ENTRIES(udp_port_spec_cfg)
 #endif
 
 #ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
 static int    mv_cust_flow_map = 0;
-static int    mv_cust_flow_map_parse(uint8_t *data, uint16_t *vlan, uint8_t *pbits, uint8_t dir);
-static int    mv_cust_flow_map_mod(uint8_t *data, uint16_t vid, uint8_t pbits, uint8_t dir);
 #endif
 
+/* Default Application Ethernet type used for socket and skb */
+#define MV_CUST_ETH_TYPE_IGMP      (0xA000)
+#define MV_CUST_ETH_TYPE_MLD       (0xAB00)
+#define MV_CUST_ETH_TYPE_LPBK      (0xFFFA)
+#define MV_CUST_ETH_TYPE_OAM       (0xBABA)
+/* The Ethernet tpye of OAM/OMCI could be same since they will not use at the same time*/
+#define MV_CUST_ETH_TYPE_OMCI      (0xBABA)
 
-#define     PORT_ENTRIES                    CUST_TBL_NUM_ENTRIES(port_spec_cfg)
-#define     EPON_MGMT_ENTRIES               CUST_TBL_NUM_ENTRIES(epon_mgmt_tx_spec)
-
-
-void mv_cust_omci_print(void)
+/* Global cust configuration*/
+/* Pay attention that the order could be be changed and the entry could not be removed */
+static mv_cust_app_config_t gCustConfig[] =
 {
-    printk("************* OMCI Configuration *****************\n\n");
-    printk("OMCI: valid = %d, gemport = %d, ethtype = 0x%04x, gh_keep = %d\n",
-           mv_cust_omci_valid, mv_cust_omci_gemport, ntohs(mv_cust_xpon_oam_type), mv_cust_xpon_oam_rx_gh);
-    printk("OMCI: txp   = %d, txq = %d, hw_cmd = 0x%08x, flags = 0x%04x on TX \n",
-           omci_mgmt_tx_spec.txp, omci_mgmt_tx_spec.txq, omci_mgmt_tx_spec.hw_cmd, omci_mgmt_tx_spec.flags);
-    printk("\n");
+    /* Application Type */   /* Enable Flag */   /*Application Eth type*/   /* Application Description*/
+    {MV_CUST_APP_TYPE_IGMP,  MV_CUST_APP_DISABLE, MV_CUST_ETH_TYPE_IGMP,     "IGMP application"},
+    {MV_CUST_APP_TYPE_MLD,   MV_CUST_APP_DISABLE, MV_CUST_ETH_TYPE_MLD,      "MLD application"},
+    {MV_CUST_APP_TYPE_LPBK,  MV_CUST_APP_DISABLE, MV_CUST_ETH_TYPE_LPBK,     "Loopback detection application"},
+    {MV_CUST_APP_TYPE_OAM,   MV_CUST_APP_DISABLE, MV_CUST_ETH_TYPE_OAM,      "eOAM application"},
+    {MV_CUST_APP_TYPE_OMCI,  MV_CUST_APP_DISABLE, MV_CUST_ETH_TYPE_OMCI,     "OMCI application"},    
+};
+
+/*----------------------------------------------------------------------------*/
+/* Function implementation                                                    */
+/*----------------------------------------------------------------------------*/
+
+void mv_cust_debug_info_set(int val)
+{
+    mv_cust_debug_code = val;
+    return;
 }
 
 
-void mv_cust_eoam_print(void)
+void mv_cust_app_flag_set(mv_cust_app_type_e app_type, uint16_t enable)
 {
-    int i;
-    printk("************* eOAM Configuration *****************\n\n");
-    printk("EOAM: valid = %d, ethtype = 0x%04x, gh_keep = %d\n",
-           mv_cust_eoam_valid, ntohs(mv_cust_xpon_oam_type), mv_cust_xpon_oam_rx_gh);
-    for (i=0;i <(EPON_MGMT_ENTRIES);i++) {
-        printk("llid%d: mac=%02x:%02x:%02x:%02x:%02x:%02x, txp=%d, txq=%d, hw_cmd=0x%08x, flags = 0x%04x\n",
-               i,
-               epon_mgmt_tx_spec[i].llid_mac_address[0],epon_mgmt_tx_spec[i].llid_mac_address[1],
-               epon_mgmt_tx_spec[i].llid_mac_address[2],epon_mgmt_tx_spec[i].llid_mac_address[3],
-               epon_mgmt_tx_spec[i].llid_mac_address[4],epon_mgmt_tx_spec[i].llid_mac_address[5],
-               epon_mgmt_tx_spec[i].tx_spec.txp, epon_mgmt_tx_spec[i].tx_spec.txq,
-               epon_mgmt_tx_spec[i].tx_spec.hw_cmd, epon_mgmt_tx_spec[i].tx_spec.flags);
-        printk("\n");
+    if (mv_cust_debug_code)
+        printk("%s() In, app_type[%d], enable[%d] \n", __func__, app_type, enable);
+    
+    if (app_type > (MV_CUST_APP_TYPE_MAX-1))
+    {
+        printk("%s: illegal application type[%d], allowed max type[%d]  \n",
+                __func__, app_type, MV_CUST_APP_TYPE_MAX-1);
+        return;
     }
-}
 
-#ifdef CONFIG_MV_CUST_IGMP_HANDLE
-void mv_cust_igmp_print(void)
-{
-    printk("************* IGMP Configuration *****************\n\n");
-    printk("IGMP valid = %d,  ethtype = 0x%04x, on RX\n",
-           mv_cust_igmp_detect, ntohs(mv_cust_igmp_type));
-    printk("IGMP txp = %d, txq = %d, , hw_cmd = 0x%08x on TX\n",
-           igmp_tx_spec.txp, igmp_tx_spec.txq, igmp_tx_spec.hw_cmd);
-    printk("\n");
-}
-#endif
-
-void mv_cust_loopdet_print(void)
-{
-    printk("************* Port Loopback Configuration *****************\n\n");
-    printk("Port Loopback valid = %d,  ethtype = 0x%04x, on RX\n",
-           mv_cust_port_loopback_detect, ntohs(mv_cust_loopdet_type));
-}
-
-
-#ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE
-int mv_cust_udp_spec_print(int port)
-{
-    int i;
-    struct eth_port *pp = mv_eth_port_by_id(port);
-    struct mv_udp_port_tx_spec *udp_spec;
-
-    if (!pp)
-        return -ENODEV;
-
-    udp_spec = &(port_spec_cfg[port].udp_dst[0]);
-
-    printk("\n**** port #%d - TX UDP Dest Port configuration *****\n", port);
-    printk("----------------------------------------------------\n");
-    printk("ID udp_dst   txp    txq    flags    hw_cmd     func_add\n");
-    for (i = 0; i < sizeof(port_spec_cfg[port].udp_dst)/sizeof(port_spec_cfg[port].udp_dst[0]); i++) {
-        if (udp_spec[i].tx_spec.txq != MV_ETH_TXQ_INVALID)
-            printk("%2d   %04d      %d      %d     0x%04x   0x%08x   0x%p\n",
-                   i, ntohs(udp_spec[i].udp_port),
-                   udp_spec[i].tx_spec.txp, udp_spec[i].tx_spec.txq,
-                   udp_spec[i].tx_spec.flags, udp_spec[i].tx_spec.hw_cmd,
-                   udp_spec[i].tx_spec.tx_func);
-    }
-    printk("-----------------------------------------------------\n");
-
-    udp_spec = &(port_spec_cfg[port].udp_src[0]);
-
-    printk("**** port #%d - TX UDP Source Port configuration *****\n", port);
-    printk("-----------------------------------------------------\n");
-    printk("ID udp_src   txp    txq     flags    hw_cmd     func_add\n");
-    for (i = 0; i < sizeof(port_spec_cfg[port].udp_src)/sizeof(port_spec_cfg[port].udp_src[0]); i++) {
-        if (udp_spec[i].tx_spec.txq != MV_ETH_TXQ_INVALID)
-            printk("%2d   %04d      %d      %d     0x%04x   0x%08x   0x%p\n",
-                   i, ntohs(udp_spec[i].udp_port),
-                   udp_spec[i].tx_spec.txp, udp_spec[i].tx_spec.txq,
-                   udp_spec[i].tx_spec.flags, udp_spec[i].tx_spec.hw_cmd,
-                   udp_spec[i].tx_spec.tx_func);
-    }
-    printk("**************************************************************\n");
-
-
-    return 0;
-}
-
-void mv_cust_udp_spec_print_all(void)
-{
-    int port;
-
-    for (port=0;port < CONFIG_MV_ETH_PORTS_NUM ;port++) {
-        mv_cust_udp_spec_print(port);
-    }
-}
-#endif
-
+    if (app_type == MV_CUST_APP_TYPE_OMCI)
+    {
+        if (enable) 
+        {
+            if (gCustConfig[MV_CUST_APP_TYPE_OAM].enable) 
+            {
+                MVCUST_ERR_PRINT("EPON is already valid\n");
+                return;
+            }
+            gCustConfig[MV_CUST_APP_TYPE_OMCI].enable = MV_CUST_APP_ENABLE;
 #ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
-void mv_cust_flow_map_print(void)
-{
-    printk("************* Flow Mapping Configuration *****************\n\n");
-    printk("FLow mapping valid = %d\n", mv_cust_flow_map);
-}
+            mv_cust_flow_map   = 1;
 #endif
+        }
+        else 
+        {
+            gCustConfig[MV_CUST_APP_TYPE_OMCI].enable = MV_CUST_APP_DISABLE;
+#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
+            mv_cust_flow_map   = 0;
+#endif
+        }
+    }
+    else if(app_type == MV_CUST_APP_TYPE_OAM)
+    {
+        if (enable) 
+        {
+            if (gCustConfig[MV_CUST_APP_TYPE_OMCI].enable) 
+            {
+                MVCUST_ERR_PRINT("GPON is already valid\n");
+                return;
+            }
+            gCustConfig[MV_CUST_APP_TYPE_OAM].enable = MV_CUST_APP_ENABLE;
+#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
+            mv_cust_flow_map   = 0;
+#endif
+        }
+        else 
+        {
+            gCustConfig[MV_CUST_APP_TYPE_OAM].enable = MV_CUST_APP_DISABLE;
+#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
+            mv_cust_flow_map   = 0;
+#endif
+        }
 
-void mv_cust_omci_hw_cmd_set(uint32_t hw_cmd)
-{
-    omci_mgmt_tx_spec.hw_cmd = hw_cmd;
+    }
+    else
+    {
+        if (enable == MV_CUST_APP_ENABLE)
+            gCustConfig[app_type].enable = MV_CUST_APP_ENABLE;
+        else
+            gCustConfig[app_type].enable = MV_CUST_APP_DISABLE;
+    }
+
+    return;
 }
-EXPORT_SYMBOL(mv_cust_omci_hw_cmd_set);
+EXPORT_SYMBOL(mv_cust_app_flag_set);
+
+
+void mv_cust_app_etype_set(mv_cust_app_type_e app_type, uint16_t eth_type)
+{
+    if (mv_cust_debug_code)
+        printk("%s() In, app_type[%d], eth_type[%d] \n", __func__, app_type, eth_type);
+    
+    if (app_type > (MV_CUST_APP_TYPE_MAX-1))
+    {
+        printk("%s: illegal application type[%d], allowed max type[%d]  \n",
+                __func__, app_type, MV_CUST_APP_TYPE_MAX-1);
+        return;
+    }
+
+    gCustConfig[app_type].eth_type = eth_type;
+
+    return;
+}
+EXPORT_SYMBOL(mv_cust_app_etype_set);
+
+
+void mv_cust_rec_skb(int port, struct sk_buff *skb)
+{
+    uint32_t rx_status;
+    struct eth_port *pp;
+
+    rx_status = netif_receive_skb(skb);
+    pp = mv_eth_port_by_id(port);
+    STAT_DBG(if (rx_status) (pp->stats.rx_drop_sw++));
+}
+
+void mv_cust_omci_rx_gh_set(int val)
+{
+    mv_cust_omci_rx_gh = val;
+    return;
+}
 
 int mv_cust_omci_tx_set(int tcont, int txq)
 {
@@ -226,6 +241,16 @@ int mv_cust_omci_tx_set(int tcont, int txq)
     return 0;
 }
 
+void mv_cust_omci_gemport_set(int gemport)
+{
+    mv_cust_omci_gemport = gemport;
+    return;
+}
+
+void mv_cust_omci_hw_cmd_set(uint32_t hw_cmd)
+{
+    omci_mgmt_tx_spec.hw_cmd = hw_cmd;
+}
 
 int mv_cust_omci_set(int tcont, int txq, int gem_port, int keep_rx_mh)
 {
@@ -243,14 +268,91 @@ int mv_cust_omci_set(int tcont, int txq, int gem_port, int keep_rx_mh)
     mv_cust_omci_gemport_set(gem_port);
     hw_cmd = ((gem_port << 8) | 0x0010);
     mv_cust_omci_hw_cmd_set(hw_cmd);
-    mv_cust_xpon_oam_rx_gh_set(keep_rx_mh);
+    mv_cust_omci_rx_gh_set(keep_rx_mh);
 
-    mv_cust_omci_enable(1);
+    mv_cust_app_flag_set(MV_CUST_APP_TYPE_OMCI, MV_CUST_APP_ENABLE);
 
     return 0;
 }
 EXPORT_SYMBOL(mv_cust_omci_set);
 
+void mv_cust_omci_print(void)
+{
+    printk("************* OMCI Configuration *****************\n\n");
+    printk("OMCI: valid = %d, gemport = %d, ethtype = 0x%04x, gh_keep = %d\n",
+           gCustConfig[MV_CUST_APP_TYPE_OMCI].enable,
+           mv_cust_omci_gemport, 
+           ntohs(gCustConfig[MV_CUST_APP_TYPE_OMCI].eth_type), 
+           mv_cust_omci_rx_gh);
+    printk("OMCI: txp   = %d, txq = %d, hw_cmd = 0x%08x, flags = 0x%04x on TX \n",
+           omci_mgmt_tx_spec.txp, omci_mgmt_tx_spec.txq, omci_mgmt_tx_spec.hw_cmd, omci_mgmt_tx_spec.flags);
+    printk("\n");
+}
+
+static int mv_cust_omci_gem_parse(uint8_t *data)
+{
+    uint16_t gh;
+
+    gh = ntohs(*(uint16_t *)data);
+
+    if(mv_cust_debug_code)
+        printk("%s:gh= 0x(%04x) - mv_cust_omci_gemport= 0x(%04x)  \n", __func__, gh, mv_cust_omci_gemport);
+
+    /* Compare GH for omci_gemport */
+    if ( (gh & MH_GEM_PORT_MASK) != mv_cust_omci_gemport ) {
+        if(mv_cust_debug_code)
+            printk("%s: compare GH for OMCI_gemport failed: gh= 0x(%04x) - mv_cust_omci_gemport= 0x(%04x)  \n", __func__, gh, mv_cust_omci_gemport);
+        return(0);
+    }
+
+    return(1);
+}
+
+static int mv_cust_omci_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
+{
+    uint32_t rx_bytes;
+
+    if (!mv_cust_omci_gem_parse(skb->data))
+        return 0;
+    if (mv_cust_omci_rx_gh) {
+        rx_bytes = rx_desc->dataSize;
+    }
+    else {
+        skb->data += MV_ETH_MH_SIZE;
+        rx_bytes = rx_desc->dataSize - MV_ETH_MH_SIZE;
+    }
+    skb->tail += rx_bytes;
+    skb->len = rx_bytes;
+    skb->protocol = eth_type_trans(skb, dev);
+    skb->protocol = htons(gCustConfig[MV_CUST_APP_TYPE_OMCI].eth_type);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+    skb->dev = dev;
+#endif
+    mv_cust_rec_skb(port, skb);
+
+    return 1;
+}
+
+int mv_cust_omci_tx(int port, struct net_device *dev, struct sk_buff *skb,
+                   struct mv_eth_tx_spec *tx_spec_out)
+{
+    if ((skb->protocol == htons(gCustConfig[MV_CUST_APP_TYPE_OMCI].eth_type))
+        && (MV_CUST_APP_ENABLE == gCustConfig[MV_CUST_APP_TYPE_OMCI].enable)
+        && (port == MV_PON_PORT_ID)) {
+        memcpy (tx_spec_out, &omci_mgmt_tx_spec, sizeof(struct mv_eth_tx_spec));
+        if(mv_cust_debug_code)
+            printk("%s", __func__);
+        return 1;
+    }
+    return 0;
+}
+
+
+void mv_cust_oam_rx_gh_set(int val)
+{
+    mv_cust_oam_rx_gh = val;
+    return;
+}
 
 int mv_cust_eoam_llid_set(int llid, uint8_t *llid_mac, int txq)
 {
@@ -272,31 +374,6 @@ int mv_cust_eoam_llid_set(int llid, uint8_t *llid_mac, int txq)
 }
 EXPORT_SYMBOL(mv_cust_eoam_llid_set);
 
-
-MV_STATUS mv_cust_omci_enable(int enable)
-{
-    if (enable) {
-
-        if (mv_cust_eoam_valid) {
-            MVCUST_ERR_PRINT("EPON is already valid\n");
-            return MV_ERROR;
-        }
-        mv_cust_omci_valid = 1;
-#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
-        mv_cust_flow_map   = 1;
-#endif
-    }
-    else {
-        mv_cust_omci_valid = 0;
-#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
-        mv_cust_flow_map   = 0;
-#endif
-    }
-
-    return MV_OK;
-}
-
-
 void mv_cust_eoam_init(void)
 {
     int i;
@@ -312,63 +389,407 @@ void mv_cust_eoam_init(void)
     }
 
     /* In Rx, keep the MH for EOAM */
-    mv_cust_xpon_oam_rx_gh_set(1);
+    mv_cust_oam_rx_gh_set(1);
     return ;
 }
-EXPORT_SYMBOL(mv_cust_eoam_init);
 
-
-MV_STATUS mv_cust_eoam_enable(int enable)
+void mv_cust_eoam_print(void)
 {
+    int i;
+    printk("************* eOAM Configuration *****************\n\n");
+    printk("EOAM: valid = %d, ethtype = 0x%04x, gh_keep = %d\n",
+           gCustConfig[MV_CUST_APP_TYPE_OAM].enable, 
+           ntohs(gCustConfig[MV_CUST_APP_TYPE_OAM].eth_type), 
+           mv_cust_oam_rx_gh);
+    for (i=0;i <(EPON_MGMT_ENTRIES);i++) {
+        printk("llid%d: mac=%02x:%02x:%02x:%02x:%02x:%02x, txp=%d, txq=%d, hw_cmd=0x%08x, flags = 0x%04x\n",
+               i,
+               epon_mgmt_tx_spec[i].llid_mac_address[0],epon_mgmt_tx_spec[i].llid_mac_address[1],
+               epon_mgmt_tx_spec[i].llid_mac_address[2],epon_mgmt_tx_spec[i].llid_mac_address[3],
+               epon_mgmt_tx_spec[i].llid_mac_address[4],epon_mgmt_tx_spec[i].llid_mac_address[5],
+               epon_mgmt_tx_spec[i].tx_spec.txp, epon_mgmt_tx_spec[i].tx_spec.txq,
+               epon_mgmt_tx_spec[i].tx_spec.hw_cmd, epon_mgmt_tx_spec[i].tx_spec.flags);
+        printk("\n");
+    }
+}
+
+static int mv_cust_eoam_type_parse(uint8_t *data)
+{
+    uint16_t ety;
+
+    ety = ntohs(*(uint16_t *)(data + MV_ETH_MH_SIZE + ETH_ALEN + ETH_ALEN));
 
     if(mv_cust_debug_code)
-        printk("%s: enable = %d\n", __func__, enable);
+        printk("%s: ety 0x(%04x)\n", __func__, ety);
 
-    if (enable) {
-        if (mv_cust_omci_valid) {
-            MVCUST_ERR_PRINT("OMCI is already valid\n");
-            return MV_ERROR;
-        }
-        mv_cust_eoam_valid = 1;
-#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
-        mv_cust_flow_map   = 0;
-#endif
+    /* Compare EPON OAM ether_type */
+    if (ety == MH_EPON_OAM_TYPE)
+        return(1);
+
+    return(0);
+}
+
+static int mv_cust_epon_oam_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
+{
+    uint32_t rx_bytes;
+
+    if (!mv_cust_eoam_type_parse(skb->data))
+        return 0;
+
+    if (mv_cust_oam_rx_gh) {
+        rx_bytes = rx_desc->dataSize;
     }
     else {
-        mv_cust_eoam_valid = 0;
-#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
-        mv_cust_flow_map   = 0;
-#endif
+        skb->data += MV_ETH_MH_SIZE;
+        rx_bytes = rx_desc->dataSize - MV_ETH_MH_SIZE;
     }
 
-    return MV_OK;
-}
-EXPORT_SYMBOL(mv_cust_eoam_enable);
+    skb->tail += rx_bytes;
+    skb->len = rx_bytes;
+    skb->protocol = eth_type_trans(skb, dev);
+    skb->protocol = htons(gCustConfig[MV_CUST_APP_TYPE_OAM].eth_type);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+    skb->dev = dev;
+#endif
+    mv_cust_rec_skb(port, skb);
 
-#if 0
-MV_STATUS mv_cust_eoam_tx_func_set(void (*tx_func) (uint8_t *data, int size, struct mv_eth_tx_spec *tx_spec))
+    return 1;
+}
+
+int mv_cust_eoam_tx(int port, struct net_device *dev, struct sk_buff *skb,
+                    struct mv_eth_tx_spec *tx_spec_out)
 {
+    int mac_match, i;
 
-    if (mv_cust_debug_code)
-        printk("%s: \n", __func__);
-
-    /* System cannot be OMCI_valid */
-    if (mv_cust_omci_valid) {
-        MVCUST_ERR_PRINT("EPON is valid\n");
-        return MV_ERROR;
+    if ((skb->protocol == htons(gCustConfig[MV_CUST_APP_TYPE_OAM].eth_type))
+        && (MV_CUST_APP_ENABLE == gCustConfig[MV_CUST_APP_TYPE_OAM].enable)
+        && port == MV_PON_PORT_ID) {
+        /* Lookup MAC Address */
+        for (i=0; i<(EPON_MGMT_ENTRIES);i++) {
+            mac_match = memcmp((void *) &(epon_mgmt_tx_spec[i].llid_mac_address[0]),
+                               (void *)(skb->data + /*MV_ETH_MH_SIZE +*/ ETH_ALEN),
+                               ETH_ALEN);
+            if (!mac_match) {
+                memcpy (tx_spec_out, &epon_mgmt_tx_spec[i].tx_spec, sizeof(struct mv_eth_tx_spec));
+                if(mv_cust_debug_code)
+                    printk("%s, llid = %d", __func__, i);
+                return 1;
+            }
+        }
+        /* Source MAC Address not found */
+        if(mv_cust_debug_code) {
+            printk("(%s)Input Packet first bytes:\n", __func__);
+            for (i=0;i<24;i++) {
+                if (i%8== 0)
+                    printk("\n");
+                printk ("%02x ", *(skb->data + i));
+            }
+        }
     }
-    /*Pointer cannot be null */
-    if (!tx_func) {
-        MVCUST_ERR_PRINT("NULL pointer\n");
-    }
-
-    xpon_mgmt_tx_spec.tx_func = tx_func;
-
-    return MV_OK;
+    return 0;
 }
-EXPORT_SYMBOL(mv_cust_eoam_tx_func_set);
+
+
+#ifdef CONFIG_MV_CUST_IGMP_HANDLE
+void mv_cust_igmp_print(void)
+{
+    printk("************* IGMP Configuration *****************\n\n");
+    printk("IGMP valid = %d,  ethtype = 0x%04x \n",
+           gCustConfig[MV_CUST_APP_TYPE_IGMP].enable, 
+           gCustConfig[MV_CUST_APP_TYPE_IGMP].eth_type);
+    printk("IGMP default txq = %d\n",MV_CUST_SWF_TX_QUEUE);
+    printk("\n");
+}
+
+static int mv_cust_igmp_parse(uint8_t *data)
+{
+    uint16_t ety;
+    uint8_t  proto;
+    uint8_t *fieldp = data + MV_ETH_MH_SIZE + ETH_ALEN + ETH_ALEN;
+
+    /* Loop through VLAN tags */
+    ety = ntohs(*(uint16_t *)fieldp);
+    while (ety == 0x8100 || ety == 0x9100 || ety == 0x88A8) {
+        fieldp+= VLAN_HLEN;
+        ety = ntohs(*(uint16_t *)fieldp);
+    }
+
+    if(mv_cust_debug_code)
+        printk("%s:ety 0x(%04x)\n", __func__, ety);
+
+    if (ety == ETY_IPV4) {
+        fieldp+= 2;
+        fieldp+= IPV4_PROTO_OFFSET;
+        proto = *fieldp;
+        if (mv_cust_debug_code)
+            printk("%s:proto 0x(%02x)\n", __func__, proto);
+
+        if (proto == IPPROTO_IGMP)
+            return(1);
+    }
+
+    return(0);
+}
+
+static int mv_cust_igmp_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
+{
+    uint32_t rx_bytes;
+
+    if (!mv_cust_igmp_parse(skb->data))
+        return 0;
+
+    /* To Indicate the source GMAC */
+    skb->data[0] = port;
+
+    rx_bytes = rx_desc->dataSize;
+
+    skb->tail += rx_bytes;
+    skb->len = rx_bytes;
+    skb->protocol = eth_type_trans(skb, dev);
+    skb->protocol = htons(gCustConfig[MV_CUST_APP_TYPE_IGMP].eth_type);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+    skb->dev = dev;
+#endif
+    mv_cust_rec_skb(port, skb);
+
+    return 1;
+}
+
+int mv_cust_igmp_tx(int port, struct net_device *dev, struct sk_buff *skb,
+                    struct mv_eth_tx_spec *tx_spec_out)
+{
+    if (gCustConfig[MV_CUST_APP_TYPE_IGMP].enable == MV_CUST_APP_ENABLE) {
+        /* Check application Ethernet type */
+        if (skb->protocol == htons(gCustConfig[MV_CUST_APP_TYPE_IGMP].eth_type)) {
+
+            /* The Mapping and VLAN mod should be support in next phase */
+            if (MV_PON_PORT_ID == port)
+            {
+                tx_spec_out->flags = MV_ETH_F_MH;
+            }
+            else
+            {
+                tx_spec_out->flags = 0;
+            }
+            
+            tx_spec_out->txp     = 0;
+            tx_spec_out->txq     = MV_CUST_SWF_TX_QUEUE;
+            tx_spec_out->hw_cmd  = 0;
+#ifdef CONFIG_MV_ETH_TX_SPECIAL
+            tx_spec_out->tx_func = NULL;
+#endif
+            return 1;
+        }
+    }
+    return 0;
+}
+
 #endif
 
+
+#ifdef CONFIG_MV_CUST_MLD_HANDLE
+void mv_cust_mld_print(void)
+{
+    printk("************* MLD Configuration *****************\n\n");
+    printk("MLD valid = %d,  ethtype = 0x%04x \n",
+           gCustConfig[MV_CUST_APP_TYPE_MLD].enable, 
+           gCustConfig[MV_CUST_APP_TYPE_MLD].eth_type);
+    printk("MLD default txq = %d\n",MV_CUST_SWF_TX_QUEUE);
+    printk("\n");
+}
+
+static int mv_cust_mld_parse(uint8_t *data)
+{
+    uint16_t ety;
+    uint8_t *fieldp = data + MV_ETH_MH_SIZE + ETH_ALEN + ETH_ALEN;
+
+
+    /* Loop through VLAN tags */
+    ety = ntohs(*(uint16_t *)fieldp);
+    while (ety == 0x8100 || ety == 0x9100 ||ety == 0x88A8) {
+        fieldp+= VLAN_HLEN;
+        ety = ntohs(*(uint16_t *)fieldp);
+    }
+
+    if(mv_cust_debug_code)
+        printk("%s:ety 0x(%04x)\n", __func__, ety);
+
+    if (ety == ETH_P_IPV6) 
+    {
+        struct ipv6hdr *hdr = (struct ipv6hdr *)(fieldp+2);
+        struct ipv6_hopopt_hdr *hopopthdr ;
+        struct icmp6hdr *pic;
+
+        if (hdr->nexthdr != NEXTHDR_HOP )
+          return 0;
+
+        hopopthdr = (struct ipv6_hopopt_hdr *)((uint8_t *)hdr+ sizeof(struct ipv6hdr));
+
+        if ( hopopthdr->nexthdr != IPPROTO_ICMPV6)
+            return 0;
+
+        pic =  (struct icmp6hdr *)((uint8_t *)hopopthdr+ipv6_optlen(hopopthdr));
+
+        switch (pic->icmp6_type) {
+        case ICMPV6_MGM_QUERY:
+        case ICMPV6_MGM_REPORT:
+        case ICMPV6_MGM_REDUCTION:
+        case ICMPV6_MLD2_REPORT:
+            return 1;
+        default:
+            break;
+        }
+        
+    }
+    
+    return(0);
+}
+
+static int mv_cust_mld_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
+{
+    uint32_t rx_bytes;
+
+    if (!mv_cust_mld_parse(skb->data))
+        return 0;
+
+    /* To Indicate the source GMAC */
+    skb->data[0] = port;
+
+    rx_bytes = rx_desc->dataSize;
+
+    skb->tail += rx_bytes;
+    skb->len = rx_bytes;
+    skb->protocol = eth_type_trans(skb, dev);
+    skb->protocol = htons(gCustConfig[MV_CUST_APP_TYPE_MLD].eth_type);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+    skb->dev = dev;
+#endif
+
+    mv_cust_rec_skb(port, skb);
+
+    return 1;
+}
+
+int mv_cust_mld_tx(int port, struct net_device *dev, struct sk_buff *skb,
+                   struct mv_eth_tx_spec *tx_spec_out)
+{
+    if (gCustConfig[MV_CUST_APP_TYPE_MLD].enable == MV_CUST_APP_ENABLE) {
+        /* Check application Ethernet type */
+        if (skb->protocol == htons(gCustConfig[MV_CUST_APP_TYPE_MLD].eth_type)) {
+
+            /* The Mapping and VLAN mod should be support in next phase */
+            if (MV_PON_PORT_ID == port)
+            {
+                tx_spec_out->flags = MV_ETH_F_MH;
+            }
+            else
+            {
+                tx_spec_out->flags = 0;
+            }
+            
+            tx_spec_out->txp     = 0;
+            tx_spec_out->txq     = MV_CUST_SWF_TX_QUEUE;
+            tx_spec_out->hw_cmd  = 0;
+#ifdef CONFIG_MV_ETH_TX_SPECIAL
+            tx_spec_out->tx_func = NULL;
+#endif
+            return 1;
+        }
+    }
+    return 0;
+}
+
+#endif
+
+
+#ifdef CONFIG_MV_CUST_LPBK_DETECT_HANDLE
+void mv_cust_loopdet_print(void)
+{
+    printk("************* UNI loopback detection Configuration *****************\n\n");
+    printk("Lpbk detect valid = %d,  ethtype = 0x%04x \n",
+           gCustConfig[MV_CUST_APP_TYPE_LPBK].enable, 
+           gCustConfig[MV_CUST_APP_TYPE_LPBK].eth_type);
+    printk("Lpbk detect default txq = %d\n",MV_CUST_SWF_TX_QUEUE);
+    printk("\n");
+}
+
+static int mv_cust_loopdet_parse(uint8_t *data)
+{
+    uint16_t ety;
+    uint8_t *fieldp = data + MV_ETH_MH_SIZE + ETH_ALEN + ETH_ALEN;
+
+    /* Loop through VLAN tags */
+    ety = ntohs(*(uint16_t *)fieldp);
+    while (ety == 0x8100 || ety == 0x9100 ||ety == 0x88A8) {
+        fieldp+= VLAN_HLEN;
+        ety = ntohs(*(uint16_t *)fieldp);
+    }
+    if(mv_cust_debug_code)
+        printk("%s: ety 0x(%04x)\n", __func__, ety);
+
+    /* Compare EPON OAM ether_type */
+    if (ety == gCustConfig[MV_CUST_APP_TYPE_LPBK].eth_type)
+        return(1);
+
+    return(0);
+}
+
+static int mv_cust_loopdet_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
+{
+    uint32_t rx_bytes;
+
+    if (!mv_cust_loopdet_parse(skb->data))
+        return 0;
+    
+    /* To Indicate the source GMAC */
+    skb->data[0] = port;
+
+    rx_bytes = rx_desc->dataSize;
+
+    skb->tail += rx_bytes;
+    skb->len = rx_bytes;
+    skb->protocol = eth_type_trans(skb, dev);
+    skb->protocol = htons(gCustConfig[MV_CUST_APP_TYPE_LPBK].eth_type);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+    skb->dev = dev;
+#endif
+    mv_cust_rec_skb(port, skb);
+
+    return 1;
+}
+
+int mv_cust_loopdet_tx(int port, struct net_device *dev, struct sk_buff *skb,
+                       struct mv_eth_tx_spec *tx_spec_out)
+{
+    if (MV_CUST_APP_ENABLE == gCustConfig[MV_CUST_APP_TYPE_LPBK].enable) {
+        /* Check application Ethernet type */
+        if (skb->protocol == htons(gCustConfig[MV_CUST_APP_TYPE_LPBK].eth_type)) {
+         
+            if (MV_PON_PORT_ID == port)
+            {
+                tx_spec_out->flags = MV_ETH_F_MH;
+            }
+            else
+            {
+                tx_spec_out->flags = 0;
+            }
+            
+            tx_spec_out->txp     = 0;
+            tx_spec_out->txq     = MV_CUST_SWF_TX_QUEUE;
+            tx_spec_out->hw_cmd  = 0;
+#ifdef CONFIG_MV_ETH_TX_SPECIAL
+            tx_spec_out->tx_func = NULL;
+#endif          
+            return 1;
+        }
+    }
+    return 0;
+}
+
+#endif
+
+
+#ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE
 static inline void mv_cust_copy_tx_spec(struct mv_eth_tx_spec * tx_spec,
                                         uint8_t txp, uint8_t txq,
                                         uint16_t flags, uint32_t hw_cmd)
@@ -379,9 +800,58 @@ static inline void mv_cust_copy_tx_spec(struct mv_eth_tx_spec * tx_spec,
     tx_spec->flags = flags;
 }
 
+int mv_cust_udp_spec_print(int port)
+{
+    int i;
+    struct eth_port *pp = mv_eth_port_by_id(port);
+    struct mv_udp_port_tx_spec *udp_spec;
+
+    if (!pp)
+        return -ENODEV;
+
+    udp_spec = &(udp_port_spec_cfg[port].udp_dst[0]);
+
+    printk("\n**** port #%d - TX UDP Dest Port configuration *****\n", port);
+    printk("----------------------------------------------------\n");
+    printk("ID udp_dst   txp    txq    flags    hw_cmd     func_add\n");
+    for (i = 0; i < sizeof(udp_port_spec_cfg[port].udp_dst)/sizeof(udp_port_spec_cfg[port].udp_dst[0]); i++) {
+        if (udp_spec[i].tx_spec.txq != MV_ETH_TXQ_INVALID)
+            printk("%2d   %04d      %d      %d     0x%04x   0x%08x   0x%p\n",
+                   i, ntohs(udp_spec[i].udp_port),
+                   udp_spec[i].tx_spec.txp, udp_spec[i].tx_spec.txq,
+                   udp_spec[i].tx_spec.flags, udp_spec[i].tx_spec.hw_cmd,
+                   udp_spec[i].tx_spec.tx_func);
+    }
+    printk("-----------------------------------------------------\n");
+
+    udp_spec = &(udp_port_spec_cfg[port].udp_src[0]);
+
+    printk("**** port #%d - TX UDP Source Port configuration *****\n", port);
+    printk("-----------------------------------------------------\n");
+    printk("ID udp_src   txp    txq     flags    hw_cmd     func_add\n");
+    for (i = 0; i < sizeof(udp_port_spec_cfg[port].udp_src)/sizeof(udp_port_spec_cfg[port].udp_src[0]); i++) {
+        if (udp_spec[i].tx_spec.txq != MV_ETH_TXQ_INVALID)
+            printk("%2d   %04d      %d      %d     0x%04x   0x%08x   0x%p\n",
+                   i, ntohs(udp_spec[i].udp_port),
+                   udp_spec[i].tx_spec.txp, udp_spec[i].tx_spec.txq,
+                   udp_spec[i].tx_spec.flags, udp_spec[i].tx_spec.hw_cmd,
+                   udp_spec[i].tx_spec.tx_func);
+    }
+    printk("**************************************************************\n");
+
+    return 0;
+}
 
 
-#ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE
+void mv_cust_udp_spec_print_all(void)
+{
+    int port;
+
+    for (port=0;port < CONFIG_MV_ETH_PORTS_NUM ;port++) {
+        mv_cust_udp_spec_print(port);
+    }
+}
+
 MV_STATUS  mv_cust_udp_int_spec_set(struct mv_udp_port_tx_spec *udp_spec, uint16_t udp_port, int table_size,
                                     uint8_t txp, uint8_t txq, uint16_t flags, uint32_t hw_cmd)
 {
@@ -411,14 +881,14 @@ MV_STATUS  mv_cust_udp_int_spec_set(struct mv_udp_port_tx_spec *udp_spec, uint16
 MV_STATUS  mv_cust_udp_src_spec_set(int tx_port, uint16_t udp_src_port, uint8_t txp, uint8_t txq, uint16_t flags, uint32_t hw_cmd)
 {
     struct eth_port *pp = mv_eth_port_by_id(tx_port);
-    struct mv_udp_port_tx_spec *udp_src_spec = port_spec_cfg[tx_port].udp_src;
+    struct mv_udp_port_tx_spec *udp_src_spec = udp_port_spec_cfg[tx_port].udp_src;
     MV_STATUS mv_status;
 
     if (!pp)
         return -ENODEV;
 
     mv_status = mv_cust_udp_int_spec_set(udp_src_spec, udp_src_port,
-                                         sizeof(port_spec_cfg[tx_port].udp_src)/sizeof(port_spec_cfg[tx_port].udp_src[0]),
+                                         sizeof(udp_port_spec_cfg[tx_port].udp_src)/sizeof(udp_port_spec_cfg[tx_port].udp_src[0]),
                                          txp, txq, flags, hw_cmd);
 
     if (mv_status != MV_OK)
@@ -432,14 +902,14 @@ EXPORT_SYMBOL(mv_cust_udp_src_spec_set);
 MV_STATUS  mv_cust_udp_dest_spec_set(int tx_port, uint16_t udp_dest_port, uint8_t txp, uint8_t txq, uint16_t flags, uint32_t hw_cmd)
 {
     struct eth_port *pp = mv_eth_port_by_id(tx_port);
-    struct mv_udp_port_tx_spec *udp_dst_spec = port_spec_cfg[tx_port].udp_dst;
+    struct mv_udp_port_tx_spec *udp_dst_spec = udp_port_spec_cfg[tx_port].udp_dst;
     MV_STATUS mv_status;
 
     if (!pp)
         return -ENODEV;
 
     mv_status = mv_cust_udp_int_spec_set(udp_dst_spec, udp_dest_port,
-                                         sizeof(port_spec_cfg[tx_port].udp_dst)/sizeof(port_spec_cfg[tx_port].udp_dst[0]),
+                                         sizeof(udp_port_spec_cfg[tx_port].udp_dst)/sizeof(udp_port_spec_cfg[tx_port].udp_dst[0]),
                                          txp, txq, flags, hw_cmd);
 
     if (mv_status != MV_OK)
@@ -462,101 +932,21 @@ void  mv_cust_udp_table_del(void)
     for (tx_port=0; tx_port<num_ports;tx_port++) {
 
         /* Invalidate UDP Dest ports, set txq=invalid  */
-        for (i=0;i<(sizeof(port_spec_cfg[tx_port].udp_dst)/sizeof(port_spec_cfg[tx_port].udp_dst[0]));i++) {
-            memset(&(port_spec_cfg[tx_port].udp_dst[i]), 0, sizeof(struct mv_udp_port_tx_spec));
-            port_spec_cfg[tx_port].udp_dst[i].tx_spec.txq = MV_ETH_TXQ_INVALID;
+        for (i=0;i<(sizeof(udp_port_spec_cfg[tx_port].udp_dst)/sizeof(udp_port_spec_cfg[tx_port].udp_dst[0]));i++) {
+            memset(&(udp_port_spec_cfg[tx_port].udp_dst[i]), 0, sizeof(struct mv_udp_port_tx_spec));
+            udp_port_spec_cfg[tx_port].udp_dst[i].tx_spec.txq = MV_ETH_TXQ_INVALID;
         }
 
         /* Invalidate UDP Source ports, , set txq=invalid */
-        for (i=0;i<(sizeof(port_spec_cfg[tx_port].udp_src)/sizeof(port_spec_cfg[tx_port].udp_src[0]));i++) {
-            memset(&(port_spec_cfg[tx_port].udp_src[i]), 0, sizeof(struct mv_udp_port_tx_spec));
-            port_spec_cfg[tx_port].udp_src[i].tx_spec.txq = MV_ETH_TXQ_INVALID;
+        for (i=0;i<(sizeof(udp_port_spec_cfg[tx_port].udp_src)/sizeof(udp_port_spec_cfg[tx_port].udp_src[0]));i++) {
+            memset(&(udp_port_spec_cfg[tx_port].udp_src[i]), 0, sizeof(struct mv_udp_port_tx_spec));
+            udp_port_spec_cfg[tx_port].udp_src[i].tx_spec.txq = MV_ETH_TXQ_INVALID;
         }
 
     }
     return;
 }
-#endif
 
-int mv_cust_omci_tx(int port, struct net_device *dev, struct sk_buff *skb,
-                   struct mv_eth_tx_spec *tx_spec_out)
-{
-    if ( (skb->protocol == mv_cust_xpon_oam_type)
-        && mv_cust_omci_valid
-        && port == MV_PON_PORT_ID) {
-        memcpy (tx_spec_out, &omci_mgmt_tx_spec, sizeof(struct mv_eth_tx_spec));
-        if(mv_cust_debug_code)
-            printk("%s", __func__);
-        return 1;
-    }
-    return 0;
-}
-
-
-int mv_cust_eoam_tx(int port, struct net_device *dev, struct sk_buff *skb,
-                    struct mv_eth_tx_spec *tx_spec_out)
-{
-    int mac_match, i;
-
-    if (skb->protocol == mv_cust_xpon_oam_type
-        && mv_cust_eoam_valid
-        && port == MV_PON_PORT_ID) {
-        /* Lookup MAC Address */
-        for (i=0; i<(EPON_MGMT_ENTRIES);i++) {
-            mac_match = memcmp((void *) &(epon_mgmt_tx_spec[i].llid_mac_address[0]),
-                               (void *)(skb->data + /*MV_ETH_MH_SIZE +*/ ETH_ALEN),
-                               ETH_ALEN);
-            if (!mac_match) {
-                memcpy (tx_spec_out, &epon_mgmt_tx_spec[i].tx_spec, sizeof(struct mv_eth_tx_spec));
-                if(mv_cust_debug_code)
-                    printk("%s, llid = %d", __func__, i);
-                return 1;
-            }
-        }
-        /* Source MAC Address not found */
-        if(mv_cust_debug_code) {
-            printk("(%s)Input Packet first bytes:\n", __func__);
-            for (i=0;i<24;i++) {
-                if (i%8== 0)
-                    printk("\n");
-                printk ("%02x ", *(skb->data + i));
-            }
-        }
-    }
-    return 0;
-}
-
-
-#ifdef CONFIG_MV_CUST_IGMP_HANDLE
-int mv_cust_igmp_tx(int port, struct net_device *dev, struct sk_buff *skb,
-                    struct mv_eth_tx_spec *tx_spec_out)
-{
-    if (mv_cust_igmp_detect) {
-        /* Check Tx XPON Type */
-        if (skb->protocol == mv_cust_igmp_type) {
-            memcpy (tx_spec_out, &igmp_tx_spec, sizeof(struct mv_eth_tx_spec));
-
-            /* MH should not be set */
-            tx_spec_out->flags = 0;
-            if (2 == port)
-            {
-                tx_spec_out->txp = skb->data[0];
-                tx_spec_out->hw_cmd = ((skb->data[2] << 8) | skb->data[3]) << 8;
-                skb->data[2] |= 0x80;
-            }
-            tx_spec_out->txq = skb->data[1];
-
-            skb_pull(skb, 2);
-
-            return 1;
-        }
-    }
-    return 0;
-}
-#endif
-
-
-#ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE
 int mv_cust_udp_port_tx(int port, struct net_device *dev, struct sk_buff *skb,
                         struct mv_eth_tx_spec *tx_spec_out)
 {
@@ -572,14 +962,14 @@ int mv_cust_udp_port_tx(int port, struct net_device *dev, struct sk_buff *skb,
     if (skb->protocol == ETY_IPV4) {
         /* Get UDP Port */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	iphdrp = skb->nh.iph;
+    iphdrp = skb->nh.iph;
 #else
-	iphdrp = ip_hdr(skb);
+    iphdrp = ip_hdr(skb);
 #endif
 
         if ((iphdrp) && (iphdrp->protocol == IPPROTO_UDP)) {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	    udphdrp = skb->h.uh;
+        udphdrp = skb->h.uh;
 #else
         udphdrp = udp_hdr(skb);
 #endif
@@ -588,20 +978,20 @@ int mv_cust_udp_port_tx(int port, struct net_device *dev, struct sk_buff *skb,
                     udphdrp = (struct udphdr *)((char *)udphdrp + (4*(iphdrp->ihl)));
                 }
                 /* Find configured UDP Source Port*/
-                for (i=0; i < sizeof(port_spec_cfg[port].udp_src)/sizeof(port_spec_cfg[port].udp_src[0]);i++) {
-                    if ((udphdrp->source == port_spec_cfg[port].udp_src[i].udp_port) &&
-                        (port_spec_cfg[port].udp_src[i].tx_spec.txq != MV_ETH_TXQ_INVALID)) {
-                        memcpy (tx_spec_out, &(port_spec_cfg[port].udp_src[i].tx_spec), sizeof(struct mv_eth_tx_spec));
+                for (i=0; i < sizeof(udp_port_spec_cfg[port].udp_src)/sizeof(udp_port_spec_cfg[port].udp_src[0]);i++) {
+                    if ((udphdrp->source == udp_port_spec_cfg[port].udp_src[i].udp_port) &&
+                        (udp_port_spec_cfg[port].udp_src[i].tx_spec.txq != MV_ETH_TXQ_INVALID)) {
+                        memcpy (tx_spec_out, &(udp_port_spec_cfg[port].udp_src[i].tx_spec), sizeof(struct mv_eth_tx_spec));
                         if (mv_cust_debug_code)
                             printk("%s: found udp_src 0x(%04x)\n", __func__, ntohs(udphdrp->source));
                         return 1;
                     }
                 }
                 /* Find configured UDP Dest. Port*/
-                for (i=0; i < sizeof(port_spec_cfg[port].udp_dst)/sizeof(port_spec_cfg[port].udp_dst[0]);i++) {
-                    if ((udphdrp->dest == port_spec_cfg[port].udp_dst[i].udp_port) &&
-                        (port_spec_cfg[port].udp_src[i].tx_spec.txq != MV_ETH_TXQ_INVALID)) {
-                        memcpy (tx_spec_out, &(port_spec_cfg[port].udp_dst[i].tx_spec), sizeof(struct mv_eth_tx_spec));
+                for (i=0; i < sizeof(udp_port_spec_cfg[port].udp_dst)/sizeof(udp_port_spec_cfg[port].udp_dst[0]);i++) {
+                    if ((udphdrp->dest == udp_port_spec_cfg[port].udp_dst[i].udp_port) &&
+                        (udp_port_spec_cfg[port].udp_src[i].tx_spec.txq != MV_ETH_TXQ_INVALID)) {
+                        memcpy (tx_spec_out, &(udp_port_spec_cfg[port].udp_dst[i].tx_spec), sizeof(struct mv_eth_tx_spec));
                         if (mv_cust_debug_code)
                             printk("%s: found udp_dst 0x(%04x)\n", __func__, ntohs(udphdrp->dest));
                         return 1;
@@ -626,7 +1016,116 @@ int mv_cust_udp_port_tx(int port, struct net_device *dev, struct sk_buff *skb,
 }
 #endif
 
+
 #ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
+void mv_cust_flow_map_print(void)
+{
+    printk("************* Flow Mapping Configuration *****************\n\n");
+    printk("Flow mapping valid = %d\n", mv_cust_flow_map);
+}
+
+static int mv_cust_flow_map_parse(uint8_t *data, uint16_t *vlan, uint8_t *pbits, uint8_t dir)
+{
+    uint16_t ety;
+    uint8_t *fieldp ;
+
+    if (MV_CUST_FLOW_DIR_US == dir)
+        fieldp = data + ETH_ALEN + ETH_ALEN;
+    else
+        fieldp = data + ETH_ALEN + ETH_ALEN + MV_ETH_MH_SIZE;
+
+    /* Loop through VLAN tags */
+    ety = ntohs(*(uint16_t *)fieldp);
+    if (ety == 0x8100 || ety == 0x88A8 || ety == 0x9100) {
+        fieldp += 2;
+        *vlan  = ntohs(*(uint16_t *)fieldp);
+        *pbits = (*vlan >> 13 ) & 0x7;
+        *vlan  = (*vlan) & 0xfff;
+        return(1);
+    }
+    else {
+        return(0);
+    }
+
+    return(0);
+}
+
+static int mv_cust_flow_map_mod(uint8_t *data, uint16_t vid, uint8_t pbits, uint8_t dir)
+{
+    uint16_t ety  = 0;
+    uint16_t vlan = 0;
+    uint8_t *fieldp;
+
+    if (MV_CUST_FLOW_DIR_US == dir)
+        fieldp = data + ETH_ALEN + ETH_ALEN;
+    else
+        fieldp = data + ETH_ALEN + ETH_ALEN + MV_ETH_MH_SIZE;
+
+    /* If not need to modify VID or P-bits */
+    if((vid == MV_CUST_VID_NOT_CARE_VALUE) &&
+       (pbits == MV_CUST_PBITS_NOT_CARE_VALUE))
+        return (1);
+
+    /* Loop through VLAN tags */
+    ety = ntohs(*(uint16_t *)fieldp);
+    if (ety == 0x8100 || ety == 0x88A8 || ety == 0x9100) {
+        fieldp += 2;
+
+        vlan = ntohs(*(uint16_t *)fieldp);
+
+        if (vid < MV_CUST_VID_NOT_CARE_VALUE)
+            vlan = (vlan & 0xf000) | (vid & 0xfff);
+        if (pbits < MV_CUST_PBITS_NOT_CARE_VALUE)
+            vlan = (vlan & 0x0fff) | ((pbits & 0x7) << 13);
+
+        *(uint16_t *)fieldp = htons(vlan);
+        return(1);
+    }
+    else {
+        return(0);
+    }
+
+    return(0);
+}
+
+static int mv_cust_flow_map_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
+{
+    uint16_t vlan        = 0;
+    uint8_t  pbits       = 0;
+    int      btag        = 0;
+    int      ret         = 0;
+    mv_cust_ioctl_flow_map_t cust_flow;
+
+    if (MV_PON_PORT_ID != port)
+        return 0;
+
+    if (mv_cust_flow_map) {
+
+        /* Parse packets to check whether it is tagged or untagged, and get vlan and pbits in tagged mode */
+        btag = mv_cust_flow_map_parse(skb->data, &vlan, &pbits, MV_CUST_FLOW_DIR_DS);
+        //printk(KERN_ERR " %s TX packet 1 btag[%d] vlan[%d]  pbits[%d]\n", __func__, btag, vlan, pbits);
+
+        /* The frame is tagged */
+        if (btag == 1) {
+            cust_flow.vid    = vlan;
+            cust_flow.pbits  = pbits;
+            cust_flow.dir    = MV_CUST_FLOW_DIR_DS;
+
+            ret = mv_cust_tag_map_rule_get(&cust_flow);
+            //printk(KERN_ERR " %s TX packet 2 trg_port[%d] trg_queue[%d]  gem_port[%d]\n", __func__, pkt_fwd.trg_port, pkt_fwd.trg_queue, pkt_fwd.gem_port);
+
+            /* Modify VID and P-bits if needed */
+            if (ret == MV_CUST_OK) {
+
+                /* modify VID and P-bits if needed */
+                ret = mv_cust_flow_map_mod(skb->data, cust_flow.mod_vid, cust_flow.mod_pbits, MV_CUST_FLOW_DIR_DS);
+            }
+        }
+    }
+
+    return 1;
+}
+
 int mv_cust_flow_map_tx(int port, struct net_device *dev, struct sk_buff *skb,
                         struct mv_eth_tx_spec *tx_spec_out)
 {
@@ -646,8 +1145,6 @@ int mv_cust_flow_map_tx(int port, struct net_device *dev, struct sk_buff *skb,
 
         /* Parse packets to check whether it is tagged or untagged, and get vlan and pbits in tagged mode */
         btag = mv_cust_flow_map_parse(skb->data, &vlan, &pbits, MV_CUST_FLOW_DIR_US);
-
-        //printk(KERN_ERR " %s TX packet 1 btag[%d] vlan[%d]  pbits[%d]\n", __func__, btag, vlan, pbits);
 
         /* The frame is tagged */
         if (btag == 1) {
@@ -733,368 +1230,44 @@ int mv_cust_flow_map_tx(int port, struct net_device *dev, struct sk_buff *skb,
     }
     return 0;
 }
+
 #endif
 
-void mv_cust_debug_info_set(int val)
+
+
+void mv_cust_print(int type)
 {
-    mv_cust_debug_code = val;
-    return;
-}
-
-void mv_cust_omci_type_set(uint16_t type)
-{
-    mv_cust_xpon_oam_type = htons(type);
-    return;
-}
-EXPORT_SYMBOL(mv_cust_omci_type_set);
-
-void mv_cust_epon_oam_type_set(uint16_t type)
-{
-    mv_cust_xpon_oam_type = htons(type);
-    return;
-}
-EXPORT_SYMBOL(mv_cust_epon_oam_type_set);
-
-
-void mv_cust_xpon_oam_rx_gh_set(int val)
-{
-    mv_cust_xpon_oam_rx_gh = val;
-    return;
-}
-EXPORT_SYMBOL(mv_cust_xpon_oam_rx_gh_set);
-
-
+    switch (type)
+    {
 #ifdef CONFIG_MV_CUST_IGMP_HANDLE
-void mv_cust_igmp_type_set(uint16_t type)
-{
-    mv_cust_igmp_type = htons(type);
+        case MV_CUST_APP_TYPE_IGMP:
+            mv_cust_igmp_print();
+            break;
+#endif
+#ifdef CONFIG_MV_CUST_MLD_HANDLE
+        case MV_CUST_APP_TYPE_MLD:
+            mv_cust_mld_print();
+            break;
+#endif
+#ifdef CONFIG_MV_CUST_LPBK_DETECT_HANDLE
+        case MV_CUST_APP_TYPE_LPBK:
+            mv_cust_loopdet_print();
+            break;
+#endif
+        case MV_CUST_APP_TYPE_OAM:
+            mv_cust_eoam_print();
+            break;
+        case MV_CUST_APP_TYPE_OMCI:
+            mv_cust_omci_print();
+            break;
+        default:
+            break;
+    }
+
     return;
 }
-EXPORT_SYMBOL(mv_cust_igmp_type_set);
-#endif
+EXPORT_SYMBOL(mv_cust_print);
 
-void mv_cust_loopdet_type_set(uint16_t type)
-{
-    mv_cust_loopdet_type = htons(type);
-    return;
-}
-EXPORT_SYMBOL(mv_cust_loopdet_type_set);
-
-
-void mv_cust_omci_gemport_set(int gemport)
-{
-    mv_cust_omci_gemport = gemport;
-    return;
-}
-EXPORT_SYMBOL(mv_cust_omci_gemport_set);
-
-
-static int mv_cust_omci_gem_parse(uint8_t *data)
-{
-    uint16_t gh;
-
-    gh = ntohs(*(uint16_t *)data);
-
-    if(mv_cust_debug_code)
-        printk("%s:gh= 0x(%04x) - mv_cust_omci_gemport= 0x(%04x)  \n", __func__, gh, mv_cust_omci_gemport);
-
-    /* Compare GH for omci_gemport */
-    if ( (gh & MH_GEM_PORT_MASK) != mv_cust_omci_gemport ) {
-        if(mv_cust_debug_code)
-            printk("%s: compare GH for OMCI_gemport failed: gh= 0x(%04x) - mv_cust_omci_gemport= 0x(%04x)  \n", __func__, gh, mv_cust_omci_gemport);
-        return(0);
-    }
-
-    return(1);
-}
-
-static int mv_cust_eoam_type_parse(uint8_t *data)
-{
-    uint16_t ety;
-
-    ety = ntohs(*(uint16_t *)(data + MV_ETH_MH_SIZE + ETH_ALEN + ETH_ALEN));
-
-    if(mv_cust_debug_code)
-        printk("%s: ety 0x(%04x)\n", __func__, ety);
-
-    /* Compare EPON OAM ether_type */
-    if (ety == MH_EPON_OAM_TYPE)
-        return(1);
-
-    return(0);
-}
-
-
-#ifdef CONFIG_MV_CUST_IGMP_HANDLE
-static int mv_cust_igmp_parse(uint8_t *data)
-{
-    uint16_t ety;
-    uint8_t  proto;
-    uint8_t *fieldp = data + MV_ETH_MH_SIZE + ETH_ALEN + ETH_ALEN;
-
-    /* Loop through VLAN tags */
-    ety = ntohs(*(uint16_t *)fieldp);
-    while (ety == 0x8100 || ety == 0x88A8) {
-        fieldp+= VLAN_HLEN;
-        ety = ntohs(*(uint16_t *)fieldp);
-    }
-
-    if(mv_cust_debug_code)
-        printk("%s:ety 0x(%04x)\n", __func__, ety);
-
-    if (ety == ETY_IPV4) {
-	    fieldp+= 2;
-        fieldp+= IPV4_PROTO_OFFSET;
-        proto = *fieldp;
-        if (mv_cust_debug_code)
-            printk("%s:proto 0x(%02x)\n", __func__, proto);
-
-        if (proto == IPPROTO_IGMP)
-            return(1);
-    }
-
-    return(0);
-}
-#endif
-
-static int mv_cust_loopdet_parse(uint8_t *data)
-{
-    uint16_t ety;
-    uint8_t *fieldp = data + MV_ETH_MH_SIZE + ETH_ALEN + ETH_ALEN;
-
-    /* Loop through VLAN tags */
-    ety = ntohs(*(uint16_t *)fieldp);
-    while (ety == 0x8100 || ety == 0x88A8) {
-        fieldp+= VLAN_HLEN;
-        ety = ntohs(*(uint16_t *)fieldp);
-    }
-    if(mv_cust_debug_code)
-        printk("%s: ety 0x(%04x)\n", __func__, ety);
-
-    /* Compare EPON OAM ether_type */
-    if (ety == mv_cust_loopdet_type)
-        return(1);
-
-    return(0);
-}
-
-#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
-static int mv_cust_flow_map_parse(uint8_t *data, uint16_t *vlan, uint8_t *pbits, uint8_t dir)
-{
-    uint16_t ety;
-    uint8_t *fieldp;
-
-    if (MV_CUST_FLOW_DIR_US == dir)
-        fieldp = data + ETH_ALEN + ETH_ALEN;
-    else if (MV_CUST_FLOW_DIR_DS == dir)
-        fieldp = data + ETH_ALEN + ETH_ALEN + MV_ETH_MH_SIZE;
-
-    /* Loop through VLAN tags */
-    ety = ntohs(*(uint16_t *)fieldp);
-    if (ety == 0x8100 || ety == 0x88A8 || ety == 0x9100) {
-        fieldp += 2;
-        *vlan  = ntohs(*(uint16_t *)fieldp);
-        *pbits = (*vlan >> 13 ) & 0x7;
-        *vlan  = (*vlan) & 0xfff;
-        return(1);
-    }
-    else {
-        return(0);
-    }
-
-    return(0);
-}
-
-static int mv_cust_flow_map_mod(uint8_t *data, uint16_t vid, uint8_t pbits, uint8_t dir)
-{
-    uint16_t ety  = 0;
-    uint16_t vlan = 0;
-    uint8_t *fieldp;
-
-    if (MV_CUST_FLOW_DIR_US == dir)
-        fieldp = data + ETH_ALEN + ETH_ALEN;
-    else if (MV_CUST_FLOW_DIR_DS == dir)
-        fieldp = data + ETH_ALEN + ETH_ALEN + MV_ETH_MH_SIZE;
-
-    /* If not need to modify VID or P-bits */
-    if((vid == MV_CUST_VID_NOT_CARE_VALUE) &&
-       (pbits == MV_CUST_PBITS_NOT_CARE_VALUE))
-        return (1);
-
-    /* Loop through VLAN tags */
-    ety = ntohs(*(uint16_t *)fieldp);
-    if (ety == 0x8100 || ety == 0x88A8 || ety == 0x9100) {
-        fieldp += 2;
-
-        vlan = ntohs(*(uint16_t *)fieldp);
-
-        if (vid < MV_CUST_VID_NOT_CARE_VALUE)
-            vlan = (vlan & 0xf000) | (vid & 0xfff);
-        if (pbits < MV_CUST_PBITS_NOT_CARE_VALUE)
-            vlan = (vlan & 0x0fff) | ((pbits & 0x7) << 13);
-
-        *(uint16_t *)fieldp = htons(vlan);
-        return(1);
-    }
-    else {
-        return(0);
-    }
-
-    return(0);
-}
-
-#endif
-
-void mv_cust_rec_skb(int port, struct sk_buff *skb)
-{
-    uint32_t rx_status;
-    struct eth_port *pp;
-
-    rx_status = netif_receive_skb(skb);
-    pp = mv_eth_port_by_id(port);
-    STAT_DBG(if (rx_status) (pp->stats.rx_drop_sw++));
-}
-
-
-static int mv_cust_omci_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
-{
-    uint32_t rx_bytes;
-
-    if (!mv_cust_omci_gem_parse(skb->data))
-        return 0;
-    if (mv_cust_xpon_oam_rx_gh) {
-        rx_bytes = rx_desc->dataSize;
-    }
-    else {
-        skb->data += MV_ETH_MH_SIZE;
-        rx_bytes = rx_desc->dataSize - MV_ETH_MH_SIZE;
-    }
-    skb->tail += rx_bytes;
-    skb->len = rx_bytes;
-    skb->protocol = eth_type_trans(skb, dev);
-    skb->protocol = mv_cust_xpon_oam_type;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
-    skb->dev = dev;
-#endif
-    mv_cust_rec_skb(port, skb);
-
-    return 1;
-}
-
-static int mv_cust_epon_oam_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
-{
-    uint32_t rx_bytes;
-
-    if (!mv_cust_eoam_type_parse(skb->data))
-        return 0;
-
-    if (mv_cust_xpon_oam_rx_gh) {
-        rx_bytes = rx_desc->dataSize;
-    }
-    else {
-        skb->data += MV_ETH_MH_SIZE;
-        rx_bytes = rx_desc->dataSize - MV_ETH_MH_SIZE;
-    }
-
-    skb->tail += rx_bytes;
-    skb->len = rx_bytes;
-    skb->protocol = eth_type_trans(skb, dev);
-    skb->protocol = mv_cust_xpon_oam_type;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
-    skb->dev = dev;
-#endif
-    mv_cust_rec_skb(port, skb);
-
-    return 1;
-}
-
-#ifdef CONFIG_MV_CUST_IGMP_HANDLE
-static int mv_cust_igmp_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
-{
-    uint32_t rx_bytes;
-
-    if (!mv_cust_igmp_parse(skb->data))
-        return 0;
-
-    /* To Indicate the source GMAC */
-    skb->data[0] = port;
-
-    rx_bytes = rx_desc->dataSize;
-
-    skb->tail += rx_bytes;
-    skb->len = rx_bytes;
-    skb->protocol = eth_type_trans(skb, dev);
-    skb->protocol = mv_cust_igmp_type;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
-    skb->dev = dev;
-#endif
-    mv_cust_rec_skb(port, skb);
-
-    return 1;
-}
-#endif
-
-#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
-static int mv_cust_flow_map_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
-{
-    uint32_t rx_bytes;
-    uint16_t vlan        = 0;
-    uint8_t  pbits       = 0;
-    int      btag        = 0;
-    int      ret         = 0;
-    mv_cust_ioctl_flow_map_t cust_flow;
-
-    if (MV_PON_PORT_ID != port)
-        return 0;
-
-    if (mv_cust_flow_map) {
-
-        /* Parse packets to check whether it is tagged or untagged, and get vlan and pbits in tagged mode */
-        btag = mv_cust_flow_map_parse(skb->data, &vlan, &pbits, MV_CUST_FLOW_DIR_DS);
-        //printk(KERN_ERR " %s TX packet 1 btag[%d] vlan[%d]  pbits[%d]\n", __func__, btag, vlan, pbits);
-
-        /* The frame is tagged */
-        if (btag == 1) {
-            cust_flow.vid    = vlan;
-            cust_flow.pbits  = pbits;
-            cust_flow.dir    = MV_CUST_FLOW_DIR_DS;
-
-            ret = mv_cust_tag_map_rule_get(&cust_flow);
-            //printk(KERN_ERR " %s TX packet 2 trg_port[%d] trg_queue[%d]  gem_port[%d]\n", __func__, pkt_fwd.trg_port, pkt_fwd.trg_queue, pkt_fwd.gem_port);
-
-            /* Modify VID and P-bits if needed */
-            if (ret == MV_CUST_OK) {
-
-                /* modify VID and P-bits if needed */
-                ret = mv_cust_flow_map_mod(skb->data, cust_flow.mod_vid, cust_flow.mod_pbits, MV_CUST_FLOW_DIR_DS);
-            }
-        }
-    }
-
-    return 1;
-}
-#endif
-
-static int mv_cust_loopdet_rx(int port, struct net_device *dev, struct sk_buff *skb, struct neta_rx_desc *rx_desc)
-{
-    uint32_t rx_bytes;
-
-    if (!mv_cust_loopdet_parse(skb->data))
-        return 0;
-
-    rx_bytes = rx_desc->dataSize;
-
-    skb->tail += rx_bytes;
-    skb->len = rx_bytes;
-    skb->protocol = eth_type_trans(skb, dev);
-    skb->protocol = mv_cust_loopdet_type;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
-    skb->dev = dev;
-#endif
-    mv_cust_rec_skb(port, skb);
-
-    return 1;
-}
 
 void mv_cust_rx_func(int port, int rxq, struct net_device *dev,
                      struct sk_buff *skb, struct neta_rx_desc *rx_desc)
@@ -1112,7 +1285,7 @@ void mv_cust_rx_func(int port, int rxq, struct net_device *dev,
 
     if (rx_desc->pncInfo & NETA_PNC_RX_SPECIAL)
     {
-        if (mv_cust_omci_valid) {
+        if (gCustConfig[MV_CUST_APP_TYPE_OMCI].enable == MV_CUST_APP_ENABLE) {
             if (mv_cust_omci_rx(port, dev, skb, rx_desc)) {
                 if(mv_cust_debug_code)
                     printk("%s omci_packet\n", __func__);
@@ -1120,7 +1293,7 @@ void mv_cust_rx_func(int port, int rxq, struct net_device *dev,
             }
         }
         else{
-            if (mv_cust_eoam_valid) {
+            if (gCustConfig[MV_CUST_APP_TYPE_OAM].enable == MV_CUST_APP_ENABLE) {
                 if (mv_cust_epon_oam_rx(port, dev, skb, rx_desc)) {
                     if (mv_cust_debug_code)
                         printk("%s eoam_packet\n", __func__);
@@ -1130,7 +1303,7 @@ void mv_cust_rx_func(int port, int rxq, struct net_device *dev,
         }
 
 #ifdef CONFIG_MV_CUST_IGMP_HANDLE
-        if (mv_cust_igmp_detect) {
+        if (gCustConfig[MV_CUST_APP_TYPE_IGMP].enable == MV_CUST_APP_ENABLE) {
             if (mv_cust_igmp_rx(port, dev, skb, rx_desc)) {
                 if(mv_cust_debug_code)
                     printk("%s igmp_packet\n", __func__);
@@ -1139,15 +1312,27 @@ void mv_cust_rx_func(int port, int rxq, struct net_device *dev,
         }
 #endif
 
-        if (mv_cust_port_loopback_detect) {
+#ifdef CONFIG_MV_CUST_MLD_HANDLE
+        if (gCustConfig[MV_CUST_APP_TYPE_MLD].enable == MV_CUST_APP_ENABLE) {
+            if (mv_cust_mld_rx(port, dev, skb, rx_desc)) {
+                if(mv_cust_debug_code)
+                    printk("%s mld_packet\n", __func__);
+                return;
+            }
+        }
+#endif
+
+#ifdef CONFIG_MV_CUST_LPBK_DETECT_HANDLE
+        if (gCustConfig[MV_CUST_APP_TYPE_LPBK].enable == MV_CUST_APP_ENABLE) {
             if (mv_cust_loopdet_rx(port, dev, skb, rx_desc)) {
                 if(mv_cust_debug_code)
                     printk("%s loop_det_packet\n", __func__);
                 return;
             }
         }
+#endif
 
-        MVCUST_ERR_PRINT("Special pkt arrived from port(%d), was not handled. \n", port);
+        //MVCUST_ERR_PRINT("Special pkt arrived from port(%d), was not handled. \n", port);
         dev_kfree_skb_any(skb);
         if(mv_cust_debug_code) {
             printk("Input Packet first bytes:\n");
@@ -1175,6 +1360,7 @@ void mv_cust_rx_func(int port, int rxq, struct net_device *dev,
     return;
 }
 
+
 int mv_cust_tx_func(int port, struct net_device *dev, struct sk_buff *skb,
                     struct mv_eth_tx_spec *tx_spec_out)
 {
@@ -1183,14 +1369,24 @@ int mv_cust_tx_func(int port, struct net_device *dev, struct sk_buff *skb,
 
     if (mv_cust_eoam_tx(port, dev, skb, tx_spec_out))
         return 1;
-
-#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
-    if (mv_cust_flow_map_tx(port, dev, skb, tx_spec_out))
+    
+#ifdef CONFIG_MV_CUST_IGMP_HANDLE
+    if (mv_cust_igmp_tx(port, dev, skb, tx_spec_out))
         return 1;
 #endif
 
-#ifdef CONFIG_MV_CUST_IGMP_HANDLE
-    if (mv_cust_igmp_tx(port, dev, skb, tx_spec_out))
+#ifdef CONFIG_MV_CUST_MLD_HANDLE
+    if (mv_cust_mld_tx(port, dev, skb, tx_spec_out))
+        return 1;
+#endif
+
+#ifdef CONFIG_MV_CUST_LPBK_DETECT_HANDLE
+    if (mv_cust_loopdet_tx(port, dev, skb, tx_spec_out))
+        return 1;
+#endif
+
+#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
+    if (mv_cust_flow_map_tx(port, dev, skb, tx_spec_out))
         return 1;
 #endif
 
@@ -1204,6 +1400,7 @@ int mv_cust_tx_func(int port, struct net_device *dev, struct sk_buff *skb,
     return 0;
 }
 
+
 int mvcust_netdev_init(void)
 {
     uint32_t port_i;
@@ -1215,14 +1412,14 @@ int mvcust_netdev_init(void)
         mv_eth_ports_num = CONFIG_MV_ETH_PORTS_NUM;
 
     mv_cust_eoam_init();
+    
+#ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE
+    mv_cust_udp_table_del();
+#endif
 
 /* Initialize flow mapping data structure */
 #ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
     mv_cust_flow_map_init();
-#endif
-
-#ifdef CONFIG_MV_CUST_UDP_SAMPLE_HANDLE
-    mv_cust_udp_table_del();
 #endif
 
     /* Register special receive check function */
@@ -1239,14 +1436,6 @@ int mvcust_netdev_init(void)
         mv_eth_tx_special_check_func(port_i, mv_cust_tx_func);
     }
 #endif /* CONFIG_MV_ETH_TX_SPECIAL */
-
-    /* Set global constants */
-    mv_cust_xpon_oam_type = htons(0xBABA);
-
-#ifdef CONFIG_MV_CUST_IGMP_HANDLE
-    mv_cust_igmp_type     = htons(0xA000);
-#endif
-    mv_cust_loopdet_type  = htons(0xA0A0);
 
     return 0;
 }

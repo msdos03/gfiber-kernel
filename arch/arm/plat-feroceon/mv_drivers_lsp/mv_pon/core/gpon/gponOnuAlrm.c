@@ -166,6 +166,9 @@ MV_STATUS onuGponAlarmSet(E_OnuGponAlarmType  alarm,
 
   onuGponApmTbl_s.onuGponAlarmTbl_s.onuGponAlarmTbl[alarm] = state;
 
+  if (onuGponDbOnuStateGet() == ONU_GPON_06_POPUP)
+	  return (MV_OK);
+
   if (state == ONU_GPON_ALARM_OFF)
   {
     l_onuGponCurrentAlarmState &= ~(1 << alarm);
@@ -371,7 +374,8 @@ void onuGponAlarmProcess(void)
 		  linkStatusCallback(MV_FALSE);
 		}
 
-        onuPonTxPowerOn(MV_FALSE);
+ //       onuPonTxPowerOn(MV_FALSE);
+		onuPonTxPowerTimerStateSet(MV_TRUE);
         onuGponSrvcStatusNotify(GPON_ONU_STATUS_DISCONNECTED);
         mvPonPrint(PON_PRINT_INFO, PON_ALARM_MODULE, "=========================\n");
         mvPonPrint(PON_PRINT_INFO, PON_ALARM_MODULE, "== Downstream sync Off ==\n");

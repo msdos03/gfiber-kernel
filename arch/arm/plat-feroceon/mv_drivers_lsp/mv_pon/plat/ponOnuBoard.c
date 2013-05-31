@@ -83,7 +83,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Global Variables
 ------------------------------------------------------------------------------*/
-MV_U32 ponXvrPolarity;
+S_OnuP2PDb onuP2PDb_s;
+t_ponXvrFuncPtr ponXvrFunc;
 
 /* Global functions
 ------------------------------------------------------------------------------*/
@@ -383,25 +384,48 @@ MV_STATUS mvOnuPonMacBurstEnableInit(void)
 	return(status);
 }
 
-/*******************************************************************************
-**
-**  mvOnuPonMacBurstEnablePolarityInit
-**  ____________________________________________________________________________
-**
-**  DESCRIPTION: The function init Burst Enable XVR polarity
-**
-**  PARAMETERS:  MV_U32 polarity
-**
-**  OUTPUTS:     None
-**
-**  RETURNS:     MV_OK or error
-**
-*******************************************************************************/
-MV_STATUS mvOnuPonMacBurstEnablePolarityInit(MV_U32 polarity)
+MV_STATUS EponXvrSDPolarityHighStatus(MV_U32 interruptStatus, MV_U32 statusMask)
 {
-	ponXvrPolarity = polarity;
+    return ((interruptStatus & statusMask) ? MV_FALSE : MV_TRUE);
+}
 
-	return(MV_OK);
+MV_STATUS EponXvrSDPolarityLowStatus(MV_U32 interruptStatus, MV_U32 statusMask)
+{
+    return ((~interruptStatus & statusMask) ? MV_FALSE : MV_TRUE);
+}
+
+MV_STATUS GponXvrSDPolarityHighStatus(MV_U32 interruptStatus, MV_U32 statusMask)
+{
+    return ((interruptStatus & statusMask) ? MV_TRUE : MV_FALSE);
+}
+
+MV_STATUS GponXvrSDPolarityLowStatus(MV_U32 interruptStatus, MV_U32 statusMask)
+{
+    return ((~interruptStatus & statusMask) ? MV_TRUE : MV_FALSE);
+}
+
+t_ponXvrFuncPtr funcEponXvrSDStatus(MV_U32 polarity)
+{
+    if (polarity == 0)
+    {
+        return EponXvrSDPolarityHighStatus;
+    }
+    else
+    {
+        return EponXvrSDPolarityLowStatus;
+    }
+}
+
+t_ponXvrFuncPtr funcGponXvrSDStatus(MV_U32 polarity)
+{
+    if (polarity == 0)
+    {
+        return GponXvrSDPolarityHighStatus;
+    }
+    else
+    {
+        return GponXvrSDPolarityLowStatus;
+    }
 }
 
 /*******************************************************************************
@@ -521,7 +545,7 @@ MV_STATUS onuPonPatternBurstEnable(bool on)
 			return(MV_ERROR);
 		}
 
-		polarity = ponXvrPolarity;
+        polarity = onuP2PDbXvrBurstEnablePolarityGet();
 
 		/* XVR polarity */
 		/* XVR polarity == 0, Active High, transmit 1 to the line  */
@@ -535,10 +559,8 @@ MV_STATUS onuPonPatternBurstEnable(bool on)
 		/* XVR polarity == 0, Active High, write 1 for Force Value */
 		/* XVR polarity == 1, Active Low, write 0 for Force Value */
 
-		trans_value = ((on == MV_TRUE) ? (~polarity) : (polarity));
-
 		/* PHY control register - force enable value - according to polarity */
-		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_VAL, trans_value, 0);
+		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_VAL, polarity, 0);
 		if (status != MV_OK) {
 			mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
 				   "ERROR: asicOntMiscRegWrite failed for PON phy ctrl force value %d\n\r",
@@ -772,6 +794,36 @@ void      onuPonPatternBurstTimerHndl(void)
 
 /*******************************************************************************
 **
+**  onuPonTxPowerTimerStateSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function enable / disable TX power off timer
+**
+**  PARAMETERS:  MV_BOOL mode - MV_TRUE  - start timer
+**                              MV_FALSE - stop timer
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuPonTxPowerTimerStateSet(MV_BOOL mode)
+{
+  MV_STATUS rcode = MV_OK;
+
+  if (mode == MV_TRUE)
+  {
+    onuPonTimerEnable(&(onuPonResourceTbl_s.onuPonTxPwrTimerId));
+  }
+  else
+  {
+    onuPonTimerDisable(&(onuPonResourceTbl_s.onuPonTxPwrTimerId));
+  }
+
+  return (rcode);
+}
+
+/*******************************************************************************
+**
 **  onuPonTxPowerOn
 **  ____________________________________________________________________________
 **
@@ -851,7 +903,7 @@ MV_STATUS onuPonTxPowerControlInit(void)
 }
 
 /*******************************************************************************
-**
+**  **  906
 **  onuPonTxLaserOn
 **  ____________________________________________________________________________
 **
@@ -885,6 +937,46 @@ MV_STATUS onuPonTxLaserOn(MV_BOOL on)
 	}
 
 	return(MV_OK);
+}
+
+/*******************************************************************************
+**
+**  onuP2PDbXvrBurstEnablePolaritySet
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function sets EPON XVR polarity register value in the database
+**               
+**  PARAMETERS:  MV_U32 val
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**                   
+*******************************************************************************/
+MV_STATUS onuP2PDbXvrBurstEnablePolaritySet(MV_U32 val)
+{
+    onuP2PDb_s.onuP2PGenTbl_s.xvrBurstEnPolarity = val;
+
+    return(MV_OK);
+}
+
+/*******************************************************************************
+**
+**  onuP2PDbXvrBurstEnablePolarityGet
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function returns EPON XVR polarity register value
+**               
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_U32 mode
+**                   
+*******************************************************************************/
+MV_U32 onuP2PDbXvrBurstEnablePolarityGet(void)
+{
+    return onuP2PDb_s.onuP2PGenTbl_s.xvrBurstEnPolarity;
 }
 
 #endif /* PON_FPGA */

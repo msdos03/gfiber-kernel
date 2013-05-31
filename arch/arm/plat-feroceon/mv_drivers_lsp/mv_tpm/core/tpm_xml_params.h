@@ -147,6 +147,7 @@ typedef enum {
 #define US_XML_OMCI_E              "OMCI"
 #define US_XML_OMCI_ETY_E          "OMCI_ETY"
 
+#define US_XML_DS_MAC_BASED_TRUNKING_E        "ds_mac_based_trunking"
 #define US_XML_IGMP_SNOOP_E        "igmp_snoop"
 #define US_XML_IGMP_SNOOP_ALL_E    "snoop_all"
 #define US_XML_ENABLED_E           "enabled"
@@ -181,7 +182,7 @@ typedef enum {
 #define US_XML_ETH_PORT_INTCON_ATTR "intr_conn"
 #define US_XML_ETH_CMPLX_CONFIG_E  "eth_complex_config"
 #define US_XML_WAN_E		    "WAN"
-#define US_XML_BACKUP_WAN_E        "backup_wan"
+#define US_XML_ACTIVE_WAN_E        "active_wan"
 #define US_XML_VIRTUAL_UNI_E       "virtual_uni"
 
 #define US_XML_ETH_PROFILE_E       "profile"
@@ -309,6 +310,7 @@ int get_pon_type_param(tpm_init_pon_type_t *pon_type);
 int get_omci_etype_param(uint32_t *ety);
 int get_debug_port_params(uint32_t *valid, uint32_t *num);
 int get_igmp_snoop_params_enable(uint32_t *enable);
+int get_ds_mac_based_trunking_enable(uint32_t *enable);
 int get_igmp_snoop_params_cpu_queue(uint32_t *que);
 int get_igmp_snoop_params_port_frwd_mode(uint32_t *mode, tpm_src_port_type_t port);
 int get_gmac_conn_params(uint32_t *num_tcont_llid);
@@ -316,7 +318,7 @@ int get_gmac_mh_en_params(uint32_t *gmac0_mh_en, uint32_t *gmac1_mh_en);
 int get_eth_cmplx_profile_params(tpm_eth_complex_profile_t *eth_cmplx_profile);
 int get_gmac_port_conf_params(tpm_init_gmac_conn_conf_t *gmac_port_conf_bufs, int max_gmac_port_num);
 int get_eth_port_conf_params(tpm_init_eth_port_conf_t *eth_port_bufs, int max_eth_port_num);
-int get_backup_wan_params(uint32_t *backup_wan);
+int get_active_wan_params(uint32_t *active_wan);
 
 int get_gmac_pool_bufs_params(tpm_init_gmac_bufs_t *gmac_bufs, int max_gmacs_num);
 int get_trace_debug_info_param(uint32_t *trace_debug_info);

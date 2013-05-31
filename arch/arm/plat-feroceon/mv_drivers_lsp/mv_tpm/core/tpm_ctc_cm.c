@@ -124,7 +124,8 @@ tpm_error_code_t tpm_ctc_cm_rule_add(uint32_t owner_id,
 
 	if (l2_parse_rule_bm)
 		ret_code = tpm_proc_add_l2_cnm_rule(owner_id, src_port, precedence, l2_parse_rule_bm, l2_key,
-						    ipv4_key_idx, pkt_frwd, pkt_act, pbits, rule_index);
+						    ipv4_parse_rule_bm, ipv4_key, ipv4_key_idx, pkt_frwd,
+						    pkt_act, pbits, rule_index);
 	else if (ipv4_parse_rule_bm)
 		ret_code = tpm_proc_add_ipv4_cnm_rule(owner_id, src_port, precedence, ipv4_parse_rule_bm,
 						      ipv4_key, pkt_frwd, pkt_act, pbits, rule_index);
@@ -235,7 +236,7 @@ tpm_error_code_t tpm_ctc_cm_add_rule_check(uint32_t owner_id,
 	}
 
 	if (l2_parse_rule_bm & ~(TPM_L2_PARSE_MAC_DA | TPM_L2_PARSE_MAC_SA | TPM_L2_PARSE_ONE_VLAN_TAG |
-				 TPM_L2_PARSE_ETYPE)) {
+				 TPM_L2_PARSE_TWO_VLAN_TAG | TPM_L2_PARSE_ETYPE)) {
 		TPM_OS_ERROR(TPM_CTC_CM_MOD, "l2_parse_rule_bm (%d) is invalid!\n", l2_parse_rule_bm);
 		return(ERR_PARSE_MAP_INVALID);
 	}

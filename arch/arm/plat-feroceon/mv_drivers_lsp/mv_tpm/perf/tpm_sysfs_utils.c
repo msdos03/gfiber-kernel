@@ -564,6 +564,7 @@ static string_enum_pair_t tpm_err_string_enum_pair_ara[] =
     {ERR_MC_STREAM_INVALID,             "ERR_MC_STREAM_INVALID"},
     {ERR_MC_STREAM_EXISTS ,             "ERR_MC_STREAM_EXISTS "},
     {ERR_MC_DST_PORT_INVALID,           "ERR_MC_DST_PORT_INVALID"},
+    {ERR_MC_DST_QUEUE_INVALID,		"ERR_MC_DST_QUEUE_INVALID"},
     {ERR_IPV4_MC_DST_IP_INVALID,        "ERR_IPV4_MC_DST_IP_INVALID"},
     {ERR_IPV6_MC_DST_IP_INVALID,        "ERR_IPV6_MC_DST_IP_INVALID"},
     {ERR_OMCI_TCONT_INVALID,            "ERR_OMCI_TCONT_INVALID"},
@@ -1782,7 +1783,7 @@ tpmcfg_ipv6_l4_ports_key_entry_t *find_tpm_ipv6_l4_ports_key_entry_by_name(char 
     int indx;
 
     for (indx = 0; indx < tpm_ipv6_l4_ports_key_db.max_num_entries; indx++, pentry++) {
-        if (strcmp(pentry->name, name) == 0) 
+        if (strcmp(pentry->name, name) == 0)
 			return pentry;
     }
     return 0;
@@ -1794,7 +1795,7 @@ tpmcfg_ipv6_l4_ports_key_entry_t *find_free_tpm_ipv6_l4_ports_key_entry(void)
     int indx;
 
     for (indx = 0; indx < tpm_ipv6_l4_ports_key_db.max_num_entries; indx++, pentry++) {
-        if (pentry->name[0] == 0) 
+        if (pentry->name[0] == 0)
 			return pentry;
     }
     return 0;
@@ -1826,7 +1827,7 @@ void show_tpm_ipv6_l4_ports_key_db(void)
         if (pentry->name[0] != 0) {
             off += sprintf(buf+off, "%s: \n", pentry->name);
 
-            off += sprintf(buf+off, "\tsrc_port %d, dst_port %d\n", 
+            off += sprintf(buf+off, "\tsrc_port %d, dst_port %d\n",
 						pentry->l4_ports.l4_src_port, pentry->l4_ports.l4_dst_port);
 
             printk(KERN_INFO "%s\n", buf);
@@ -1839,14 +1840,14 @@ void show_tpm_ipv6_l4_ports_key_db(void)
 void tpm_reset_mc_vid_key(void)
 {
     tpm_src_port_type_t                 src_port;
-    
+
     memset(&mc_vid_key, 0, sizeof(mc_vid_key));
-    
+
     for ( src_port = TPM_SRC_PORT_UNI_0; src_port <= TPM_SRC_PORT_UNI_VIRT; src_port++)
     {
         mc_vid_key.mc_vid_port_vids[src_port - TPM_SRC_PORT_UNI_0].tpm_src_port = src_port;
     }
-    
+
     return;
 }
 
@@ -1861,11 +1862,11 @@ GT_BOOL tpm_set_mc_vid_key(
         printk(KERN_INFO "illegal input src port(%d)\n", src_port);
         return GT_FALSE;
     }
-    
+
     mc_vid_key.mc_vid_port_vids[src_port - TPM_SRC_PORT_UNI_0].mc_uni_port_mode = mc_uni_xlate_mode;
     mc_vid_key.mc_vid_port_vids[src_port - TPM_SRC_PORT_UNI_0].tpm_src_port = src_port;
     mc_vid_key.mc_vid_port_vids[src_port - TPM_SRC_PORT_UNI_0].uni_port_vid = mc_uni_xlate_vid;
-    
+
     return GT_TRUE;
 }
 
@@ -1874,7 +1875,7 @@ tpm_error_code_t tpm_set_mc_vid_cfg(
 )
 {
     tpm_error_code_t ret;
-    
+
     ret = tpm_proc_set_mc_vid_port_vids (0, mc_vid, &mc_vid_key);
     return ret;
 }

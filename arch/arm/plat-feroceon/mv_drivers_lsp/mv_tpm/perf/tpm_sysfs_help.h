@@ -97,6 +97,7 @@ extern int sfs_help_rule_table_display      (char *buf);
 extern int sfs_help_ipv6_dip_key_cfg        (char *buf);
 extern int sfs_help_ipv6_l4_key_cfg         (char *buf);
 extern int sfs_help_ipv6_ctc_cm_key_cfg     (char *buf);
+extern int sfs_help_ds_load_balance_rule    (char* buf);
 extern int sfs_help_key_rule_delete         (char *buf);
 extern int sfs_help_l2_rule_add             (char *buf);
 extern int sfs_help_l3_rule_add             (char *buf);
@@ -111,6 +112,9 @@ extern int sfs_help_oam_omci_channel        (char *buf);
 extern int sfs_help_no_oam_omci_channel     (char *buf);
 extern int sfs_help_setup                   (char *buf);
 extern int sfs_help_mib_reset               (char *buf);
+extern int sfs_help_set_active_wan          (char *buf);
+extern int sfs_help_hot_swap_profile    (char* buf);
+extern int sfs_help_set_port_hwf_admin(char* buf);
 extern int sfs_help_cfg_cpu_lpbk            (char *buf);
 extern int sfs_help_cfg_age_count           (char *buf);
 extern int sfs_help_rate_limit              (char *buf);
@@ -170,6 +174,9 @@ extern int sfs_help_mac_learn_def_act_set   (char* buf);
 #define  sfs_help_no_oam_omci_channel     NULL
 #define  sfs_help_setup                   NULL
 #define  sfs_help_mib_reset               NULL
+#define  sfs_help_set_active_wan          NULL
+#define  sfs_help_hot_swap_profile        NULL
+#define  sfs_help_set_port_hwf_admin      NULL
 #define  sfs_help_erase_section           NULL
 #define  sfs_help_cfg_cpu_lpbk            NULL
 #define  sfs_help_cfg_age_count           NULL
@@ -193,6 +200,7 @@ extern int sfs_help_mac_learn_def_act_set   (char* buf);
 #define sfs_help_flush_atu           NULL
 #define sfs_help_mac_learn_rule_add       NULL
 #define sfs_help_mac_learn_def_act_set    NULL
+#define sfs_help_ds_load_balance_rule     NULL
 
 
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */

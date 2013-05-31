@@ -102,6 +102,7 @@ extern MV_STATUS onuGponAllocIdMacAdd(MV_U32 allocId, MV_U32 tcontId);
 ------------------------------------------------------------------------------*/
 MV_STATUS onuGponPonMngrUpdateState(MV_U32 newState);
 MV_STATUS onuGponPonMngClearOnuInfo(void);
+MV_STATUS onuGponPonMngClearOnuBuffers(void);
 MV_STATUS onuGponPonMngClearOnuTconts(void);
 MV_STATUS onuGponPonMngClearOnuPorts(void);
 MV_STATUS onuGponPonMngClearOnuId(void);
@@ -165,13 +166,9 @@ MV_STATUS onuGponPonMngrUpdateState(MV_U32 newState)
 #endif /* PON_FPGA */
 
     /* stop onu periodic timers */
-    if (g_periodicTimerState != MV_FALSE)
-    {
-      onuPonTimerDisable(&(onuPonResourceTbl_s.onuPonPmTimerId));
-      onuPonTimerDisable(&(onuPonResourceTbl_s.onuPonSwFIFOTimerId));
-      mvOnuGponMacMessageCleanSwFifo();
-      g_periodicTimerState = MV_FALSE;
-    }
+    onuPonTimerDisable(&(onuPonResourceTbl_s.onuPonPmTimerId));
+    onuPonTimerDisable(&(onuPonResourceTbl_s.onuPonSwFIFOTimerId));
+    mvOnuGponMacMessageCleanSwFifo();
   }
 
   if (newState == ONU_GPON_02_STANDBY)
@@ -182,13 +179,12 @@ MV_STATUS onuGponPonMngrUpdateState(MV_U32 newState)
 #endif /* PON_FPGA */
 
     /* start onu periodic timers */
-    if (g_periodicTimerState != MV_TRUE)
-    {
-      onuPonTimerEnable(&(onuPonResourceTbl_s.onuPonPmTimerId));
-      onuPonTimerDisable(&(onuPonResourceTbl_s.onuPonSwFIFOTimerId));
-      mvOnuGponMacMessageCleanSwFifo();
-      g_periodicTimerState = MV_TRUE;
-    }
+    onuPonTimerEnable(&(onuPonResourceTbl_s.onuPonPmTimerId));
+    onuPonTimerDisable(&(onuPonResourceTbl_s.onuPonSwFIFOTimerId));
+    mvOnuGponMacMessageCleanSwFifo();
+
+    /* stop onu gpon xvr reset timer */
+    onuGponIsrXvrResetStateSet(MV_FALSE);
   }
 
   rcode = onuGponPonMngPreambleSet(newState);
@@ -224,6 +220,8 @@ MV_STATUS onuGponPonMngrUpdateState(MV_U32 newState)
     return(rcode);
   }
 
+  onuGponSyncLog(ONU_GPON_LOG_STATE, asicNewState, 0, 0);
+
   /* update database */
   onuGponDbOnuStateSet(newState);
 
@@ -233,6 +231,34 @@ MV_STATUS onuGponPonMngrUpdateState(MV_U32 newState)
   }
 
   return(MV_OK);
+}
+
+/*******************************************************************************
+**
+**  onuGponPonMngClearOnuBuffers
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function reset onu buffers to its default state
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuGponPonMngClearOnuBuffers(void)
+{
+   MV_STATUS rcode;
+
+   rcode = onuGponAllocIdFreeAllBuffers();
+   if (rcode != MV_OK)
+   {
+     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+   	     "ERROR: (%s:%d) onuGponPonMngClearOnuBuffers\n", __FILE_DESC__, __LINE__);
+   }
+
+   return(MV_OK);
 }
 
 /*******************************************************************************
@@ -266,6 +292,14 @@ MV_STATUS onuGponPonMngClearOnuInfo(void)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
                "ERROR: (%s:%d) onuGponPonMngClearOnuTconts\n", __FILE_DESC__, __LINE__);    return(rcode);
+  }
+
+  rcode = onuGponPonMngClearOnuBuffers();
+  if (rcode != MV_OK)
+  {
+    mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+               "ERROR: (%s:%d) onuGponPonMngClearOnuBuffers\n", __FILE_DESC__, __LINE__);
+    return;
   }
 
   rcode = onuGponPonMngClearOnuId();
@@ -1067,6 +1101,9 @@ void onuGponPonMngRangeTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
   finalDelay        = M_ONU_GPON_RANG_MSG_FINAL_DELAY(msgDelay);
   equalizationDelay = M_ONU_GPON_RANG_MSG_EQUAL_DELAY(msgDelay);
 
+  mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+	     "Range Debug Info: (%s:%d), State O4, Message: equalizationDelay(%d:0x%x), finalDelay(%d:0x%x)\n",
+	     __FILE_DESC__, __LINE__, equalizationDelay, equalizationDelay, finalDelay, finalDelay);
 
   /* sync state */
   /* ========== */
@@ -1099,6 +1136,11 @@ void onuGponPonMngRangeTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
     /* update database */
     onuGponDbEqualizationDelaySet(msgDelay);
+
+    mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+	       "Range Debug Info: (%s:%d), State O4, Calc: equalizationDelay(%d:0x%x), finalDelay(%d:0x%x)\n",
+	       __FILE_DESC__, __LINE__, equalizationDelay, equalizationDelay, finalDelay, finalDelay);
+
 
     /* alarm handling */
     /* ============== */
@@ -1138,16 +1180,33 @@ void onuGponPonMngRangeTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
     /* get current delay */
     currentDelay = onuGponDbEqualizationDelayGet();
 
+    mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+	       "Range Debug Info: (%s:%d), State O5, Current equalization Delay from DB(%d:0x%x)\n",
+	       __FILE_DESC__, __LINE__, currentDelay, currentDelay);
+
     /* Reduce Equlization delay */
     if (currentDelay > msgDelay)
     {
       changeDelay = currentDelay - msgDelay;
+
+      mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+		 "Range Debug Info: (%s:%d), State O5, Current equalization Delay(0x%x) > Message equalization Delay(0x%x), change(0x%x)\n",
+		 __FILE_DESC__, __LINE__, currentDelay, msgDelay, changeDelay);
+
       mvOnuGponMacTxFinalDelayGet(&currFinalDelay);
+
+      mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+		 "Range Debug Info: (%s:%d), State O5, Final delay from DB (0x%x)\n",
+		 __FILE_DESC__, __LINE__, currFinalDelay);
 
       /* Check if can change the TX Final Delay only */
       if (changeDelay <= currFinalDelay)
       {
         finalDelay = currFinalDelay - changeDelay;
+
+	mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+		   "Range Debug Info: (%s:%d), State O5, Change delay <= Final delay, updated final delay, finalDelay = currFinalDelay - changeDelay, (0x%x)\n",
+		   __FILE_DESC__, __LINE__, finalDelay);
       }
       else
       {
@@ -1155,6 +1214,10 @@ void onuGponPonMngRangeTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
         mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
                    "ERROR: (%s:%d) Change Range delay while O5 - Update EqD\n", __FILE_DESC__, __LINE__);
 #endif /* MV_GPON_DEBUG_PRINT */
+
+	mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+		   "Range Debug Info: (%s:%d), State O5, Change > Final delay, updated equalization delay\n",
+		   __FILE_DESC__, __LINE__);
 
         /* calc delay */
         finalDelay        = M_ONU_GPON_RANG_MSG_FINAL_DELAY(msgDelay) + (MV_U32)GPON_TX_FINAL_DELAY_FD;
@@ -1168,6 +1231,10 @@ void onuGponPonMngRangeTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
                      __FILE_DESC__, __LINE__, equalizationDelay);
           return;
         }
+
+	mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+		   "Range Debug Info: (%s:%d), State O5, Updated: equalizationDelay(%d:0x%x), finalDelay(%d:0x%x)\n",
+		   __FILE_DESC__, __LINE__, equalizationDelay, equalizationDelay, finalDelay, finalDelay);
       }
 
       rcode = mvOnuGponMacTxFinalDelaySet(finalDelay);
@@ -1184,12 +1251,25 @@ void onuGponPonMngRangeTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
     else if (currentDelay < msgDelay)
     {
       changeDelay = msgDelay - currentDelay;
+
+      mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+		 "Range Debug Info: (%s:%d), State O5, Current equalization Delay(0x%x) < Message equalization Delay(0x%x), change(0x%x)\n",
+		 __FILE_DESC__, __LINE__, currentDelay, msgDelay, changeDelay);
+
       mvOnuGponMacTxFinalDelayGet(&currFinalDelay);
+
+      mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+		 "Range Debug Info: (%s:%d), State O5, Final delay from DB (0x%x)\n",
+		 __FILE_DESC__, __LINE__, currFinalDelay);
 
       /* Check if can change the TX Final Delay only */
       if (changeDelay + currFinalDelay > GPON_TX_FINAL_DELAY_MAX)
       {
         finalDelay = currFinalDelay + changeDelay;
+
+	mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+		   "Range Debug Info: (%s:%d), State O5, Change delay + current Final delay > MAX Final delay(0x3F), updated final delay, finalDelay = currFinalDelay + changeDelay, (0x%x)\n",
+		   __FILE_DESC__, __LINE__, finalDelay);
       }
       else
       {
@@ -1197,6 +1277,10 @@ void onuGponPonMngRangeTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
         mvPonPrint(PON_PRINT_DEBUG, PON_SM_DEBUG_MODULE,
                    "DEBUG: (%s:%d) Change Range delay while O5 - Update EqD\n", __FILE_DESC__, __LINE__);
 #endif /* MV_GPON_DEBUG_PRINT */
+
+	mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+		   "Range Debug Info: (%s:%d), State O5, Change delay + Final delay < MAX Final delay = 0x3F, updated equalization delay\n",
+		   __FILE_DESC__, __LINE__);
 
         /* calc delay */
         finalDelay        = M_ONU_GPON_RANG_MSG_FINAL_DELAY(msgDelay) + (MV_U32)GPON_TX_FINAL_DELAY_FD;
@@ -1212,6 +1296,11 @@ void onuGponPonMngRangeTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
           return;
         }
       }
+
+      mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+		 "Range Debug Info: (%s:%d), State O5, Updated: equalizationDelay(%d:0x%x), finalDelay(%d:0x%x)\n",
+		 __FILE_DESC__, __LINE__, equalizationDelay, equalizationDelay, finalDelay, finalDelay);
+
 
       rcode = mvOnuGponMacTxFinalDelaySet(finalDelay);
       if (rcode != MV_OK)
@@ -1375,6 +1464,8 @@ void onuGponPonMngDisSnMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 	if ((disableStatus == GPON_ONU_DISABLE) && (isSnMatch == MV_TRUE) &&
 		(onuState != ONU_GPON_07_EMERGANCY_STOP)) {
 
+        onuPonTxPowerOn(MV_FALSE);
+
 		/* clear onu information */
 		/* ===================== */
 		rcode = onuGponPonMngClearOnuInfo();
@@ -1424,6 +1515,8 @@ void onuGponPonMngDisSnMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 	} else if (((disableStatus == GPON_ONU_ENABLE_ALL) ||
 			  ((disableStatus == GPON_ONU_ENABLE_ONU) && (isSnMatch == MV_TRUE))) &&
 			 (onuState == ONU_GPON_07_EMERGANCY_STOP)) {
+
+        onuPonTxPowerOn(MV_TRUE);
 
 		/* alarm handling */
 		/* ============== */
@@ -1634,8 +1727,8 @@ void onuGponPonMngReqPassMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
   mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
              "[US PLOAM] PASSWORD, onuId(%d), msgId(%d), msg[%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x]\n",
              srcOnuId, msgId,
-             msgData[0], msgData[1], msgData[2], msgData[3], msgData[4],
-             msgData[5], msgData[6], msgData[7], msgData[8], msgData[9]);
+             password [0], password [1], password [2], password [3], password [4],
+             password [5], password [6], password [7], password [8], password [9]);
 #endif /* MV_GPON_DEBUG_PRINT */
 
 #ifdef MV_GPON_PERFORMANCE_CHECK
@@ -1849,6 +1942,8 @@ void onuGponPonMngPopupMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
   /* stop onu gpon pon mng T02 timer */
   onuPonTimerDisable(&(onuPonResourceTbl_s.onuGponT02_TimerId));
+  /* stop onu gpon xvr reset timer */
+  onuGponIsrXvrResetStateSet(MV_FALSE);
 
   if (onuId == ONU_GPON_BROADCAST_ONU_ID) /* Broadcast ONU-ID */
   {
@@ -2766,6 +2861,10 @@ void onuGponPonMngGenCritAlarm(E_OnuGponAlarmType alarmType_e,
 	else
 	  mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
 	  		     "ERROR: (%s:%d) wrong start to T02\n", __FILE_DESC__, __LINE__);
+#ifndef PON_FPGA
+	/* start xvr reset timer */
+	onuGponIsrXvrResetStateSet(MV_TRUE);
+#endif /* PON_FPGA */
 
 #ifdef MV_GPON_DEBUG_PRINT
     mvPonPrint(PON_PRINT_DEBUG, PON_SM_MODULE, "===========\n");
@@ -2827,7 +2926,6 @@ void onuGponPonMngGenCritAlarm(E_OnuGponAlarmType alarmType_e,
 
   /* alarm handling */
   /* ============== */
-  if (onuGponDbOnuStateGet() != ONU_GPON_06_POPUP)
   onuGponAlarmSet(alarmType_e, ONU_GPON_ALARM_ON);
 }
 
@@ -3044,5 +3142,36 @@ MV_STATUS onuGponPonMngDisableSetRegister(DISABLESTATSETFUNC disableFunc)
   return(MV_OK);
 }
 
+/*******************************************************************************
+**
+**  onuGponTimerTxPwrHndl
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function is called by the GPON handler in the case of DS
+**               sync off to start 1 sec timer that will disable Tx if expired
+**
+**  PARAMETERS:  unsigned long data
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+void onuGponTimerTxPwrHndl(unsigned long data)
+{
+  unsigned long flags;
 
+  spin_lock_irqsave(&onuPonIrqLock, flags);
+
+  onuPonResourceTbl_s.onuPonTxPwrTimerId.onuPonTimerActive = ONU_PON_TIMER_NOT_ACTIVE;
+
+  if (onuGponDbOnuStateGet() < ONU_GPON_02_STANDBY)
+  {
+     onuPonTxPowerOn(MV_FALSE);
+  }
+
+  onuPonTimerDisable(&(onuPonResourceTbl_s.onuPonTxPwrTimerId));
+
+  spin_unlock_irqrestore(&onuPonIrqLock, flags);
+}
 

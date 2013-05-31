@@ -103,6 +103,17 @@ extern "C" {
 #define MV_IS_MARVELL_OUI(_reg2, _reg3)		\
 	(((_reg2) == 0x0141) && (((_reg3)&0xFC00) == 0x0C00))
 
+/* PHY nego mode macro */
+#define PHY_AUTO_NEGO_MODE_HALF_10 0x1
+#define PHY_AUTO_NEGO_MODE_FULL_10 0x2
+#define PHY_AUTO_NEGO_MODE_HALF_100 0x4
+#define PHY_AUTO_NEGO_MODE_FULL_100 0x8
+#define PHY_AUTO_NEGO_MODE_HALF_1000 0x10
+#define PHY_AUTO_NEGO_MODE_FULL_1000 0x20
+
+/* PHY reset expire time */
+#define MV_PHY_RESET_EXPIRE_COUNT 1000
+
 typedef struct {
 	MV_U8		ctrlRevId;
 	MV_U32		phyAddr[MV_ETH_MAX_PORTS];
@@ -119,11 +130,50 @@ typedef struct {
 	MV_STATUS	(*mvExtPhyReadFunc)(MV_U32 phyAddr, MV_U32 regAddr, MV_U16 *data);
 } MV_ETHPHY_HAL_DATA;
 
+/*
+* typedef: enum MV_ETHPHY_PAUSE_MODE
+*
+* Description: Enumeration of Pause Mode in the Phy.
+*
+* Enumerations:
+*	MV_ETHPHY_NO_PAUSE		- disable pause
+*	MV_ETHPHY_PAUSE		- support pause
+*	MV_ETHPHY_ASYMMETRIC_PAUSE	- support asymmetric pause
+*	MV_ETHPHY_BOTH_PAUSE	- support both pause and asymmetric pause
+*/
+typedef enum
+{
+	MV_ETHPHY_NO_PAUSE = 0,
+	MV_ETHPHY_PAUSE,
+	MV_ETHPHY_ASYMMETRIC_PAUSE,
+	MV_ETHPHY_BOTH_PAUSE
+} MV_ETHPHY_PAUSE_MODE;
+
+/*
+* typedef: enum MV_ETHPHY_SPEED
+*
+* Description: Enumeration of Phy Speed
+*
+* Enumerations:
+*	MV_ETHPHY_SPEED_10_MBPS   - 10Mbps
+*	MV_ETHPHY_SPEED_100_MBPS  - 100Mbps
+*	MV_ETHPHY_SPEED_1000_MBPS - 1000Mbps
+*	MV_ETHPHY_SPEED_UNKNOWN   - Unknown speed
+*/
+typedef enum
+{
+	MV_ETHPHY_SPEED_10_MBPS,
+	MV_ETHPHY_SPEED_100_MBPS,
+	MV_ETHPHY_SPEED_1000_MBPS,
+	MV_ETHPHY_SPEED_UNKNOWN
+} MV_ETHPHY_SPEED;
+
+
 MV_STATUS 	mvEthPhyHalInit(MV_ETHPHY_HAL_DATA *halData);
 MV_STATUS	mvEthPhyInit(MV_U32 ethPortNum, MV_BOOL eeeEnable);
 MV_STATUS	mvEthPhyRegRead(MV_U32 phyAddr, MV_U32 regOffs, MV_U16 *data);
 MV_STATUS 	mvEthPhyRegWrite(MV_U32 phyAddr, MV_U32 regOffs, MV_U16 data);
-MV_STATUS 	mvEthPhyReset(MV_U32 phyAddr, int timeout);
+MV_STATUS 	mvEthPhyReset(MV_U32 phyAddr, MV_U16 data, int timeout);
 MV_STATUS 	mvEthPhyRestartAN(MV_U32 phyAddr, int timeout);
 MV_STATUS 	mvEthPhyDisableAN(MV_U32 phyAddr, int speed, int duplex);
 MV_STATUS   	mvEthPhyLoopback(MV_U32 phyAddr, MV_BOOL isEnable);
@@ -149,6 +199,24 @@ MV_VOID		mvEth1340PhyBasicInit(void);
 MV_VOID		mvEth131xPhyBasicInit(MV_U32 phyAddr);
 MV_VOID 	mvEthE1512PhyBasicInit(MV_U32 ethPortNum, MV_BOOL eeeEnable);
 /* MV_VOID		mvEthInternal3FEPhyBasicInit(MV_U32 port); */
+MV_STATUS	mvEthPhySetAdminState(MV_U32 phyAddr, MV_BOOL phy_state);
+MV_STATUS	mvEthPhyGetAdminState(MV_U32 phyAddr, MV_BOOL *phy_state);
+MV_STATUS	mvEthPhyGetLinkStatus(MV_U32 phyAddr, MV_BOOL *link_state);
+MV_STATUS	mvEthPhyDuplexOperGet(MV_U32 phyAddr, MV_BOOL *state_valid, MV_BOOL *duplex_state);
+MV_STATUS	mvEthPhyPauseSet(MV_U32 phyAddr, MV_U32 pause_state);
+MV_STATUS	mvEthPhyPauseAdminGet(MV_U32 phyAddr, MV_U32 *pause_state);
+MV_STATUS	mvEthPhyLoopbackSet(MV_U32 phyAddr, MV_BOOL isEnable);
+MV_STATUS	mvEthPhyLoopbackGet(MV_U32 phyAddr, MV_BOOL *isEnable);
+MV_STATUS	mvEthPhyLineLoopbackSet(MV_U32 phyAddr, MV_BOOL isEnable);
+MV_STATUS	mvEthPhyLineLoopbackGet(MV_U32 phyAddr, MV_BOOL *isEnable);
+MV_STATUS	mvEthPhyDuplexModeSet(MV_U32 phyAddr, MV_BOOL isEnable);
+MV_STATUS	mvEthPhyDuplexModeAdminGet(MV_U32 phyAddr, MV_BOOL *isEnable);
+MV_STATUS	mvEthPhySpeedSet(MV_U32 phyAddr, MV_U32 speed);
+MV_STATUS	mvEthPhySpeedOperGet(MV_U32 phyAddr, MV_U32 *speed);
+MV_STATUS	mvEthPhySpeedAdminGet(MV_U32 phyAddr, MV_U32 *speed);
+MV_STATUS	mvEthPhySpeedDuplexModeSet(MV_U32 phyAddr, MV_U32 speed, MV_BOOL isEnable);
+MV_STATUS	mvEthPhyAutoNegoSet(MV_U32 phyAddr, MV_BOOL isEnable);
+MV_STATUS	mvEthPhyAutoNegoGet(MV_U32 phyAddr, MV_BOOL *isEnable);
 
 #ifdef __cplusplus
 }

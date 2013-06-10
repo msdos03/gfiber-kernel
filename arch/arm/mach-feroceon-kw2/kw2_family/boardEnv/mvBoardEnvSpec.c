@@ -1456,11 +1456,11 @@ MV_DEV_CS_INFO gflt110InfoBoardDeCsInfo[] = {
 
 MV_BOARD_MPP_INFO gflt110InfoBoardMppConfigValue[] = {
 	{{
-	  RD_88F6601_MPP0_7,
-	  RD_88F6601_MPP8_15,
-	  RD_88F6601_MPP16_23,
-	  RD_88F6601_MPP24_31,
-	  RD_88F6601_MPP32_37
+	  GFLT110_MPP0_7,
+	  GFLT110_MPP8_15,
+	  GFLT110_MPP16_23,
+	  GFLT110_MPP24_31,
+	  GFLT110_MPP32_37
 	  }
 	 }
 };
@@ -1500,14 +1500,14 @@ MV_BOARD_INFO gflt110Info = {
 	.ledsPolarity = 0,
 
 	/* GPP values */
-	.gppOutEnValLow = RD_88F6601_GPP_OUT_ENA_LOW,
-	.gppOutEnValMid = RD_88F6601_GPP_OUT_ENA_MID,
+	.gppOutEnValLow = GFLT110_GPP_OUT_ENA_LOW,
+	.gppOutEnValMid = GFLT110_GPP_OUT_ENA_MID,
 	.gppOutEnValHigh = 0,
-	.gppOutValLow = RD_88F6601_GPP_OUT_VAL_LOW,
-	.gppOutValMid = RD_88F6601_GPP_OUT_VAL_MID,
+	.gppOutValLow = GFLT110_GPP_OUT_VAL_LOW,
+	.gppOutValMid = GFLT110_GPP_OUT_VAL_MID,
 	.gppOutValHigh = 0,
-	.gppPolarityValLow = RD_88F6601_GPP_POL_LOW,
-	.gppPolarityValMid = RD_88F6601_GPP_POL_MID,
+	.gppPolarityValLow = GFLT110_GPP_POL_LOW,
+	.gppPolarityValMid = GFLT110_GPP_POL_MID,
 	.gppPolarityValHigh = 0,
 
 	/* External Switch Configuration */

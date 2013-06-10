@@ -178,12 +178,8 @@ void onuEponIsrRoutine(MV_U32 event, MV_U32 status)
 	/* ================= */
 
 	if (interruptEvent & ONU_EPON_XVR_SD_MASK) {
-    //TODO(jnewlin): Make sure this is correct for GFLT200 board.
-		if (GFLT200_ID == mvBoardIdGet()) {
-			state = (interruptStatus & ONU_EPON_XVR_SD_MASK) ? MV_TRUE : MV_FALSE;
-		} else {
-			state = ponXvrFunc(interruptStatus, ONU_EPON_XVR_SD_MASK);
-		}
+		state = ponXvrFunc(interruptStatus, ONU_EPON_XVR_SD_MASK);
+
 		if (state == MV_FALSE)
 		{
 			onuEponDbOnuSignalDetectSet(1); /* alarm is OFF */

@@ -139,7 +139,10 @@ MV_STATUS onuEponSetup(void)
     return(MV_ERROR);
   }
 
-  ponXvrFunc = EponXvrSDPolarityHighStatus;
+  if (GFLT200_ID == mvBoardIdGet())
+    ponXvrFunc = EponXvrSDPolarityLowStatus;
+  else
+    ponXvrFunc = EponXvrSDPolarityHighStatus;
   /* init onu database */
   rcode = onuEponDbInit();
   if (rcode != MV_OK)

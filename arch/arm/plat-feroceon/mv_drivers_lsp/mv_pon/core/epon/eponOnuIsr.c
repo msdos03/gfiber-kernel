@@ -244,49 +244,6 @@ void onuEponIsrRoutine(MV_U32 event, MV_U32 status)
 			mvOnuEponMacPcsDelaySet(0x1C58);
 			/* clear Rx Ctrl message FIFO */
 			onuEponPonMngIntrRxCtrlFifoCleanup();
-
-#if 0
-// TODO(jnewlin): Double check this merge.
-<<<<<<< HEAD
-		} else if (state == MV_TRUE) { /* alarm is ON */
-
-			/* set EPON mode only if it is not P2P */
-			if (E_EPON_IOCTL_P2P_MODE != onuEponDbModeGet()) {
-				onuEponDbModeSet(E_EPON_IOCTL_STD_MODE);
-			}
-=======
-			/* Call link status callback function */
-			if (onuEponDbModeGet() == E_EPON_IOCTL_P2P_MODE)
-			{
-				linkStatusCallback = onuEponDbLinkStatusCallbackGet();
-				if (linkStatusCallback != NULL)
-				{
-					linkStatusCallback(MV_TRUE);
-					mvPonPrint(PON_PRINT_DEBUG, PON_ISR_INT_MODULE,
-						   "DEBUG: (%s:%d) Notify link is UP\n", __FILE_DESC__, __LINE__);
-				}
-			}
-		}
-		else if (state == MV_TRUE) /* alarm is ON */
-		{
-			if (onuEponDbP2PForceModeGet())
-			{
-				/* set P2P mode */
-				onuEponDbModeSet(E_EPON_IOCTL_P2P_MODE);
-			}
-			else
-			{
-				/* set EPON mode */
-				onuEponDbModeSet(E_EPON_IOCTL_STD_MODE);
-			}
-            
->>>>>>> remotes/gfiber-internal/vendor_drops
-#endif
-
-			/* config PCS synchronization configuration  - FEC disabled */
-			mvOnuEponMacPcsDelaySet(0x1C58);
-			/* clear Rx Ctrl message FIFO */
-			onuEponPonMngIntrRxCtrlFifoCleanup();
 			/* clear OAM SW FIFO - Tx */
 			onuEponOamFlushAllMsg();
 			/* start xvr reset timer */

@@ -2766,6 +2766,18 @@ MV_U32 mvBoardIdGet(MV_VOID)
 	return gBoardId;
 }
 
+MV_BOARD_INFO *mvBoardInfoGet(MV_VOID)
+{
+	MV_U32 boardId = mvBoardIdGet();
+
+	if (!((boardId >= BOARD_ID_BASE) && (boardId < MV_MAX_BOARD_ID))) {
+		mvOsPrintf("Board unknown.\n");
+		return NULL;
+	}
+
+	return BOARD_INFO(boardId);
+}
+
 /*******************************************************************************
 * mvBoardTwsiSatRGet -
 *

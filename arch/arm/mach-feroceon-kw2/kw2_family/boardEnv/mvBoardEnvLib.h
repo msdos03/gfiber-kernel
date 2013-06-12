@@ -541,6 +541,7 @@ MV_U8 mvBoardTwsiAddrTypeGet(MV_BOARD_TWSI_CLASS twsiClass, MV_U32 index);
 MV_U8 mvBoardTwsiAddrGet(MV_BOARD_TWSI_CLASS twsiClass, MV_U32 index);
 MV_32 mvBoardNandWidthGet(MV_VOID);
 MV_U32 mvBoardIdGet(MV_VOID);
+MV_BOARD_INFO *mvBoardInfoGet(MV_VOID);
 
 MV_U8 mvBoardTwsiSatRGet(MV_U8 devNum, MV_U8 regNum);
 MV_STATUS mvBoardTwsiSatRSet(MV_U8 devNum, MV_U8 regNum, MV_U8 regVal);

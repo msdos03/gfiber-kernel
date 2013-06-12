@@ -471,11 +471,11 @@ MPP#	NAME			IN/OUT
 /***************************************************************************
 ** GFLT200
 ****************************************************************************/
-#define GFLT200_MPP0_7			0x22222220
-#define GFLT200_MPP8_15			0x00000002
-#define GFLT200_MPP16_23		0x00000000
-#define GFLT200_MPP24_31		0x40200000
-#define GFLT200_MPP32_37		0x00000004
+#define GFLT200_EVT1_MPP0_7		0x22222220
+#define GFLT200_EVT1_MPP8_15		0x00000002
+#define GFLT200_EVT1_MPP16_23		0x00000000
+#define GFLT200_EVT1_MPP24_31		0x40200000
+#define GFLT200_EVT1_MPP32_37		0x00000004
 
 /* GPPs
  1 SPI_MOSI (out)
@@ -507,14 +507,14 @@ MPP#	NAME			IN/OUT
 37 PON_PWR_EN_L (out)
 */
 
-#define GFLT200_GPP_OUT_ENA_LOW		(BIT13 | BIT15 | BIT18 | BIT29)
-#define GFLT200_GPP_OUT_ENA_MID		(BIT4)
+#define GFLT200_EVT1_GPP_OUT_ENA_LOW	(BIT13 | BIT15 | BIT18 | BIT29)
+#define GFLT200_EVT1_GPP_OUT_ENA_MID	(BIT4)
 
-#define GFLT200_GPP_OUT_VAL_LOW		(BIT9 | BIT10 | BIT21 | BIT26 | BIT27 | BIT28)
-#define GFLT200_GPP_OUT_VAL_MID		0x0
+#define GFLT200_EVT1_GPP_OUT_VAL_LOW	(BIT9 | BIT10 | BIT21 | BIT26 | BIT27 | BIT28)
+#define GFLT200_EVT1_GPP_OUT_VAL_MID	0x0
 
-#define GFLT200_GPP_POL_LOW		0x0
-#define GFLT200_GPP_POL_MID		0x0
+#define GFLT200_EVT1_GPP_POL_LOW	0x0
+#define GFLT200_EVT1_GPP_POL_MID	0x0
 
 /***************************************************************************
 ** GFLT110

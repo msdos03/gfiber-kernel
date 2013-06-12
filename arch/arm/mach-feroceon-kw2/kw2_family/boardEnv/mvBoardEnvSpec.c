@@ -64,6 +64,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "mvCommon.h"
 #include "mvBoardEnvLib.h"
 #include "mvBoardEnvSpec.h"
+#include "gpp/mvGpp.h"
 #include "twsi/mvTwsi.h"
 
 /***************************************************************************
@@ -1323,13 +1324,13 @@ MV_DEV_CS_INFO gflt200InfoBoardDeCsInfo[] = {
 #endif
 };
 
-MV_BOARD_MPP_INFO gflt200InfoBoardMppConfigValue[] = {
+MV_BOARD_MPP_INFO gflt200Evt1InfoBoardMppConfigValue[] = {
 	{{
-	  GFLT200_MPP0_7,
-	  GFLT200_MPP8_15,
-	  GFLT200_MPP16_23,
-	  GFLT200_MPP24_31,
-	  GFLT200_MPP32_37
+	  GFLT200_EVT1_MPP0_7,
+	  GFLT200_EVT1_MPP8_15,
+	  GFLT200_EVT1_MPP16_23,
+	  GFLT200_EVT1_MPP24_31,
+	  GFLT200_EVT1_MPP32_37
 	  }
 	 }
 };
@@ -1347,12 +1348,36 @@ MV_BOARD_SPEC_INIT gflt200BoardSpecInit[] = {
 	}
 };
 */
+
+#define GFLT200_GPP_BOARD_VER_MASK	((1 << 18) | (1 << 15) | (1 << 13))
+#define GFLT200_EVT1_BOARD_VER		(0)
+
+static MV_VOID gflt200BoardInit(MV_BOARD_INFO *pBoardInfo)
+{
+	mvGppTypeSet(0, GFLT200_GPP_BOARD_VER_MASK, GFLT200_GPP_BOARD_VER_MASK);
+
+	switch (mvGppValueGet(0, GFLT200_GPP_BOARD_VER_MASK)) {
+	case GFLT200_EVT1_BOARD_VER:
+	default: /* latest */
+		pBoardInfo->numBoardMppConfigValue
+			= MV_ARRAY_SIZE(gflt200Evt1InfoBoardMppConfigValue);
+		pBoardInfo->pBoardMppConfigValue
+			= gflt200Evt1InfoBoardMppConfigValue;
+		pBoardInfo->gppOutEnValLow = GFLT200_EVT1_GPP_OUT_ENA_LOW;
+		pBoardInfo->gppOutEnValMid = GFLT200_EVT1_GPP_OUT_ENA_MID;
+		pBoardInfo->gppOutValLow = GFLT200_EVT1_GPP_OUT_VAL_LOW;
+		pBoardInfo->gppOutValMid = GFLT200_EVT1_GPP_OUT_VAL_MID;
+		pBoardInfo->gppPolarityValLow = GFLT200_EVT1_GPP_POL_LOW;
+		pBoardInfo->gppPolarityValMid = GFLT200_EVT1_GPP_POL_MID;
+		break;
+	}
+}
+
 MV_BOARD_INFO gflt200Info = {
 	.boardName = "GFLT200",
+	.pBoardInit = gflt200BoardInit,
 	.numBoardMppTypeValue = MV_ARRAY_SIZE(gflt200InfoBoardMppTypeInfo),
 	.pBoardMppTypeValue = gflt200InfoBoardMppTypeInfo,
-	.numBoardMppConfigValue = MV_ARRAY_SIZE(gflt200InfoBoardMppConfigValue),
-	.pBoardMppConfigValue = gflt200InfoBoardMppConfigValue,
 	.intsGppMaskLow = 0,
 	.intsGppMaskMid = 0,
 	.intsGppMaskHigh = 0,
@@ -1369,14 +1394,8 @@ MV_BOARD_INFO gflt200Info = {
 	.ledsPolarity = 0,
 
 	/* GPP values */
-	.gppOutEnValLow = GFLT200_GPP_OUT_ENA_LOW,
-	.gppOutEnValMid = GFLT200_GPP_OUT_ENA_MID,
 	.gppOutEnValHigh = 0,
-	.gppOutValLow = GFLT200_GPP_OUT_VAL_LOW,
-	.gppOutValMid = GFLT200_GPP_OUT_VAL_MID,
 	.gppOutValHigh = 0,
-	.gppPolarityValLow = GFLT200_GPP_POL_LOW,
-	.gppPolarityValMid = GFLT200_GPP_POL_MID,
 	.gppPolarityValHigh = 0,
 
 	/* External Switch Configuration */

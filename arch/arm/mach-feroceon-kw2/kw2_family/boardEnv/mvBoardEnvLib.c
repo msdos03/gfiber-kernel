@@ -129,11 +129,16 @@ MV_VOID mvBoardEnvInit(MV_VOID)
 	MV_U32 boardId = mvBoardIdGet();
 	MV_U32 nandDev;
 	MV_32 width;
+	MV_BOARD_INFO *pBoardInfo;
 
 	if (!((boardId >= BOARD_ID_BASE) && (boardId < MV_MAX_BOARD_ID))) {
 		mvOsPrintf("mvBoardEnvInit:Board unknown.\n");
 		return;
 	}
+
+	pBoardInfo = mvBoardInfoGet();
+	if (pBoardInfo->pBoardInit)
+		pBoardInfo->pBoardInit(pBoardInfo);
 
 	nandDev = boardGetDevCSNum(0, BOARD_DEV_NAND_FLASH);
 	if (nandDev != 0xFFFFFFFF) {

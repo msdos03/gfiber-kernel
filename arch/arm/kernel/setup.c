@@ -123,6 +123,9 @@ static const char *machine_name;
 static char __initdata command_line[COMMAND_LINE_SIZE];
 
 static char default_command_line[COMMAND_LINE_SIZE] __initdata = CONFIG_CMDLINE;
+#ifdef CONFIG_CMDLINE_BOOL
+static char config_command_line[COMMAND_LINE_SIZE] __initdata = CONFIG_CMDLINE;
+#endif
 static union { char c[4]; unsigned long l; } endian_test __initdata = { { 'l', '?', '?', 'b' } };
 #define ENDIANNESS ((char)endian_test.l)
 
@@ -782,7 +785,21 @@ void __init setup_arch(char **cmdline_p)
 
 	memcpy(boot_command_line, from, COMMAND_LINE_SIZE);
 	boot_command_line[COMMAND_LINE_SIZE-1] = '\0';
-	parse_cmdline(cmdline_p, from);
+#ifdef CONFIG_CMDLINE_BOOL
+#ifdef CONFIG_CMDLINE_OVERRIDE
+	// Use only the baked in command line.
+	memcpy(boot_command_line, config_command_line, COMMAND_LINE_SIZE);
+	boot_command_line[COMMAND_LINE_SIZE-1] = '\0';
+#else
+	// Append the baked in command line parameter(s) to the supplied
+	// command line.
+	if (config_command_line[0]) {
+		strlcat(boot_command_line, " ", COMMAND_LINE_SIZE);
+		strlcat(boot_command_line, config_command_line, COMMAND_LINE_SIZE);
+	}
+#endif
+#endif
+	parse_cmdline(cmdline_p, boot_command_line);
 	paging_init(mdesc);
 #ifdef CONFIG_DEBUG_LL
 	{

@@ -1312,6 +1312,14 @@ config ZBOOT_ROM
 	  Say Y here if you intend to execute your compressed kernel image
 	  (zImage) directly from ROM or flash.  If unsure, say N.
 
+config CMDLINE_BOOL
+	bool "Built-in kernel command line"
+	default n
+
+config CMDLINE_OVERRIDE
+	bool "Built-in command line overrides firware arguments"
+	default n
+
 config CMDLINE
 	string "Default kernel command string"
 	default ""

@@ -347,7 +347,6 @@ static struct resource mv_uart0_resources[] = {
 	},
 };
 
-#if 0
 static struct resource mv_uart1_resources[] = {
 	{
 		.start		= PORT1_BASE,
@@ -360,7 +359,6 @@ static struct resource mv_uart1_resources[] = {
 		.flags          = IORESOURCE_IRQ,
 	},
 };
-#endif
 
 static struct plat_serial8250_port mv_uart0_data[] = {
 	{
@@ -394,7 +392,7 @@ static struct plat_serial8250_port mv_uart1_data[] = {
 	{ },
 };
 
-static struct platform_device mv_uart = {
+static struct platform_device mv_uart0 = {
 	.name			= "serial8250",
 	.id			= PLAT8250_DEV_PLATFORM,
 	.dev			= {
@@ -404,11 +402,21 @@ static struct platform_device mv_uart = {
 	.resource		= mv_uart0_resources,
 };
 
+static struct platform_device mv_uart1 = {
+	.name			= "serial8250",
+	.id			= PLAT8250_DEV_PLATFORM1,
+	.dev			= {
+		.platform_data	= mv_uart1_data,
+	},
+	.num_resources		= 2, /*ARRAY_SIZE(mv_uart_resources),*/
+	.resource		= mv_uart1_resources,
+};
 
 static void serial_initialize(void)
 {
 	mv_uart0_data[0].uartclk = mv_uart1_data[0].uartclk = mvTclk;
-	platform_device_register(&mv_uart);
+	platform_device_register(&mv_uart0);
+	platform_device_register(&mv_uart1);
 }
 
 #if defined(CONFIG_MV_INCLUDE_SDIO)

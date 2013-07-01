@@ -17825,7 +17825,7 @@ tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint
 
 	//TPM_OS_INFO(TPM_PNCL_MOD, "port = %d txp = %d enable = %d\n", port, txp, enable);
 
-	printk("TPM T-Cont API, port(%d), txp(%d) enable(%d)\n", port, txp, enable);
+    printk(KERN_DEBUG "TPM T-Cont API, port(%d), txp(%d) enable(%d)\n", port, txp, enable);
 
 	tx_mod = port + txp;
 
@@ -17855,7 +17855,7 @@ tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint
 
 			/* enable/disable hwf */
 			if (enable == true)
-				printk("HWF T-Cont active, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+                printk(KERN_DEBUG "HWF T-Cont active, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
 
 			mvNetaHwfTxqEnable((queue_owner - 1), port, txp, q_num, enable);
 
@@ -17864,7 +17864,7 @@ tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint
 			if ((!enable) && (curr_state))
 			{
 				//TPM_OS_INFO(TPM_PNCL_MOD, "Call mv_eth_txq_clean - current state: %d, enable %d\n", curr_state, enable);
-				printk("HWF T-Cont stop/clean, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+                printk(KERN_DEBUG "HWF T-Cont stop/clean, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
 				mv_eth_txq_clean(port, txp, q_num);
 			}
 		}
@@ -17874,13 +17874,13 @@ tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint
 		{
 			if (!enable)
 			{
-				printk("SWF T-Cont stop/clean, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+                printk(KERN_DEBUG "SWF T-Cont stop/clean, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
 				mv_cust_set_tcont_state(txp, false);
 				mv_eth_txq_clean(port, txp, q_num);
 			}
 			else
 			{
-				printk("SWF T-Cont active, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+                printk(KERN_DEBUG "SWF T-Cont active, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
 				mv_cust_set_tcont_state(txp, true);
 			}
 		}

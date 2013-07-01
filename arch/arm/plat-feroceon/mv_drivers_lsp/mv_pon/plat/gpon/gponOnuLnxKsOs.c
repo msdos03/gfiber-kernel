@@ -154,8 +154,6 @@ MV_STATUS onuPonWqInit(void)
     INIT_WORK((struct work_struct *) &gponTcontCleanAllWork, onuGponWqTcontFunc);
     gponTcontCleanAllWork.action = TCONT_CLEAN_ALL_EVENT;
 
-    printk("STARTING PON WORK QUEUE!!!!!\n");
-
     return(MV_OK);
   }
 

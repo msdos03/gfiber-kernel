@@ -105,6 +105,7 @@ MV_STATUS onuGponAllocIdTcontClear(MV_U32 tcontNum);
 MV_STATUS onuGponAllocIdDeAssignAll(void);
 MV_STATUS onuGponAllocIdFreeAllBuffers(void);
 MV_STATUS onuGponAllocIdTcontClearAll(void);
+MV_STATUS onuGponAllocIdMacReActivate(void);
 MV_U32    onuGponIdleAllocIdTcontGet(void);
 
 /* Macros

@@ -89,6 +89,8 @@ extern spinlock_t onuPonIrqLock;
 
 /* Local Variables
 ------------------------------------------------------------------------------*/
+static   S_EponIoctlTdmQueue ioctlTdmQueue;
+static   S_EponIoctlDba      ioctlDba;
 
 /* Export Functions
 ------------------------------------------------------------------------------*/
@@ -648,10 +650,8 @@ int mvEponCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd,
   S_EponIoctlFec      ioctlFec;
   S_EponIoctlEnc      ioctlEnc;
   S_EponIoctlOamTx    ioctlTxOam;
-  S_EponIoctlDba      ioctlDba;
   S_EponIoctlHoldOver ioctlHoldover;
   S_EponIoctlSilence  ioctlSilence;
-  S_EponIoctlTdmQueue ioctlTdmQueue;
   MV_U32              ioctlState;
   MV_U32              ioctlAlarm;
   S_EponIoctlRogueOnu ioctlRogueOnu;
@@ -925,7 +925,7 @@ int mvEponCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
         spin_lock_irqsave(&onuPonIrqLock, flags);
         
-        onuEponDbP2PForceModeSet(ioctlState);
+        status = onuEponDbP2PForceModeSet(ioctlState);
         
         spin_unlock_irqrestore(&onuPonIrqLock, flags);
 

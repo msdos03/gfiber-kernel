@@ -31,7 +31,7 @@ static inline void arch_idle(void)
 	cpu_do_idle();
 }
 
-#define UPON_SDK_VERSION "uPON_2.6.25_RC74"
+#define UPON_SDK_VERSION "uPON_2.6.25_RC76"
 
 #ifdef __BIG_ENDIAN
 #define MV_ARM_32BIT_LE(X) ((((X)&0xff)<<24) |                       \

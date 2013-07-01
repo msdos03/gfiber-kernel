@@ -113,8 +113,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                                                
 #define ON_GPON_MAX_ALARMS                      (3)
 
-#define ONU_GPON_INT_ALARMS                     (ONU_GPON_LOF_ALARM_MASK |\
-                                                 ONU_GPON_LCDG_ALARM_MASK)
+#define ONU_GPON_INT_ALARMS                     (ONU_GPON_LOF_ALARM_MASK)
 
 #define ONU_GPON_PARITY_ERROR                   (ONU_GPON_RAM_TEST_GRX_PARITY_ERR_MASK  |\
                                                  ONU_GPON_RAM_TEST_GEM_PARITY_ERR_MASK  |\

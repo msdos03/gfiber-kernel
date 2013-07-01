@@ -101,6 +101,7 @@ extern MV_U32 regRandomMaskThreshold;
 /* Local Variables
 ------------------------------------------------------------------------------*/
 MV_BOOL infoEponCntReadClearInd = MV_TRUE;
+static S_EponIoctlDba ioctlDba;
 
 /* Export Functions
 ------------------------------------------------------------------------------*/
@@ -1088,7 +1089,6 @@ void onuEponUiCfgDbaSwDebug(MV_U32 queueSet, MV_U32 queueBitMap,
   MV_U32         idx;
   MV_U32         qsetidx;
   MV_U32         numOfQueues = 0;
-  S_EponIoctlDba ioctlDba;
 
   memset (&ioctlDba, 0, sizeof(S_EponIoctlDba));
 

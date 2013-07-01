@@ -808,7 +808,7 @@ MV_BOOL onuEponLinkIsUp(void)
 
 MV_STATUS mvEponApi2kSupportedSet(MV_U32 pkt2kSupported)
 {
-    MV_STATUS status;
+    MV_STATUS status = 0;
     MV_U32    devId;
 
     devId = mvCtrlModelGet();

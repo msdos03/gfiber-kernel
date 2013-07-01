@@ -162,10 +162,10 @@ MV_STATUS onuGponAllocIdMacInit(void)
 **
 **  OUTPUTS:     MV_U32 *entry
 **
-**  RETURNS:     MV_TRUE or MV_FALSE
+**  RETURNS:     MV_OK or MV_ERROR
 **
 *******************************************************************************/
-MV_BOOL onuGponAllocIdMacAllocExistCheck(MV_U32 allocId, MV_U32 *entry, MV_U32 *tcont)
+MV_STATUS onuGponAllocIdMacAllocExistCheck(MV_U32 allocId, MV_U32 *entry, MV_U32 *tcont)
 {
 	MV_U32  iEntry;
 	MV_U32  macAllocId;
@@ -178,12 +178,47 @@ MV_BOOL onuGponAllocIdMacAllocExistCheck(MV_U32 allocId, MV_U32 *entry, MV_U32 *
 		if ((status == MV_OK) && (macAllocId == allocId) && (valid == MV_TRUE)) {
 			*entry = iEntry;
 			*tcont = tcontNum;
-			return (MV_TRUE);
+			return (MV_OK);
 		}
 	}
 
-	return (MV_FALSE);
+	return (MV_ERROR);
 }
+
+/*******************************************************************************
+**
+**  onuGponAllocIdMacAllocCheck
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function checks if BW Map entry is valid and return T-Cont
+**               and Alloc Number
+**
+**  PARAMETERS:  none
+**
+**  OUTPUTS:     MV_U32 *allocId
+**      	 MV_U32 *tcont
+**
+**  RETURNS:     MV_OK or MV_ERROR
+**
+*******************************************************************************/
+MV_STATUS onuGponAllocIdMacAllocCheck(MV_U32 index, MV_U32 *allocId, MV_U32 *tcont)
+{
+	MV_U32  macAllocId;
+	MV_U32  tcontNum;
+	MV_BOOL valid;
+	MV_STATUS status;
+
+       status = mvOnuGponMacRxBwMapGet(index, &macAllocId, &valid, &tcontNum);
+       if ((status == MV_OK) && (valid == MV_TRUE))
+       {
+	       *allocId = macAllocId;
+	       *tcont   = tcontNum;
+	       return (MV_OK);
+       }
+
+       return (MV_ERROR);
+}
+
 
 /*******************************************************************************
 **
@@ -196,10 +231,10 @@ MV_BOOL onuGponAllocIdMacAllocExistCheck(MV_U32 allocId, MV_U32 *entry, MV_U32 *
 **
 **  OUTPUTS:     MV_U32 *entry
 **
-**  RETURNS:     MV_TRUE or MV_FALSE
+**  RETURNS:     MV_OK or MV_ERROR
 **
 *******************************************************************************/
-MV_BOOL onuGponAllocIdMacAllocFreeEntryGet(MV_U32 *entry)
+MV_STATUS onuGponAllocIdMacAllocFreeEntryGet(MV_U32 *entry)
 {
 	MV_U32  iEntry;
 	MV_U32  macAllocId;
@@ -211,11 +246,11 @@ MV_BOOL onuGponAllocIdMacAllocFreeEntryGet(MV_U32 *entry)
 		status = mvOnuGponMacRxBwMapGet(iEntry, &macAllocId, &valid, &tcontNum);
 		if ((status == MV_OK) && (valid == MV_FALSE)) {
 			*entry = iEntry;
-			return (MV_TRUE);
+			return (MV_OK);
 		}
 	}
 
-	return (MV_FALSE);
+	return (MV_ERROR);
 }
 
 /*******************************************************************************
@@ -237,10 +272,9 @@ MV_STATUS onuGponAllocIdMacAdd(MV_U32 allocId, MV_U32 tcontId)
 {
 	MV_STATUS status = MV_OK;
 	MV_U32    entry;
-	MV_BOOL   exist;
 
-	exist = onuGponAllocIdMacAllocFreeEntryGet(&entry);
-	if (exist == MV_FALSE)
+	status = onuGponAllocIdMacAllocFreeEntryGet(&entry);
+	if (status != MV_OK)
 		return (MV_ERROR);
 
 	status = mvOnuGponMacRxBwMapSet(entry, allocId, tcontId, MV_TRUE);
@@ -273,7 +307,6 @@ MV_STATUS onuGponAllocIdMacAdd(MV_U32 allocId, MV_U32 tcontId)
 MV_STATUS onuGponAllocIdMacConnect(MV_U32 allocId, MV_U32 tcontNum)
 {
 	MV_STATUS status;
-	MV_BOOL   exist;
 	MV_U32    entry;
 	MV_U32    tcont;
 	MV_U32    newIdleTcontEntry;
@@ -288,8 +321,8 @@ MV_STATUS onuGponAllocIdMacConnect(MV_U32 allocId, MV_U32 tcontNum)
 #endif /* MV_GPON_DEBUG_PRINT */
 
 	/* validate that requested alloc-Id is configured in HW and is valid */
-	exist = onuGponAllocIdMacAllocExistCheck(allocId, &entry, &tcont);
-	if (exist != MV_TRUE) {
+	status = onuGponAllocIdMacAllocExistCheck(allocId, &entry, &tcont);
+	if (status != MV_OK) {
 		mvPonPrint(PON_PRINT_ERROR, PON_ALLOC_MODULE,
 					"ERROR: (%s:%d) onuGponAllocIdMacConnect, alloc Id(%d) entry(%d)\n",
 					__FILE_DESC__, __LINE__, allocId, entry);
@@ -301,8 +334,8 @@ MV_STATUS onuGponAllocIdMacConnect(MV_U32 allocId, MV_U32 tcontNum)
 		** should be changed to another Idle T-Cont */
 
 		/* Check for a free (idle) entry in the Tcont DB table */
-		exist = onuGponDbBwTcontFreeGet(allocId, &freeTcontEntry);
-		if (exist != MV_TRUE) {
+		status = onuGponDbBwTcontFreeGet(allocId, &freeTcontEntry);
+		if (status != MV_OK) {
 #ifdef MV_GPON_DEBUG_PRINT
 			mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
 						"DEBUG: (%s:%d) onuGponAllocIdMacConnect, alloc Id(%d) freeTcontEntry(%d)\n",
@@ -318,8 +351,8 @@ MV_STATUS onuGponAllocIdMacConnect(MV_U32 allocId, MV_U32 tcontNum)
 				onuGponDbBwIdleAllocGet(newIdleTcontEntry, &entryAllocId);
 				if (entryAllocId != PON_ONU_ALLOC_NOT_EXIST) {
 					/* Check if this idle Alloc ID exists in the HW table */
-					exist = onuGponAllocIdMacAllocExistCheck(entryAllocId, &bwMapEntry, &tcont);
-					if (exist == MV_TRUE) {
+					status = onuGponAllocIdMacAllocExistCheck(entryAllocId, &bwMapEntry, &tcont);
+					if (status == MV_OK) {
 						/* re-assign this Alloc ID to the new idle Tcont in HW */
 						status = mvOnuGponMacRxBwMapSet(bwMapEntry, entryAllocId, onuIdleAllocTcont, MV_TRUE);
 						if (status != MV_OK) {
@@ -345,19 +378,11 @@ MV_STATUS onuGponAllocIdMacConnect(MV_U32 allocId, MV_U32 tcontNum)
 
 #ifdef MV_GPON_DEBUG_PRINT
 	mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
-              "DEBUG: (%s:%d) AllocIdMacConnect, tpm_active_tcont, Tcont(%d)\n",
-              __FILE_DESC__, __LINE__, tcontNum);
+		   "DEBUG: (%s:%d) TCONT (%d) active, Connect\n",
+		   __FILE_DESC__, __LINE__, tcontNum);
 #endif /* MV_GPON_DEBUG_PRINT */
 
-	printk("TCONT (%d) active, Connect\n", tcontNum);
-	status = onuGponWqTcontActivate(tcontNum);
-	if (status != MV_OK)
-	{
-		mvPonPrint(PON_PRINT_ERROR, PON_ALLOC_MODULE,
-			   "ERROR: (%s:%d) onuGponAllocIdMacAdd, failed to schedule T-Cont(%d) activate in WQ\n",
-			   __FILE_DESC__, __LINE__, tcontNum);
-		return (status);
-	}
+	onuGponWqTcontActivate(tcontNum);
 
 	return (status);
 }
@@ -379,7 +404,6 @@ MV_STATUS onuGponAllocIdMacConnect(MV_U32 allocId, MV_U32 tcontNum)
 *******************************************************************************/
 MV_STATUS onuGponAllocIdMacReconnect(MV_U32 allocId, MV_U32 tcontNum)
 {
-	MV_BOOL   exist;
 	MV_STATUS status = MV_OK;
 	MV_U32    entry;
 	MV_U32    onuId;
@@ -393,12 +417,12 @@ MV_STATUS onuGponAllocIdMacReconnect(MV_U32 allocId, MV_U32 tcontNum)
 #endif /* MV_GPON_DEBUG_PRINT */
 
 	/* Get free entry */
-	exist = onuGponAllocIdMacAllocExistCheck(allocId, &entry, &tcont);
-	if (exist != MV_TRUE)
-		return (MV_ERROR);
+	status = onuGponAllocIdMacAllocExistCheck(allocId, &entry, &tcont);
+	if (status == MV_OK)
+		return(status);
 
-	exist = onuGponDbBwTcontFreeGet(allocId, &tcontFreeNum);
-	if (exist != MV_TRUE)
+	status = onuGponDbBwTcontFreeGet(allocId, &tcontFreeNum);
+	if (status != MV_OK)
 		onuIdleAllocTcont = tcontFreeNum;
 
 	/* Check if default Alloc Id */
@@ -411,20 +435,56 @@ MV_STATUS onuGponAllocIdMacReconnect(MV_U32 allocId, MV_U32 tcontNum)
                       __FILE_DESC__, __LINE__, tcontNum);
 #endif /* MV_GPON_DEBUG_PRINT */
 
-	       // printk("TCONT (%d) flush, Reconnect\n", tcontNum);
-	       // status = onuGponWqTcontFlush(tcontNum);
-	       // if (status != MV_OK)
-	       //{
-	       // 	mvPonPrint(PON_PRINT_ERROR, PON_ALLOC_MODULE,
-	       // 		   "ERROR: (%s:%d) onuGponAllocIdMacReconnect, failed to schedule T-Cont(%d) flush in WQ\n",
-	       // 		   __FILE_DESC__, __LINE__, tcontNum);
-	       //}
-
 		/* Set Alloc Id to T-Cont in the GMAC hardware */
 		status = mvOnuGponMacRxBwMapSet(entry, allocId, onuIdleAllocTcont, MV_TRUE);
 	}
 
 	return (status);
+}
+
+
+/*******************************************************************************
+**
+**  onuGponAllocIdMacReActivate
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function reactivate onu tcont incase the tcont is not
+**               clear and set by mng
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuGponAllocIdMacReActivate(void)
+{
+	MV_STATUS status;
+	MV_U32    entry;
+	MV_U32	  allocId;
+	MV_U32    tcont;
+
+#ifdef MV_GPON_DEBUG_PRINT
+	mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
+              "DEBUG: (%s:%d) onuGponAllocIdMacReActivate\n", __FILE_DESC__, __LINE__);
+#endif /* MV_GPON_DEBUG_PRINT */
+
+	for (entry = 0; entry < ONU_GPON_MAX_NUM_OF_T_CONTS; entry++)
+	{
+		status = onuGponAllocIdMacAllocCheck(entry, &allocId, &tcont);
+		if (status == MV_OK)
+		{
+			mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
+				   "DEBUG: (%s:%d) TCONT (%d) active, Connect\n",
+				   __FILE_DESC__, __LINE__, tcont);
+
+			onuGponWqTcontActivate(tcont);
+		}
+	}
+
+
+	return (MV_OK);
 }
 
 /*******************************************************************************
@@ -446,7 +506,6 @@ MV_STATUS onuGponAllocIdMacDisconnect(MV_U32 allocId)
 	MV_U32  onuId;
 	MV_U32  entry;
 	MV_U32  tcont;
-	MV_BOOL exist;
 	MV_STATUS status = MV_OK;
 
 #ifdef MV_GPON_DEBUG_PRINT
@@ -456,28 +515,21 @@ MV_STATUS onuGponAllocIdMacDisconnect(MV_U32 allocId)
 #endif /* MV_GPON_DEBUG_PRINT */
 
 	/* Check if already exist */
-	exist = onuGponAllocIdMacAllocExistCheck(allocId, &entry, &tcont);
-	if (exist == MV_FALSE)
-		return (MV_ERROR);
+	status = onuGponAllocIdMacAllocExistCheck(allocId, &entry, &tcont);
+	if (status != MV_OK)
+		return(MV_ERROR);
 
 	/* Check if default Alloc Id */
 	onuId = onuGponDbOnuIdGet();
 	if (allocId != onuId)
 	{
 #ifdef MV_GPON_DEBUG_PRINT
-	        mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
-                      "DEBUG: (%s:%d) tpm_deactive_tcont, Tcont(%d)\n",
-                      __FILE_DESC__, __LINE__, tcont);
+		mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
+			   "DEBUG: (%s:%d) TCONT (%d) flush, Disconnect\n",
+			   __FILE_DESC__, __LINE__, tcont);
 #endif /* MV_GPON_DEBUG_PRINT */
 
-		printk("TCONT (%d) flush, Disconnect\n", tcont);
-		status = onuGponWqTcontFlush(tcont);
-		if (status != MV_OK)
-		{
-			mvPonPrint(PON_PRINT_ERROR, PON_ALLOC_MODULE,
-				   "ERROR: (%s:%d) onuGponAllocIdMacDisconnect, failed to schedule T-Cont(%d) flush in WQ\n",
-				   __FILE_DESC__, __LINE__, tcont);
-		}
+		onuGponWqTcontFlush(tcont);
 
 		status = mvOnuGponMacRxBwMapSet(entry, 0, 0, MV_FALSE);
 		if (status != MV_OK)
@@ -560,7 +612,7 @@ MV_STATUS onuGponAllocIdAssign(MV_U32 allocId, MV_U32 notifyFlag)
 	/* check if Alloc-Id exist in the alloc Id DB table */
 	allocIdExist = onuGponDbBwAllocExist(allocId);
 	if (allocIdExist == MV_TRUE)
-		return (MV_OK);
+		return (MV_NO_CHANGE/*MV_OK*/);
 
 	/* set the Alloc-Id exist to the database */
 	status = onuGponDbBwAllocInsert(allocId, &entry);
@@ -714,21 +766,15 @@ MV_STATUS onuGponAllocIdDeAssign(MV_U32 allocId)
 *******************************************************************************/
 MV_STATUS onuGponAllocIdFreeAllBuffers(void)
 {
-    MV_STATUS status;
+    MV_STATUS status = MV_OK;
     MV_U32    tcontNum = 0xFF;
+
 #ifdef MV_GPON_DEBUG_PRINT
     mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
-               "DEBUG: (%s:%d) release All T-Conts buffers, tpm_deactive_tcont\n", __FILE_DESC__, __LINE__);
+	       "DEBUG: (%s:%d) FreeAllBuffers\n", __FILE_DESC__, __LINE__);
 #endif /* MV_GPON_DEBUG_PRINT */
 
-    printk("TCONT flush, FreeAllBuffers\n");
-    status = onuGponWqTcontFlush(tcontNum);
-    if (status != MV_OK)
-    {
-            mvPonPrint(PON_PRINT_ERROR, PON_ALLOC_MODULE,
-        	       "ERROR: (%s:%d) onuGponAllocIdFreeAllBuffers, failed to schedule All T-Cont flush in WQ\n",
-        	       __FILE_DESC__, __LINE__, tcontNum);
-    }
+    onuGponWqTcontFlush(tcontNum);
 
     return(status);
 }
@@ -961,14 +1007,14 @@ MV_STATUS onuGponAllocIdTcontClear(MV_U32 tcontNum)
 *******************************************************************************/
 MV_STATUS onuGponAllocIdTcontClearAll(void)
 {
-	MV_U32  iEntry;
-	MV_BOOL exist;
-	MV_STATUS status;
+	MV_U32    iEntry;
+	MV_BOOL   exist;
+	MV_STATUS status = MV_OK;
 	MV_U32    tcontNum = 0xFF;
 
 #ifdef MV_GPON_DEBUG_PRINT
 	mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
-				"DEBUG: (%s:%d) Clear All Alloc-Ids from T-TCONTs\n", __FILE_DESC__, __LINE__);
+		   "DEBUG: (%s:%d) TCONT flush, Clear All\n", __FILE_DESC__, __LINE__);
 #endif /* MV_GPON_DEBUG_PRINT */
 
 	for (iEntry = 0 ; iEntry < ONU_GPON_MAX_NUM_OF_T_CONTS ; iEntry++) {
@@ -978,15 +1024,7 @@ MV_STATUS onuGponAllocIdTcontClearAll(void)
 			onuGponAllocIdTcontClear(iEntry);
 	}
 
-	printk("TCONT flush, Clear All\n");
-	status = onuGponWqTcontFlush(tcontNum);
-	if (status != MV_OK)
-	{
-	 	mvPonPrint(PON_PRINT_ERROR, PON_ALLOC_MODULE,
-	 		   "ERROR: (%s:%d) onuGponAllocIdTcontClearAll, failed to schedule All T-Cont flush in WQ\n",
-	 		   __FILE_DESC__, __LINE__);
-	}
-
+	onuGponWqTcontFlush(tcontNum);
 
 	return (MV_OK);
 }

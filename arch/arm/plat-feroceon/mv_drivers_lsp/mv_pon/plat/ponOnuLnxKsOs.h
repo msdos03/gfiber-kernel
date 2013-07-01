@@ -187,7 +187,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define ONU_PON_TIMER_SILENCE_INTERVAL       (60000) /* 60 sec */
 #define ONU_PON_TIMER_TX_MOD_INTERVAL        (1)   /* 1 msec */
 #define ONU_PON_TIMER_EVENT_MISS_INTERVAL    (10)   /* 10 msec */
-#define ONU_PON_TIMER_TX_PWR_INTERVAL        (1000)  /* 1 sec */
+#define ONU_PON_TIMER_TX_PWR_INTERVAL        (6000)  /* 1   sec  */
 
 #define ONU_PON_TIMER_ACTIVE                 (1)
 #define ONU_PON_TIMER_NOT_ACTIVE             (0)

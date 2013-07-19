@@ -1335,6 +1335,17 @@ MV_BOARD_MPP_INFO gflt200Evt1InfoBoardMppConfigValue[] = {
 	 }
 };
 
+MV_BOARD_MPP_INFO gflt200Evt2InfoBoardMppConfigValue[] = {
+	{{
+	  GFLT200_EVT2_MPP0_7,
+	  GFLT200_EVT2_MPP8_15,
+	  GFLT200_EVT2_MPP16_23,
+	  GFLT200_EVT2_MPP24_31,
+	  GFLT200_EVT2_MPP32_37
+	  }
+	 }
+};
+
 /*
 MV_BOARD_SPEC_INIT gflt200BoardSpecInit[] = {
 	{
@@ -1351,14 +1362,16 @@ MV_BOARD_SPEC_INIT gflt200BoardSpecInit[] = {
 
 #define GFLT200_GPP_BOARD_VER_MASK	((1 << 18) | (1 << 15) | (1 << 13))
 #define GFLT200_EVT1_BOARD_VER		(0)
+#define GFLT200_EVT2_BOARD_VER		(1 << 13)
 
 static MV_VOID gflt200BoardInit(MV_BOARD_INFO *pBoardInfo)
 {
+	MV_U32 board_ver;
+
 	mvGppTypeSet(0, GFLT200_GPP_BOARD_VER_MASK, GFLT200_GPP_BOARD_VER_MASK);
 
-	switch (mvGppValueGet(0, GFLT200_GPP_BOARD_VER_MASK)) {
+	switch ((board_ver = mvGppValueGet(0, GFLT200_GPP_BOARD_VER_MASK))) {
 	case GFLT200_EVT1_BOARD_VER:
-	default: /* latest */
 		pBoardInfo->numBoardMppConfigValue
 			= MV_ARRAY_SIZE(gflt200Evt1InfoBoardMppConfigValue);
 		pBoardInfo->pBoardMppConfigValue
@@ -1369,6 +1382,22 @@ static MV_VOID gflt200BoardInit(MV_BOARD_INFO *pBoardInfo)
 		pBoardInfo->gppOutValMid = GFLT200_EVT1_GPP_OUT_VAL_MID;
 		pBoardInfo->gppPolarityValLow = GFLT200_EVT1_GPP_POL_LOW;
 		pBoardInfo->gppPolarityValMid = GFLT200_EVT1_GPP_POL_MID;
+		break;
+
+	default:
+		pr_err("GFLT200: unknown board version '%x'\n", board_ver);
+		/* fallthrough */
+	case GFLT200_EVT2_BOARD_VER:
+		pBoardInfo->numBoardMppConfigValue
+			= MV_ARRAY_SIZE(gflt200Evt2InfoBoardMppConfigValue);
+		pBoardInfo->pBoardMppConfigValue
+			= gflt200Evt2InfoBoardMppConfigValue;
+		pBoardInfo->gppOutEnValLow = GFLT200_EVT2_GPP_OUT_ENA_LOW;
+		pBoardInfo->gppOutEnValMid = GFLT200_EVT2_GPP_OUT_ENA_MID;
+		pBoardInfo->gppOutValLow = GFLT200_EVT2_GPP_OUT_VAL_LOW;
+		pBoardInfo->gppOutValMid = GFLT200_EVT2_GPP_OUT_VAL_MID;
+		pBoardInfo->gppPolarityValLow = GFLT200_EVT2_GPP_POL_LOW;
+		pBoardInfo->gppPolarityValMid = GFLT200_EVT2_GPP_POL_MID;
 		break;
 	}
 }

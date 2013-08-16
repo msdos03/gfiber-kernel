@@ -89,8 +89,6 @@ extern spinlock_t onuPonIrqLock;
 
 /* Local Variables
 ------------------------------------------------------------------------------*/
-static   S_EponIoctlTdmQueue ioctlTdmQueue;
-static   S_EponIoctlDba      ioctlDba;
 
 /* Export Functions
 ------------------------------------------------------------------------------*/
@@ -477,7 +475,9 @@ MV_STATUS onuEponMiHoldoverConfig(S_EponIoctlHoldOver *ioctlHoldover)
   onuEponDbOnuHoldoverStateSet(ioctlHoldover->holdoverState);
   onuEponDbOnuHoldoverTimeSet(ioctlHoldover->holdoverTime);
 
-  onuEponIsrTimerHoldoverIntervalSet(ioctlHoldover->holdoverTime, 0);
+  /* Add the newly configured holdover time with OpticalLosTime */
+  onuEponIsrTimerHoldoverIntervalSet(onuEponDbOnuHoldoverTimeGet() + 
+                                     onuEponDbOnuOpticalLosTimeGet(), 0);
 
   mvPonPrint(PON_PRINT_INFO, PON_API_MODULE,
 			 "DEBUG: Holdover config, state(%d), time(%d))\n",
@@ -508,6 +508,132 @@ MV_STATUS onuEponMiHoldoverReport(S_EponIoctlHoldOver *ioctlHoldover)
   ioctlHoldover->holdoverTime  = onuEponDbOnuHoldoverTimeGet();
 
   return(status);
+}
+
+/*******************************************************************************
+**
+**  onuEponMiLosTimeConfig
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets the time delay for entering holdover status
+**
+**  PARAMETERS:  *ioctlLosTime - time delay value
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+MV_STATUS onuEponMiLosTimeConfig(S_EponIoctlLosTime *ioctlLosTime)
+{
+    MV_STATUS status = MV_OK;
+
+    MV_U16 opticalLosTime;
+    MV_U16 macLosTime;
+
+    opticalLosTime = ioctlLosTime->optical_los_time;
+    macLosTime     = ioctlLosTime->mac_los_time;
+
+    status = mvEponApiLosTimeConfig(opticalLosTime, macLosTime);
+
+    return status;
+}
+
+/*******************************************************************************
+**
+**  onuEponMiTxPowerControlConfig
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function controls the TX power on and off
+**
+**  PARAMETERS:  ioctlTxControl - on, off and time delay before off
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+MV_STATUS onuEponMiTxPowerControlConfig(S_EponIoctlTxControl *ioctlTxControl)
+{
+    MV_STATUS status = MV_OK;
+    MV_U16 action;
+    MV_U16 time;
+        
+    action = ioctlTxControl->action;
+    time   = ioctlTxControl->time * 1000;   /* The time from user space is expressed in second */
+
+    status = mvEponApiTxPowerCtrlConfig(action, time);
+
+    return status;
+}
+
+/*******************************************************************************
+**
+**  onuEponMiPowerSavingConfig
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets maxSleepDuration for power saving mode
+**
+**  PARAMETERS:  *ioctlPowerSaving - power saving mode duration
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+MV_STATUS onuEponMiPowerSavingConfig(S_EponIoctlPowerSaving *ioctlPowerSaving)
+{
+    MV_STATUS status = MV_OK;
+
+    MV_U8  earlyWakeup;
+    MV_U64 maxSleepDuration;
+
+    earlyWakeup      = ioctlPowerSaving->earlyWakeUp;
+    maxSleepDuration = ioctlPowerSaving->maxSleepDuration;
+
+    status = mvEponApiPowerSavingConfig(earlyWakeup, maxSleepDuration);
+
+    return status;
+}
+
+/*******************************************************************************
+**
+**  onuEponMiControlSleepConfig
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function triggers the action of power mode transformation
+**
+**  PARAMETERS:  *ioctlControlSleep - power control and sleep/wakeup duration
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+MV_STATUS onuEponMiControlSleepConfig(S_EponIoctlControlSleep *ioctlControlSleep)
+{
+    MV_STATUS status = MV_OK;
+
+    uint8_t action;
+
+    action = ioctlControlSleep->action;
+
+    if (action == E_GPON_SLEEP_ACTION_DISABLE)
+    {
+        mvEponApiSleepCtrlDisable();
+    }
+    else if (action == E_GPON_SLEEP_ACTION_ENABLE)
+    {
+        mvEponApiSleepCtrlEnable();
+    }
+    else if (action == E_GPON_SLEEP_ACTION_CONFIG)
+    {
+        mvEponApiSleepCtrlCfg(ioctlControlSleep->sleepMode, 
+                              ioctlControlSleep->sleepDuration, 
+                              ioctlControlSleep->waitDuration);
+    }
+
+    return status;
 }
 
 /*******************************************************************************
@@ -650,11 +776,17 @@ int mvEponCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd,
   S_EponIoctlFec      ioctlFec;
   S_EponIoctlEnc      ioctlEnc;
   S_EponIoctlOamTx    ioctlTxOam;
+  S_EponIoctlDba      ioctlDba;
   S_EponIoctlHoldOver ioctlHoldover;
   S_EponIoctlSilence  ioctlSilence;
+  S_EponIoctlTdmQueue ioctlTdmQueue;
   MV_U32              ioctlState;
   MV_U32              ioctlAlarm;
   S_EponIoctlRogueOnu ioctlRogueOnu;
+  S_EponIoctlLosTime      ioctlLosTime;
+  S_EponIoctlTxControl    ioctlTxControl;
+  S_EponIoctlPowerSaving  ioctlPowerSaving;
+  S_EponIoctlControlSleep ioctlControlSleep;
   unsigned long       flags;
   int                 ret = -EINVAL;
 
@@ -870,6 +1002,90 @@ int mvEponCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd,
       ret = 0;
       break;
 
+    /* ====== MVEPON_IOCTL_LOS_TIME ==================== */
+    case MVEPON_IOCTL_LOS_TIME:
+        if (copy_from_user(&ioctlLosTime, (S_EponIoctlLosTime*)arg, sizeof(S_EponIoctlLosTime)))
+        {
+            mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+      		           "ERROR: (%s:%d) copy_from_user failed\n", __FILE_DESC__, __LINE__);
+            goto ioctlErr;
+        }
+
+        spin_lock_irqsave(&onuPonIrqLock, flags);
+        status = onuEponMiLosTimeConfig(&(ioctlLosTime));
+        spin_unlock_irqrestore(&onuPonIrqLock, flags);
+        if (status != MV_OK)
+        {
+            goto ioctlErr;
+        }
+
+        ret = 0;
+        
+        break;
+
+    /* ====== MVEPON_IOCTL_TX_CONTROL ==================== */
+    case MVEPON_IOCTL_TX_CONTROL:
+        if (copy_from_user(&ioctlTxControl, (S_EponIoctlTxControl*)arg, sizeof(S_EponIoctlTxControl)))
+        {
+            mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+      		           "ERROR: (%s:%d) copy_from_user failed\n", __FILE_DESC__, __LINE__);
+            goto ioctlErr;
+        }
+
+        spin_lock_irqsave(&onuPonIrqLock, flags);
+        status = onuEponMiTxPowerControlConfig(&(ioctlTxControl));
+        spin_unlock_irqrestore(&onuPonIrqLock, flags);
+        if (status != MV_OK)
+        {
+            goto ioctlErr;
+        }
+
+        ret = 0;
+        
+        break;
+
+    /* ====== MVEPON_IOCTL_POWER_SAVING ==================== */
+    case MVEPON_IOCTL_POWER_SAVING:
+        if (copy_from_user(&ioctlPowerSaving, (S_EponIoctlPowerSaving*)arg, sizeof(S_EponIoctlPowerSaving)))
+        {
+            mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+      		           "ERROR: (%s:%d) copy_from_user failed\n", __FILE_DESC__, __LINE__);
+            goto ioctlErr;
+        }
+
+        spin_lock_irqsave(&onuPonIrqLock, flags);
+        status = onuEponMiPowerSavingConfig(&(ioctlPowerSaving));
+        spin_unlock_irqrestore(&onuPonIrqLock, flags);
+        if (status != MV_OK)
+        {
+            goto ioctlErr;
+        }
+
+        ret = 0;
+
+        break;
+
+    /* ====== MVEPON_IOCTL_CONTROL_SLEEP ==================== */
+    case MVEPON_IOCTL_CONTROL_SLEEP:
+        if (copy_from_user(&ioctlControlSleep, (S_EponIoctlControlSleep*)arg, sizeof(S_EponIoctlControlSleep)))
+        {
+            mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+      		           "ERROR: (%s:%d) copy_from_user failed\n", __FILE_DESC__, __LINE__);
+            goto ioctlErr;
+        }
+
+        spin_lock_irqsave(&onuPonIrqLock, flags);
+        status = onuEponMiControlSleepConfig(&(ioctlControlSleep));
+        spin_unlock_irqrestore(&onuPonIrqLock, flags);
+        if (status != MV_OK)
+        {
+            goto ioctlErr;
+        }
+
+        ret = 0;
+        
+        break;
+
     /* ====== MVEPON_IOCTL_SILENCE ==================== */
     case MVEPON_IOCTL_SILENCE:
       if(copy_from_user(&ioctlSilence, (S_EponIoctlSilence*)arg, sizeof(S_EponIoctlSilence)))
@@ -925,7 +1141,7 @@ int mvEponCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
         spin_lock_irqsave(&onuPonIrqLock, flags);
         
-        status = onuEponDbP2PForceModeSet(ioctlState);
+        onuEponDbP2PForceModeSet(ioctlState);
         
         spin_unlock_irqrestore(&onuPonIrqLock, flags);
 

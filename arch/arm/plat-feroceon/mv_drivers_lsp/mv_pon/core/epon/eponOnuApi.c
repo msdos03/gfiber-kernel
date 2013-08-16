@@ -806,9 +806,23 @@ MV_BOOL onuEponLinkIsUp(void)
 	}
 }
 
+/*******************************************************************************
+**
+**  mvEponApi2kSupportedSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets 2K byte packets supported on MC board
+**
+**  PARAMETERS:  pkt2kSupported - 2K byte enable or disable
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_TRUE or MV_FLASE
+**
+*******************************************************************************/
 MV_STATUS mvEponApi2kSupportedSet(MV_U32 pkt2kSupported)
 {
-    MV_STATUS status = 0;
+    MV_STATUS status;
     MV_U32    devId;
 
     devId = mvCtrlModelGet();
@@ -833,6 +847,294 @@ MV_STATUS mvEponApi2kSupportedSet(MV_U32 pkt2kSupported)
     }
 
     return (status);
+}
+
+/*******************************************************************************
+**
+**  mvEponApiLosTimeConfig
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets time duration to expire for entering holdover
+**
+**  PARAMETERS:  opticalLosTime - time duration when no optical signal detected
+**               macLosTime     - time duration when no GATE MPCPDU received
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_TRUE or MV_FLASE
+**
+*******************************************************************************/
+MV_STATUS mvEponApiLosTimeConfig(MV_U16 opticalLosTime, MV_U16 macLosTime)
+{
+    MV_STATUS status = MV_OK;
+    
+    onuEponDbOnuOpticalLosTimeSet(opticalLosTime);
+    onuEponDbOnuMacLosTimeSet(macLosTime);
+
+    /* If the holdover timer is not active, we add the OpticalLosTimer to the holdover time and save */
+    if (onuPonResourceTbl_s.onuPonHoldoverTimerId.onuPonTimerActive == ONU_PON_TIMER_NOT_ACTIVE)
+    {
+        /* Add the configured OptLosTime to holdover time and save for next holdover */
+        onuPonTimerUpdate(&(onuPonResourceTbl_s.onuPonHoldoverTimerId), 0, 
+                          onuEponDbOnuHoldoverTimeGet() + onuEponDbOnuOpticalLosTimeGet(), 0);
+    }
+
+    return status;
+}
+
+/*******************************************************************************
+**
+**  mvEponApiTxPowerCtrlConfig
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function controls the TX power on and off
+**
+**  PARAMETERS:  action - turn on and turn off the TX power, or turn off after 
+**                        certain time duration.
+**               time   - time duration to be expired before turning off TX
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_TRUE or MV_FLASE
+**
+*******************************************************************************/
+MV_STATUS mvEponApiTxPowerCtrlConfig(MV_U16 action, MV_U16 time)
+{
+    MV_STATUS status = MV_OK;
+    
+    if (action == E_EPON_IOCTL_ENABLE_TX)
+    {
+        onuPonTxPowerOn(MV_TRUE);
+    }
+    else if (action == E_EPON_IOCTL_DISABLE_TX)
+    {
+        onuPonTxPowerOn(MV_FALSE);
+    }
+    else if (action == E_EPON_IOCTL_DISABLE_TX_DELAY)
+    {        
+        onuPonTimerUpdate(&(onuPonResourceTbl_s.onuEponTxControlTimerId), 0, time, 1);
+    }
+
+    return status;
+}
+
+/*******************************************************************************
+**
+**  mvEponApiPowerSavingConfig
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets the parameters for power saving mode
+**
+**  PARAMETERS:  earlyWakeup - set the ability of supporting early wake up
+**               maxSleepDuration - time period for keeping power saving mode
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_TRUE or MV_FLASE
+**
+*******************************************************************************/
+MV_STATUS mvEponApiPowerSavingConfig(MV_U8 earlyWakeup, MV_U64 maxSleepDuration)
+{
+    MV_STATUS status = MV_OK;
+    
+    if ((onuEponDbOnuSleepDurationGet() + onuEponDbOnuWakeupDurationGet())
+        >= maxSleepDuration)
+    {
+        mvPonPrint(PON_PRINT_INFO, PON_API_MODULE,
+			       "ERROR: Wrong parameters, sleep(%d) + wakeup(%d) >= maxSleepDuration(%d)\r\n", 
+			       onuEponDbOnuSleepDurationGet(), onuEponDbOnuWakeupDurationGet(), 
+			       maxSleepDuration);
+        
+        return MV_BAD_PARAM;
+    }
+
+    onuEponDbOnuPowerSavingWakeupSet(earlyWakeup);
+    onuEponDbOnuPowerSavingMaxSleepDurationSet(maxSleepDuration);
+
+    if (onuPonResourceTbl_s.onuEponMaxSleepTimerId.onuPonTimerActive == ONU_PON_TIMER_ACTIVE)
+    {
+        onuPonTimerUpdate(&(onuPonResourceTbl_s.onuEponMaxSleepTimerId), 0, 
+                          maxSleepDuration, 1);
+    }
+
+    return status;
+}
+
+/*******************************************************************************
+**
+**  mvEponApiSleepModeCtrl
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function controls sleep mode
+**
+**  PARAMETERS:  enable - turn off and turn on the TX or RX
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_TRUE or MV_FLASE
+**
+**  Ref:         Called by mvEponApiSleepCtrlEnable, mvEponApiSleepCtrlDisable, 
+**               mvEponApiSleepCtrlCfg, onuEponMaxSleepTimerHndl, 
+**               onuEponSleepWakeDurationTimerHndl
+*******************************************************************************/
+MV_STATUS mvEponApiSleepModeCtrl(MV_U32 enable)
+{
+    MV_STATUS status = MV_OK;
+    
+    if (onuEponDbOnuSleepModeGet() == E_EPON_SLEEP_MODE_CTRL_TX)
+    {
+        if (enable == MV_TRUE)
+        {
+            status |= onuPonTxPowerOn(MV_FALSE);
+        }
+        else
+        {
+            status |= onuPonTxPowerOn(MV_TRUE);
+        }
+    }
+    else if (onuEponDbOnuSleepModeGet() == E_EPON_SLEEP_MODE_CTRL_TX_RX)
+    {
+        if (enable == MV_TRUE)
+        {
+            status |= onuPonTxPowerOn(MV_FALSE);
+            status |= mvOnuEponMacSerdesPuRxWrite(MV_FALSE);
+        }
+        else
+        {
+            status |= onuPonTxPowerOn(MV_TRUE);
+            status |= mvOnuEponMacSerdesPuRxWrite(MV_TRUE);
+        }
+    }
+
+    return status;
+}
+
+/*******************************************************************************
+**
+**  mvEponApiSleepCtrlDisable
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets ONU to leave the power saving mode
+**
+**  PARAMETERS:  
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_TRUE or MV_FLASE
+**
+*******************************************************************************/
+MV_STATUS mvEponApiSleepCtrlDisable()
+{   
+    /* Stop max sleep timer */
+    if (onuPonResourceTbl_s.onuEponMaxSleepTimerId.onuPonTimerActive == ONU_PON_TIMER_ACTIVE)
+    {
+        onuPonTimerDisable(&(onuPonResourceTbl_s.onuEponMaxSleepTimerId));
+    }
+
+    /* Stop sleep/wakeup duration timer */
+    if (onuPonResourceTbl_s.onuEponSleepDurationTimerId.onuPonTimerActive == ONU_PON_TIMER_ACTIVE)
+    {
+        onuPonTimerDisable(&(onuPonResourceTbl_s.onuEponSleepDurationTimerId));
+    }
+
+    /* Enable TX/RX power */
+    mvEponApiSleepModeCtrl(MV_FALSE);
+
+    /* Leave the power saving status */
+    onuEponDbOnuSleepWakeupStatusSet(E_EPON_NOT_POWER_SAVING_STATUS);
+
+    return(MV_OK);
+}
+
+/*******************************************************************************
+**
+**  mvEponApiSleepCtrlEnable
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets ONU to enter the power saving mode
+**
+**  PARAMETERS:  
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_TRUE or MV_FLASE
+**
+*******************************************************************************/
+MV_STATUS mvEponApiSleepCtrlEnable()
+{
+    /* refresh max sleep timer, no matter it's active or not */
+    onuPonTimerUpdate(&(onuPonResourceTbl_s.onuEponMaxSleepTimerId), 0, 
+                      onuEponDbOnuPowerSavingMaxSleepDurationGet(), 1);
+
+    /* refresh sleep/wakeup duration timer, no matter it's active or not */
+    onuPonTimerUpdate(&(onuPonResourceTbl_s.onuEponSleepDurationTimerId), 0, 
+                      onuEponDbOnuSleepDurationGet(), 1);
+
+    /* if the current status is not sleep, then go to sleep status */
+    if (onuEponDbOnuSleepWakeupStatusGet() != E_EPON_POWER_SAVING_SLEEP_STATUS)
+    {
+        /* Disable TX/RX power */
+        mvEponApiSleepModeCtrl(MV_TRUE);
+
+        /* update status to sleep status */
+        onuEponDbOnuSleepWakeupStatusSet(E_EPON_POWER_SAVING_SLEEP_STATUS);
+    }
+
+    return(MV_OK);
+}
+
+/*******************************************************************************
+**
+**  mvEponApiSleepCtrlCfg
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets the parameters used in the power saving mode
+**
+**  PARAMETERS:  mode - 0: do nothing, 1: turn off Tx, 2: turn off Tx and Rx
+**               sleepDuration - time duration for keeping sleep
+**               wakeupDuration - time duration for being wakeup
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_TRUE or MV_FLASE
+**
+*******************************************************************************/
+MV_STATUS mvEponApiSleepCtrlCfg(MV_U8 mode, MV_U32 sleepDuration, MV_U32 wakeupDuration)
+{
+    if ((sleepDuration + wakeupDuration) >= onuEponDbOnuPowerSavingMaxSleepDurationGet())
+    {
+        mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+			       "ERROR: Wrong parameters, sleep(%d) + wakeup(%d) >= maxSleepDuration(%d)\r\n", 
+			       sleepDuration, sleepDuration, 
+			       onuEponDbOnuPowerSavingMaxSleepDurationGet());
+        
+        return MV_BAD_PARAM;
+    }
+
+    /* save paraters into DB */
+    onuEponDbOnuSleepModeSet(mode);
+    onuEponDbOnuSleepDurationSet(sleepDuration);
+    onuEponDbOnuWakeupDurationSet(wakeupDuration);
+
+    /* refresh max sleep timer, no matter it's active or not */
+    onuPonTimerUpdate(&(onuPonResourceTbl_s.onuEponMaxSleepTimerId), 0, 
+                      onuEponDbOnuPowerSavingMaxSleepDurationGet(), 1);
+
+    /* refresh sleep/wakeup duration timer, no matter it's active or not */
+    onuPonTimerUpdate(&(onuPonResourceTbl_s.onuEponSleepDurationTimerId), 0, 
+                      onuEponDbOnuSleepDurationGet(), 1);
+
+    /* if the current status is not sleep, then go to sleep status */
+    if (onuEponDbOnuSleepWakeupStatusGet() != E_EPON_POWER_SAVING_SLEEP_STATUS)
+    {
+        /* Disable TX/RX power */
+        mvEponApiSleepModeCtrl(MV_TRUE);
+
+        /* update status to sleep status */
+        onuEponDbOnuSleepWakeupStatusSet(E_EPON_POWER_SAVING_SLEEP_STATUS);
+    }
+
+    return(MV_OK);
 }
 
 

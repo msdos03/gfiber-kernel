@@ -234,6 +234,113 @@ tpm_error_code_t tpm_src_port_mac_map(tpm_src_port_type_t src_port,
 }
 
 /*******************************************************************************
+* tpm_sw_set_gmac_speed_duplex_fc
+*
+* DESCRIPTION:
+*       This function will update GMAC Port Auto-Negotiation Configuration Register if PHY is
+*        connected to GMAC directly. Maily for Media Convert.
+*
+* INPUTS:
+*       src_port         - Source port in UNI port index, UNI0, UNI1...UNI4.
+*       auto_nego_en - Auto-negotiation enable status
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success - TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*        NONE.
+*******************************************************************************/
+static tpm_error_code_t tpm_sw_set_gmac_speed_duplex_fc(uint32_t owner_id,
+                                                        tpm_src_port_type_t src_port,
+                                                        bool auto_nego_en)
+{
+    tpm_error_code_t retVal = TPM_RC_OK;
+    tpm_phy_ctrl_t   phy_access_way;
+    uint32_t switch_init;
+    tpm_gmacs_enum_t gmac_port;
+    uint32_t phy_direct_addr;
+    tpm_phy_speed_t cfg_speed;
+    bool  cfg_duplex, cfg_fc;
+
+    retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
+    if (retVal != TPM_RC_OK) {
+        printk(KERN_ERR
+               "Port%d PHY access way check failed\n", src_port);
+        return retVal;
+    }
+    /* check swicth init or not */
+    if (tpm_db_switch_init_get(&switch_init) != TPM_DB_OK) {
+        printk(KERN_ERR "ERROR: (%s:%d) tpm_db_switch_init_get Failed\n", __FUNCTION__, __LINE__);
+        retVal = ERR_GENERAL;
+        return retVal;
+    }
+    /* The routine only apply PHY connected to GMAC */
+    if ((PHY_SMI_MASTER_CPU == phy_access_way) &&
+         (!switch_init)) {
+        for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
+            if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
+            break;
+        }
+        if (gmac_port == TPM_MAX_NUM_GMACS) {
+            printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
+            retVal = ERR_GENERAL;
+            return retVal;
+        }
+
+        if (auto_nego_en) {/* auto-nego enable */
+            if (mvNetaSpeedDuplexSet((int)gmac_port, MV_ETH_SPEED_AN, MV_ETH_DUPLEX_AN) != MV_OK) {
+                printk(KERN_ERR "ERROR: (%s:%d) mvNetaSpeedDuplexSet Failed\n", __FUNCTION__, __LINE__);
+                retVal = ERR_GENERAL;
+                return retVal;
+            }
+            if (mvNetaFlowCtrlSet((int)gmac_port, MV_ETH_FC_AN_NO)  != MV_OK){
+                printk(KERN_ERR "ERROR: (%s:%d) mvNetaFlowCtrlSet Failed\n", __FUNCTION__, __LINE__);
+                retVal = ERR_GENERAL;
+                return retVal;
+            }
+        } else {/* auto-nego disable */
+            retVal = tpm_phy_get_port_speed(owner_id, src_port, &cfg_speed);
+            if (retVal) {
+                printk(KERN_ERR "ERROR: (%s:%d) PHY speed config get failed\n", __FUNCTION__, __LINE__);
+                return retVal;
+            }
+            retVal = tpm_phy_get_port_duplex_mode(owner_id, src_port, &cfg_duplex);
+            if (retVal) {
+                printk(KERN_ERR "ERROR: (%s:%d) PHY duplex config get failed\n", __FUNCTION__, __LINE__);
+                return retVal;
+            }
+            retVal = tpm_phy_get_port_flow_control_support(owner_id, src_port, &cfg_fc);
+            if (retVal) {
+                printk(KERN_ERR "ERROR: (%s:%d) PHY flow control config get failed\n", __FUNCTION__, __LINE__);
+                return retVal;
+            }
+            if (mvNetaSpeedDuplexSet((int)gmac_port,
+                                     (cfg_speed + MV_ETH_SPEED_10),
+                                     (cfg_duplex ? MV_ETH_DUPLEX_FULL : MV_ETH_DUPLEX_HALF)) != MV_OK) {
+                printk(KERN_ERR "ERROR: (%s:%d) mvNetaSpeedDuplexSet Failed\n", __FUNCTION__, __LINE__);
+                retVal = ERR_GENERAL;
+                return retVal;
+            }
+            if (mvNetaFlowCtrlSet((int)gmac_port, (cfg_fc ? MV_ETH_FC_ENABLE : MV_ETH_FC_DISABLE)) != MV_OK) {
+                printk(KERN_ERR "ERROR: (%s:%d) mvNetaFlowCtrlSet Failed\n", __FUNCTION__, __LINE__);
+                retVal = ERR_GENERAL;
+                return retVal;
+            }
+        }
+    } else {
+        printk(KERN_ERR "PHY not connected to GMAC\n");
+        retVal = ERR_GENERAL;
+        return retVal;
+    }
+
+    return retVal;
+}
+
+/*******************************************************************************
 * tpm_sw_set_debug_trace_flag
 *
 * DESCRIPTION:
@@ -4981,6 +5088,12 @@ tpm_error_code_t tpm_phy_set_port_autoneg_mode
                 retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
             }
         }
+        /* Update GMAC speed, duplex and flow control */
+        retVal = tpm_sw_set_gmac_speed_duplex_fc(owner_id, src_port, (state ? true : false));
+        if (retVal != TPM_RC_OK) {
+            printk(KERN_ERR "Failed to update GMAC config with port%d\n", src_port);
+            return retVal;
+        }
     } else {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
@@ -6444,6 +6557,13 @@ tpm_error_code_t tpm_phy_set_port_duplex_mode
             printk(KERN_ERR
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        } else {
+            /* Update GMAC speed, duplex and flow control */
+            retVal = tpm_sw_set_gmac_speed_duplex_fc(owner_id, src_port, false);
+            if (retVal != TPM_RC_OK) {
+                printk(KERN_ERR "Failed to update GMAC config with port%d\n", src_port);
+                return retVal;
+            }
         }
     } else {
         /* PHY accessed through switch, as original do */
@@ -6619,6 +6739,13 @@ tpm_error_code_t tpm_phy_set_port_speed
             printk(KERN_ERR
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        } else {
+            /* Update GMAC speed, duplex and flow control */
+            retVal = tpm_sw_set_gmac_speed_duplex_fc(owner_id, src_port, false);
+            if (retVal != TPM_RC_OK) {
+                printk(KERN_ERR "Failed to update GMAC config with port%d\n", src_port);
+                return retVal;
+            }
         }
     } else {
         /* PHY accessed through switch, as original do */
@@ -7883,6 +8010,13 @@ tpm_error_code_t tpm_phy_set_port_speed_duplex_mode
             printk(KERN_ERR
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+        } else {
+            /* Update GMAC speed, duplex and flow control */
+            retVal = tpm_sw_set_gmac_speed_duplex_fc(owner_id, src_port, false);
+            if (retVal != TPM_RC_OK) {
+                printk(KERN_ERR "Failed to update GMAC config with port%d\n", src_port);
+                return retVal;
+            }
         }
     } else {
         /* PHY accessed through switch, as original do */
@@ -8036,3 +8170,70 @@ void tpm_sw_init
                 "==EXIT== %s\n\r",__FUNCTION__);
     }
 }
+
+/*******************************************************************************
+* tpm_sw_set_static_multicast_mac
+*
+* DESCRIPTION:
+*       This function creates or destory a static MAC entry in the MAC address table for taget
+*       UNI port bitmap in the integrated switch
+*
+* INPUTS:
+*       owner_id    	- APP owner id, should be used for all API calls.
+*       tpm_trg_port    - target port bm in UNI port index, TPM_TRG_UNI_0 | TPM_TRG_UNI_1 | ...
+*       static_mac  	- 6 byte network order MAC source address.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success - TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*       None.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_set_static_multicast_mac
+(
+    uint32_t            owner_id,
+    tpm_trg_port_type_t tpm_trg_port,
+    uint8_t             static_mac[6]
+)
+{
+    int32_t ret_code;
+    uint32_t trg_port_bm = 0;
+
+    SWITCH_INIT_CHECK();
+
+    if (trace_sw_dbg_flag)
+    {
+        printk(KERN_INFO
+               "==ENTER==%s: owner_id[%d],tpm_trg_port[0x%x],static_mac [0x%02x%02x%02x%02x%02x%02x]\n",
+               __FUNCTION__,owner_id,tpm_trg_port,static_mac[0],static_mac[1], static_mac[2],
+               static_mac[3],static_mac[4], static_mac[5]);
+    }
+
+	if((static_mac[0] != 0x01) && (static_mac[0] != 0x33 || static_mac[1] != 0x33))
+    {
+    	printk(KERN_ERR
+           "%s:%d: function failed, 0x%x:%x:%x:%x:%x:%x is not multicast address \r\n", 
+           __FUNCTION__,__LINE__, static_mac[0], static_mac[1], static_mac[2], static_mac[3], 
+           static_mac[4], static_mac[5]);
+    	IF_ERROR(ERR_SW_MAC_INVALID);
+    }
+    
+    trg_port_bm = tpm_db_trg_port_switch_port_get(tpm_trg_port);
+
+    if (tpm_trg_port == 0) {
+        ret_code = tpm_sw_del_static_mac(TPM_MOD_OWNER_TPM, static_mac);
+        IF_ERROR(ret_code);
+    } else {
+        ret_code = tpm_sw_set_static_mac_w_ports_mask(TPM_MOD_OWNER_TPM, trg_port_bm, static_mac);
+        IF_ERROR(ret_code);
+    }
+
+    return(TPM_RC_OK);
+}
+
+

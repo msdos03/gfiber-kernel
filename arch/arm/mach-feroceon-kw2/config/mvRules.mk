@@ -63,8 +63,8 @@ LSP_TPM_PERF_DIR  = $(PLAT_DRIVERS)/mv_tpm/perf
 LSP_TPM_PLAT_DIR  = $(PLAT_DRIVERS)/mv_tpm/plat
 endif
 
-ifeq ($(CONFIG_MV_INCLUDE_CUST),y)
-LSP_CUST_CORE_DIR  = $(PLAT_DRIVERS)/mv_cust
+ifeq ($(CONFIG_MV_INCLUDE_CPH),y)
+LSP_CPH_CORE_DIR  = $(PLAT_DRIVERS)/mv_cph
 endif
 
 LSP_EZXML_DIR     = $(PLAT_DRIVERS)/mv_ezxml

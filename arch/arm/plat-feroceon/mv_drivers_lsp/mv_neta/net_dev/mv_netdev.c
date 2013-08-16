@@ -663,9 +663,6 @@ int mv_eth_ctrl_txq_mode_get(int port, int txp, int txq, int *value)
 	if (pp == NULL)
 		return -ENODEV;
 
-	if (pp == NULL)
-		return -ENODEV;
-
 	txq_ctrl = &pp->txq_ctrl[txp * CONFIG_MV_ETH_TXQ + txq];
 	if (txq_ctrl->cpu_owner) {
 		mode = MV_ETH_TXQ_CPU;
@@ -826,7 +823,7 @@ void mv_eth_tx_special_check_func(int port,
 #ifdef CONFIG_MV_ETH_RX_SPECIAL
 /* Register special transmit check function */
 void mv_eth_rx_special_proc_func(int port, void (*func)(int port, int rxq, struct net_device *dev,
-							struct sk_buff *skb, struct neta_rx_desc *rx_desc))
+							struct eth_pbuf *pkt, struct neta_rx_desc *rx_desc))
 {
 	struct eth_port *pp = mv_eth_port_by_id(port);
 
@@ -1620,13 +1617,13 @@ static inline int mv_eth_rx(struct eth_port *pp, int rx_todo, int rxq)
 
 #if defined(CONFIG_MV_ETH_PNC) && defined(CONFIG_MV_ETH_RX_SPECIAL)
 		/* Special RX processing */
-#ifdef CONFIG_MV_CUST_FLOW_MAP_HANDLE
+#ifdef CONFIG_MV_CPH_FLOW_MAP_HANDLE
 		if ((MV_PON_PORT_ID == pp->port) || (rx_desc->pncInfo & NETA_PNC_RX_SPECIAL)) {
 #else
 		if (rx_desc->pncInfo & NETA_PNC_RX_SPECIAL) {
 #endif
 			if (pp->rx_special_proc) {
-				pp->rx_special_proc(pp->port, rxq, dev, (struct sk_buff *)(pkt->osInfo), rx_desc);
+				pp->rx_special_proc(pp->port, rxq, dev, pkt, rx_desc);
 				STAT_INFO(pp->stats.rx_special++);
 
                 if (rx_desc->pncInfo & NETA_PNC_RX_SPECIAL) {

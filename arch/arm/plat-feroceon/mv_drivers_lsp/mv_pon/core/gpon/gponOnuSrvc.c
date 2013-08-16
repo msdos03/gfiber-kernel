@@ -1221,7 +1221,7 @@ void onuGponSyncLogPrint(void)
             break;
 
         case ONU_GPON_LOG_MSG_CONTENT:
-            printk("[%03d] PLOAM message, data=0x%08x%08x%08x [030201000706050411100908]\n", printEntry,
+            printk("[%03d] PLOAM message, data=0x%08x%08x%08x\n", printEntry,
                     onuGponLogDb[printEntry].dataVal1,
                     onuGponLogDb[printEntry].dataVal2,
                     onuGponLogDb[printEntry].dataVal3);
@@ -1232,7 +1232,6 @@ void onuGponSyncLogPrint(void)
                     onuGponLogDb[printEntry].state,
                     onuGponLogDb[printEntry].time,
                     onuGponLogDb[printEntry].dataVal1);
-            printk("==========================================================\n");
             break;
 
         case ONU_GPON_LOG_INTERRUPT_XVR_SD:
@@ -1256,7 +1255,7 @@ void onuGponSyncLogPrint(void)
             break;
 
         case ONU_GPON_LOG_INTERRUPT_SERDES_STOP:
-            printk("[%03d] SERDES Stop, state=%d, time=%08x\n", printEntry,
+            printk("[%03d] Interrupt, state=%d, time=%08x\n", printEntry,
                     onuGponLogDb[printEntry].state,
                     onuGponLogDb[printEntry].time);
             break;
@@ -1265,14 +1264,6 @@ void onuGponSyncLogPrint(void)
             printk("[%03d] State, state=%d, time=%08x\n", printEntry,
                     onuGponLogDb[printEntry].dataVal1,
                     onuGponLogDb[printEntry].time);
-            break;
-
-        case ONU_GPON_LOG_FREE_TEXT:
-            printk("[%03d] Free, time=%08x %d %d %d\n", printEntry,
-                   onuGponLogDb[printEntry].time,
-		   onuGponLogDb[printEntry].dataVal1,
-		   onuGponLogDb[printEntry].dataVal2,
-		   onuGponLogDb[printEntry].dataVal3);
             break;
 
         default:
@@ -1310,10 +1301,15 @@ void onuGponSyncLogPrint(void)
 *******************************************************************************/
 MV_STATUS onuGponWqTcontFlush(MV_U32 tcont)
 {
+    MV_STATUS rcode;
+
     if (tcont != 0xFF)
-	queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontCleanWork[tcont]);
+	rcode = queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontCleanWork[tcont]);
     else
-        queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontCleanAllWork);
+        rcode = queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontCleanAllWork);
+
+    if(rcode == 0)
+	return(MV_ERROR);
 
     return(MV_OK);
 }
@@ -1335,7 +1331,11 @@ MV_STATUS onuGponWqTcontFlush(MV_U32 tcont)
 *******************************************************************************/
 MV_STATUS onuGponWqTcontActivate(MV_U32 tcont)
 {
-    queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontActiveWork[tcont]);
+    MV_STATUS rcode;
+
+    rcode = queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontActiveWork[tcont]);
+    if(rcode == 0)
+        return(MV_ERROR);
 
     return(MV_OK);
 }
@@ -1371,17 +1371,14 @@ void onuGponWqTcontFunc(struct work_struct *work)
     {
 	if (onuGponTcontFlushState[tcont] == TCONT_FLUSH_RUNNING_STATE)
 	{
-		mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
-			   "DEBUG: (%s:%d) TCONT (%d) CLEAN_EVENT\n", __FILE_DESC__, __LINE__, tcont);
-		onuGponTcontFlushState[tcont] = TCONT_FLUSH_BLOCKING_STATE;
-		tpm_deactive_tcont(tcont);
-		onuGponTcontFlushState[tcont] = TCONT_FLUSH_READY_STATE;
+	   onuGponTcontFlushState[tcont] = TCONT_FLUSH_BLOCKING_STATE;
+	   tpm_deactive_tcont(tcont);
+	   printk("TCONT (%d) CLEAN_EVENT\n", tcont);
+	   onuGponTcontFlushState[tcont] = TCONT_FLUSH_READY_STATE;
 	}
 	else
 	{
-		mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
-			   "DEBUG: (%s:%d) Received TCONT_CLEAN_EVENT while in T-CONT(%d) state(%s)\n",
-			   __FILE_DESC__, __LINE__, tcont, stateText[onuGponTcontFlushState[tcont]]);
+	   printk("Received TCONT_CLEAN_EVENT while in T-CONT(%d) state(%s)\n", tcont, stateText[onuGponTcontFlushState[tcont]]);
 	}
     }
 
@@ -1393,17 +1390,14 @@ void onuGponWqTcontFunc(struct work_struct *work)
 	{
 	    if (onuGponTcontFlushState[tcont] == TCONT_FLUSH_RUNNING_STATE)
 	    {
-		    mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
-			       "DEBUG: (%s:%d) TCONT (%d) CLEAN_EVENT\n", __FILE_DESC__, __LINE__, tcont);
-		    onuGponTcontFlushState[tcont] = TCONT_FLUSH_BLOCKING_STATE;
-		    tpm_deactive_tcont(tcont);
-		    onuGponTcontFlushState[tcont] = TCONT_FLUSH_READY_STATE;
+	       onuGponTcontFlushState[tcont] = TCONT_FLUSH_BLOCKING_STATE;
+	       tpm_deactive_tcont(tcont);
+	       printk("TCONT (%d) CLEAN_EVENT\n", tcont);
+	       onuGponTcontFlushState[tcont] = TCONT_FLUSH_READY_STATE;
 	    }
 	    else
 	    {
-		    mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
-			       "DEBUG: (%s:%d) Received TCONT_CLEAN_EVENT while in T-CONT(%d) state(%s)\n",
-			       __FILE_DESC__, __LINE__, tcont, stateText[onuGponTcontFlushState[tcont]]);
+	       printk("Received TCONT_CLEAN_EVENT while in T-CONT(%d) state(%s)\n", tcont, stateText[onuGponTcontFlushState[tcont]]);
 	    }
 	}
     }
@@ -1414,16 +1408,13 @@ void onuGponWqTcontFunc(struct work_struct *work)
     {
        if (onuGponTcontFlushState[tcont] == TCONT_FLUSH_READY_STATE)
        {
-	       mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
-	            "DEBUG: (%s:%d) TCONT (%d) ACTIVE_EVENT\n", __FILE_DESC__, __LINE__, tcont);
-	       onuGponTcontFlushState[tcont] = TCONT_FLUSH_RUNNING_STATE;
-	       tpm_active_tcont(tcont);
+          onuGponTcontFlushState[tcont] = TCONT_FLUSH_RUNNING_STATE;
+          tpm_active_tcont(tcont);
+          printk("TCONT (%d) ACTIVE_EVENT\n", tcont);
        }
        else
        {
-	       mvPonPrint(PON_PRINT_DEBUG, PON_ALLOC_MODULE,
-			  "DEBUG: (%s:%d) Received TCONT_ACTIVE_EVENT while in T-CONT state(%s)\n",
-			  __FILE_DESC__, __LINE__, stateText[onuGponTcontFlushState[tcont]]);
+           printk("Received TCONT_ACTIVE_EVENT while in T-CONT state(%s)\n", stateText[onuGponTcontFlushState[tcont]]);
        }
     }
 

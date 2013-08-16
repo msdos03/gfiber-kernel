@@ -221,8 +221,8 @@ obj-$(CONFIG_MV_EPON) += ../plat-feroceon/mv_drivers_lsp/mv_pon/
 #TPM
 obj-$(CONFIG_MV_TPM) += ../plat-feroceon/mv_drivers_lsp/mv_tpm/
 
-#CUST
-obj-$(CONFIG_MV_CUST) += ../plat-feroceon/mv_drivers_lsp/mv_cust/
+#CPH
+obj-$(CONFIG_MV_CPH) += ../plat-feroceon/mv_drivers_lsp/mv_cph/
 
 #MAC_LEARN
 obj-$(CONFIG_MV_MAC_LEARN) += ../plat-feroceon/mv_drivers_lsp/mv_mac_learn/

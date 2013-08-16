@@ -121,8 +121,8 @@ config MV_INCLUDE_TPM
         ---help---
         Please don't change this configs unless you know what you are doing.
 
-config MV_INCLUDE_CUST
-	bool "Customer driver Support"
+config MV_INCLUDE_CPH
+	bool "CPH Support"
 	depends on MV88F6500
 	default y
         ---help---
@@ -403,7 +403,7 @@ source arch/arm/plat-feroceon/mv_drivers_lsp/mv_phone/Kconfig
 
 source arch/arm/plat-feroceon/mv_drivers_lsp/mv_tsu/Kconfig
 
-source arch/arm/plat-feroceon/mv_drivers_lsp/mv_cust/Kconfig
+source arch/arm/plat-feroceon/mv_drivers_lsp/mv_cph/Kconfig
 
 source arch/arm/plat-feroceon/mv_drivers_lsp/mv_pon/Kconfig
 

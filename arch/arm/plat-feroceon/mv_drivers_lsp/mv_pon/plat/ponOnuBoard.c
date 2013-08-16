@@ -88,6 +88,9 @@ t_ponXvrFuncPtr ponXvrFunc;
 
 /* Global functions
 ------------------------------------------------------------------------------*/
+MV_U32 prbsUserDefinedPattern[3] = {0xA5A5A5A5, /* [31:00] */
+				    0xA5A5A5A5, /* [63:32] */
+				    0xA5A5};    /* [79:64] */
 
 /* Local Variables
 ------------------------------------------------------------------------------*/
@@ -300,6 +303,48 @@ MV_STATUS onuPonDyingGaspExit(void)
 
 /*******************************************************************************
 **
+**  mvOnuPonMacPrbsUserDefinedPatternSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function init User defined PRBS pattern
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+void mvOnuPonMacPrbsUserDefinedPatternSet(MV_U32 *prbsUserPattern)
+{
+  prbsUserDefinedPattern[0] = prbsUserPattern[0];
+  prbsUserDefinedPattern[1] = prbsUserPattern[1];
+  prbsUserDefinedPattern[2] = prbsUserPattern[2];
+}
+
+/*******************************************************************************
+**
+**  mvOnuPonMacPrbsUserDefinedPatternGet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function return User defined PRBS pattern
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or error
+**
+*******************************************************************************/
+void mvOnuPonMacPrbsUserDefinedPatternGet(MV_U32 *prbsUserPattern)
+{
+  prbsUserPattern[0] = prbsUserDefinedPattern[0];
+  prbsUserPattern[1] = prbsUserDefinedPattern[1];
+  prbsUserPattern[2] = prbsUserDefinedPattern[2];
+}
+
+/*******************************************************************************
+**
 **  mvOnuPonMacBurstEnableInit
 **  ____________________________________________________________________________
 **
@@ -342,7 +387,10 @@ MV_STATUS mvOnuPonMacBurstEnableInit(void)
 			     "ERROR: asicOntMiscRegWrite failed for PON phy SW ctrl not force\n\r");
 		       return(MV_ERROR);
 	       }
-	} else if (mvCtrlRevGet() == ONU_ASIC_REV_Z2) {
+	}
+	else
+	{
+		if (mvCtrlRevGet() == ONU_ASIC_REV_Z2) {
 
 		/* KW2 ASIC Rev Z2 */
 		/* =============== */
@@ -360,24 +408,26 @@ MV_STATUS mvOnuPonMacBurstEnableInit(void)
 		if (status == MV_OK)
 			status = mvGppTypeSet(gpioGroup, gpioMask, gpioMask /* 0-input NOT allow transsmit*/);
 
-	} else if (mvCtrlRevGet() == ONU_ASIC_REV_A0) {
+		}
+		else if (mvCtrlRevGet() == ONU_ASIC_REV_A0) {
 
 		/* KW2 ASIC Rev A0 */
 		/* =============== */
 		/* PHY control register - output status set */
-		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_OUTPUT, 0);
-		if (status != MV_OK) {
-			mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-				   "ERROR: asicOntMiscRegWrite failed for PON phy ctrl enable - output\n\r");
-			return(MV_ERROR);
-		}
+			status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_OUTPUT, 0);
+			if (status != MV_OK) {
+				mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+					   "ERROR: asicOntMiscRegWrite failed for PON phy ctrl enable - output\n\r");
+				return(MV_ERROR);
+			}
 
-		/* PHY control register - force disable */
-		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_EN, 0, 0);
-		if (status != MV_OK) {
-			mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-				   "ERROR: asicOntMiscRegWrite failed for PON phy ctrl not force\n\r");
-			return(MV_ERROR);
+			/* PHY control register - force disable */
+			status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_EN, 0, 0);
+			if (status != MV_OK) {
+				mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+					   "ERROR: asicOntMiscRegWrite failed for PON phy ctrl not force\n\r");
+				return(MV_ERROR);
+			}
 		}
 	}
 
@@ -519,53 +569,57 @@ MV_STATUS onuPonPatternBurstEnable(bool on)
 		       return(MV_ERROR);
 	       }
 
-	} else if (mvCtrlRevGet() == ONU_ASIC_REV_Z2) {
+	}
+	else
+	{
+		if (mvCtrlRevGet() == ONU_ASIC_REV_Z2) {
 
-	    	/* ASIC Rev Z2 */
-	    	/* =========== */
-		PON_GPIO_GET(BOARD_GPP_PON_XVR_TX, gpioGroup, gpioMask);
-		if (gpioMask == PON_GPIO_NOT_USED)
-			return MV_ERROR;
+			/* ASIC Rev Z2 */
+			/* =========== */
+			PON_GPIO_GET(BOARD_GPP_PON_XVR_TX, gpioGroup, gpioMask);
+			if (gpioMask == PON_GPIO_NOT_USED)
+				return MV_ERROR;
 
-		trans_value = ((on == MV_TRUE) ? (gpioMask/*1*/) : (~gpioMask/*0*/));
+			trans_value = ((on == MV_TRUE) ? (gpioMask/*1*/) : (~gpioMask/*0*/));
 
-		status = mvGppValueSet(gpioGroup, gpioMask, trans_value);
-		if (status != MV_OK)
-			return(MV_ERROR);
-
-	} else if (mvCtrlRevGet() == ONU_ASIC_REV_A0) {
-
-		/* ASIC Rev A0 */
-		/* =========== */
-		/* PHY control register - force enable */
-		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_EN, 1, 0);
-		if (status != MV_OK) {
-			mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-				   "ERROR: asicOntMiscRegWrite failed for PON phy ctrl force\n\r");
-			return(MV_ERROR);
+			status = mvGppValueSet(gpioGroup, gpioMask, trans_value);
+			if (status != MV_OK)
+				return(MV_ERROR);
 		}
+		else if	(mvCtrlRevGet() == ONU_ASIC_REV_A0) {
 
-        polarity = onuP2PDbXvrBurstEnablePolarityGet();
+			/* ASIC Rev A0 */
+			/* =========== */
+			/* PHY control register - force enable */
+			status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_EN, 1, 0);
+			if (status != MV_OK) {
+				mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+					   "ERROR: asicOntMiscRegWrite failed for PON phy ctrl force\n\r");
+				return(MV_ERROR);
+			}
 
-		/* XVR polarity */
-		/* XVR polarity == 0, Active High, transmit 1 to the line  */
-		/* XVR polarity == 1, Active Low, transmit 0 to the line  */
+			polarity = onuP2PDbXvrBurstEnablePolarityGet();
 
-		/* P2P mode */
-		/* Force Value == 0, transmit 0 to the line  */
-		/* Force Value == 1, transmit 1 to the line  */
+			/* XVR polarity */
+			/* XVR polarity == 0, Active High, transmit 1 to the line  */
+			/* XVR polarity == 1, Active Low, transmit 0 to the line  */
 
-		/* Setting P2P should be reversed from XVR polarity */
-		/* XVR polarity == 0, Active High, write 1 for Force Value */
-		/* XVR polarity == 1, Active Low, write 0 for Force Value */
+			/* P2P mode */
+			/* Force Value == 0, transmit 0 to the line  */
+			/* Force Value == 1, transmit 1 to the line  */
 
-		/* PHY control register - force enable value - according to polarity */
-		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_VAL, polarity, 0);
-		if (status != MV_OK) {
-			mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-				   "ERROR: asicOntMiscRegWrite failed for PON phy ctrl force value %d\n\r",
-				   trans_value);
-			return(MV_ERROR);
+			/* Setting P2P should be reversed from XVR polarity */
+			/* XVR polarity == 0, Active High, write 1 for Force Value */
+			/* XVR polarity == 1, Active Low, write 0 for Force Value */
+
+			/* PHY control register - force enable value - according to polarity */
+			status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_VAL, polarity, 0);
+			if (status != MV_OK) {
+				mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+					   "ERROR: asicOntMiscRegWrite failed for PON phy ctrl force value %d\n\r",
+					   trans_value);
+				return(MV_ERROR);
+				}
 		}
 	}
 
@@ -605,6 +659,8 @@ MV_STATUS onuPonPatternBurstOn(MV_U32 pattern, MV_BOOL isPeriodic, MV_U32 period
 	/*pattern validation*/
 	if (!((pattern == ONU_PON_TX_PATTERN_TYPE_T1) ||
 	      (pattern == ONU_PON_TX_PATTERN_TYPE_T2) ||
+	      (pattern == ONU_PON_TX_PATTERN_TYPE_USER) ||
+          (pattern == ONU_PON_TX_PATTERN_TYPE_PRBS_7) ||
 	      (pattern == ONU_PON_TX_PATTERN_TYPE_PRBS_9) ||
 	      (pattern == ONU_PON_TX_PATTERN_TYPE_PRBS_15) ||
 	      (pattern == ONU_PON_TX_PATTERN_TYPE_PRBS_23))) {
@@ -663,10 +719,32 @@ MV_STATUS onuPonPatternBurstOn(MV_U32 pattern, MV_BOOL isPeriodic, MV_U32 period
 	if (status != MV_OK)
 		return(status);
 
-	/*set pattern type*/
-	status  = asicOntMiscRegWrite(mvAsicReg_PT_PATTERN_DATA, pattern, 0);
-	if (status != MV_OK)
-		return(status);
+    /*set pattern type*/
+    if (pattern != ONU_PON_TX_PATTERN_TYPE_USER)
+    {
+       status  = asicOntMiscRegWrite(mvAsicReg_PT_PATTERN_DATA, pattern, 0);
+       if (status != MV_OK)
+         return(status);
+    }
+    else
+    {
+       /*
+       **  0xF10A2E6C <- PHY Test Data[15:0];  [UserData[8:0], Type = 5}
+       **  0xF10A2E68 <- PHY Test Data[31:16]; [UserData[23:9]}
+       **  0xF10A2E64 <- PHY Test Data[47:32]; [UserData[39:24]}
+       **  0xF10A2E60 <- PHY Test Data[63:48]; [UserData[55:40]}
+       **  0xF10A2E5C <- PHY Test Data[79:64]; [UserData[71:56]}
+       **  0xF10A2E58 <- PHY Test Data[96:80]; [UserData[79:72]}
+       */
+       status  = asicOntMiscRegWrite(mvAsicReg_PT_PATTERN_DATA,         (((prbsUserDefinedPattern[0] &  0xFF) << 8)   | (pattern & 0xFF)), 0);
+       status |= asicOntMiscRegWrite(mvAsicReg_PT_PATTERN_USER_DATA_01,  ((prbsUserDefinedPattern[0] >> 8)  & 0xFFFF), 0);
+       status |= asicOntMiscRegWrite(mvAsicReg_PT_PATTERN_USER_DATA_02, (((prbsUserDefinedPattern[0] >> 24) & 0xFF)   | ((prbsUserDefinedPattern[1] & 0xFF) << 8)), 0);
+       status |= asicOntMiscRegWrite(mvAsicReg_PT_PATTERN_USER_DATA_03,  ((prbsUserDefinedPattern[1] >> 8)  & 0xFFFF), 0);
+       status |= asicOntMiscRegWrite(mvAsicReg_PT_PATTERN_USER_DATA_04, (((prbsUserDefinedPattern[1] >> 24) & 0xFF)   | ((prbsUserDefinedPattern[2] & 0xFF) << 8)), 0);
+       status |= asicOntMiscRegWrite(mvAsicReg_PT_PATTERN_USER_DATA_05,  ((prbsUserDefinedPattern[2] >> 8)  & 0xFF), 0);
+       if (status != MV_OK)
+         return(status);
+    }
 
 	/*turn on selected pattern*/
 	status  = asicOntMiscRegWrite(mvAsicReg_PT_PATTERN_ENABLED, 0x1, 0);
@@ -904,15 +982,15 @@ MV_STATUS onuPonTxPowerControlInit(void)
 **
 **  onuP2PDbXvrBurstEnablePolaritySet
 **  ____________________________________________________________________________
-** 
+**
 **  DESCRIPTION: The function sets EPON XVR polarity register value in the database
-**               
+**
 **  PARAMETERS:  MV_U32 val
 **
 **  OUTPUTS:     None
 **
 **  RETURNS:     MV_OK or error
-**                   
+**
 *******************************************************************************/
 MV_STATUS onuP2PDbXvrBurstEnablePolaritySet(MV_U32 val)
 {
@@ -925,15 +1003,15 @@ MV_STATUS onuP2PDbXvrBurstEnablePolaritySet(MV_U32 val)
 **
 **  onuP2PDbXvrBurstEnablePolarityGet
 **  ____________________________________________________________________________
-** 
+**
 **  DESCRIPTION: The function returns EPON XVR polarity register value
-**               
+**
 **  PARAMETERS:  None
 **
 **  OUTPUTS:     None
 **
 **  RETURNS:     MV_U32 mode
-**                   
+**
 *******************************************************************************/
 MV_U32 onuP2PDbXvrBurstEnablePolarityGet(void)
 {

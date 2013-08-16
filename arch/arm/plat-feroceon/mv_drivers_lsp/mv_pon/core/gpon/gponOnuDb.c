@@ -3254,10 +3254,10 @@ MV_STATUS onuGponDbBwTcontConnectCheck(MV_U32 allocId, MV_U32 *tcontNum, MV_BOOL
 **
 **  OUTPUTS:     None
 **
-**  RETURNS:     MV_OK if there is a free entry, MV_ERROR otherwise
+**  RETURNS:     MV_TRUE if there is a free entry, MV_FALSE otherwise
 **
 *******************************************************************************/
-MV_STATUS onuGponDbBwTcontFreeGet(MV_U32 allocId, MV_U32 *tcontNum)
+MV_BOOL onuGponDbBwTcontFreeGet(MV_U32 allocId, MV_U32 *tcontNum)
 {
 	MV_BOOL exist;
 	MV_U32  dbAllocId;
@@ -3270,7 +3270,7 @@ MV_STATUS onuGponDbBwTcontFreeGet(MV_U32 allocId, MV_U32 *tcontNum)
 		onuGponDbBwTcontGet(iTcont, &exist, &dbAllocId, &dbValid);
 		if ((exist == MV_TRUE) && (dbValid == MV_FALSE)) {
 			*tcontNum = iTcont;
-			return(MV_OK);
+			return(MV_TRUE);
 		}
 
 		if (dbAllocId == allocId)
@@ -3279,7 +3279,7 @@ MV_STATUS onuGponDbBwTcontFreeGet(MV_U32 allocId, MV_U32 *tcontNum)
 
 	*tcontNum = tempTcont;
 
-	return(MV_ERROR);
+	return(MV_FALSE);
 }
 
 /*******************************************************************************

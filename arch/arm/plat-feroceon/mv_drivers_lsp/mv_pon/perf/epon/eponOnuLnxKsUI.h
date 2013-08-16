@@ -96,6 +96,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 MV_STATUS onuEponUsrInterfaceCreate(void);
 MV_STATUS onuEponUsrInterfaceRelease(void);
 
+void onuEponUiCfgLosTime(MV_U32 opticalLosTime, MV_U32 macLosTime);
+void onuEponUiCfgTxPowerControl(MV_U32 action, MV_U32 time);
+void onuEponUiCfgPowerSaving(MV_U32 earlyWakeup, MV_U32 maxSleepDuration);
+void onuEponUiCfgControlSleep(MV_U32 action, MV_U32 sleepMode, 
+                              MV_U32 sleepDuration, MV_U32 wakeupDuration);
+
 /* Macros
 ------------------------------------------------------------------------------*/    
 

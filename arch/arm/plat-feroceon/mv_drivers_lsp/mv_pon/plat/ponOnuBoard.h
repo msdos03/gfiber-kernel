@@ -93,7 +93,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define ONU_PON_TX_PATTERN_TYPE_T1        (0x1)
 #define ONU_PON_TX_PATTERN_TYPE_T2        (0x2)
-#define ONU_PON_TX_PATTERN_TYPE_PRBS_9    (0x80)
+#define ONU_PON_TX_PATTERN_TYPE_USER      (0x5)
+#define ONU_PON_TX_PATTERN_TYPE_PRBS_7    (0x80)
+#define ONU_PON_TX_PATTERN_TYPE_PRBS_9    (0x81)
 #define ONU_PON_TX_PATTERN_TYPE_PRBS_15   (0x82)
 #define ONU_PON_TX_PATTERN_TYPE_PRBS_23   (0x83)
 
@@ -155,6 +157,8 @@ MV_STATUS onuPonLedInit(void);
 MV_STATUS onuPonLedHandler(MV_U32 led, MV_U32 action);
 MV_STATUS onuPonDyingGaspProcess(void);
 MV_STATUS onuPonDyingGaspExit(void);
+void      mvOnuPonMacPrbsUserDefinedPatternSet(MV_U32 *prbsUserPattern);
+void      mvOnuPonMacPrbsUserDefinedPatternGet(MV_U32 *prbsUserPattern);
 MV_STATUS mvOnuPonMacBurstEnableInit(void);
 MV_STATUS mvOnuPonMacBurstEnablePolarityInit(MV_U32 polarity);
 MV_STATUS onuPonPatternBurstOn(MV_U32 pattern, MV_BOOL isPeriodic, MV_U32 period, MV_U32 duration);

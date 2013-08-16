@@ -84,12 +84,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ------------------------------------------------------------------------------*/
 #define __FILE_DESC__ "mv_pon/core/gpon/gponOnuStateMachine.c"
 
-#define INDICATION_BIT_MAP_NONE                 (0x00000000)
-#define INDICATION_BIT_MAP_FIBER_EVENT          (0x00000001)
-#define INDICATION_BIT_MAP_FORCE_TCONT_CLEAR    (0x00000002)
-#define INDICATION_BIT_MAP_FORCE_TCONT_RECONFIG (0x00000004)
-#define INDICATION_BIT_MAP_RESERVED             (0x00000008)
-
 /* Global Variables
 ------------------------------------------------------------------------------*/
 extern spinlock_t onuPonIrqLock;
@@ -107,9 +101,9 @@ extern MV_STATUS onuGponAllocIdMacAdd(MV_U32 allocId, MV_U32 tcontId);
 /* Local Functions
 ------------------------------------------------------------------------------*/
 MV_STATUS onuGponPonMngrUpdateState(MV_U32 newState);
-MV_STATUS onuGponPonMngClearOnuInfo(MV_U32 indicationBitMap);
-MV_STATUS onuGponPonMngClearOnuTconts(MV_U32 indicationBitMap);
-MV_STATUS onuGponPonMngClearOnuBuffers(MV_U32 indicationBitMap);
+MV_STATUS onuGponPonMngClearOnuInfo(void);
+MV_STATUS onuGponPonMngClearOnuBuffers(void);
+MV_STATUS onuGponPonMngClearOnuTconts(void);
 MV_STATUS onuGponPonMngClearOnuPorts(void);
 MV_STATUS onuGponPonMngClearOnuId(void);
 MV_STATUS onuGponPonMngClearOnuDelay(void);
@@ -253,28 +247,15 @@ MV_STATUS onuGponPonMngrUpdateState(MV_U32 newState)
 **  RETURNS:     MV_OK or error
 **
 *******************************************************************************/
-MV_STATUS onuGponPonMngClearOnuBuffers(MV_U32 indicationBitMap)
+MV_STATUS onuGponPonMngClearOnuBuffers(void)
 {
-   MV_STATUS rcode = MV_OK;
+   MV_STATUS rcode;
 
    rcode = onuGponAllocIdFreeAllBuffers();
    if (rcode != MV_OK)
    {
      mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
    	     "ERROR: (%s:%d) onuGponPonMngClearOnuBuffers\n", __FILE_DESC__, __LINE__);
-   }
-
-
-   if ((onuGponDbTcontResetGet() != MV_TRUE) &&
-       (indicationBitMap & INDICATION_BIT_MAP_FIBER_EVENT))
-   {
-	 rcode = onuGponAllocIdMacReActivate();
-	 if (rcode != MV_OK)
-	 {
-	   mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-		      "ERROR: (%s:%d) onuGponPonMngClearOnuTconts\n", __FILE_DESC__, __LINE__);
-	   return(rcode);
-	 }
    }
 
    return(MV_OK);
@@ -295,7 +276,7 @@ MV_STATUS onuGponPonMngClearOnuBuffers(MV_U32 indicationBitMap)
 **  RETURNS:     MV_OK or error
 **
 *******************************************************************************/
-MV_STATUS onuGponPonMngClearOnuInfo(MV_U32 indicationBitMap)
+MV_STATUS onuGponPonMngClearOnuInfo(void)
 {
   MV_STATUS rcode;
 
@@ -303,32 +284,29 @@ MV_STATUS onuGponPonMngClearOnuInfo(MV_U32 indicationBitMap)
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-               "ERROR: (%s:%d) onuGponPonMngClearOnuPorts\n", __FILE_DESC__, __LINE__);
-    return(rcode);
+               "ERROR: (%s:%d) onuGponPonMngClearOnuPorts\n", __FILE_DESC__, __LINE__);    return(rcode);
   }
 
-  rcode = onuGponPonMngClearOnuTconts(indicationBitMap);
+  rcode = onuGponPonMngClearOnuTconts();
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-               "ERROR: (%s:%d) onuGponPonMngClearOnuTconts\n", __FILE_DESC__, __LINE__);
-    return(rcode);
+               "ERROR: (%s:%d) onuGponPonMngClearOnuTconts\n", __FILE_DESC__, __LINE__);    return(rcode);
   }
 
-  rcode = onuGponPonMngClearOnuBuffers(indicationBitMap);
+  rcode = onuGponPonMngClearOnuBuffers();
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
                "ERROR: (%s:%d) onuGponPonMngClearOnuBuffers\n", __FILE_DESC__, __LINE__);
-    return(rcode);
+    return;
   }
 
   rcode = onuGponPonMngClearOnuId();
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-               "ERROR: (%s:%d) onuGponPonMngClearOnuId\n", __FILE_DESC__, __LINE__);
-    return(rcode);
+               "ERROR: (%s:%d) onuGponPonMngClearOnuId\n", __FILE_DESC__, __LINE__);    return(rcode);
   }
 
   rcode = onuGponPonMngClearOnuDelay();
@@ -409,20 +387,18 @@ MV_STATUS onuGponPonMngClearOnuPorts(void)
 **  RETURNS:     MV_OK or error
 **
 *******************************************************************************/
-MV_STATUS onuGponPonMngClearOnuTconts(MV_U32 indicationBitMap)
+MV_STATUS onuGponPonMngClearOnuTconts(void)
 {
   MV_STATUS rcode = MV_OK;
 
-  if ((onuGponDbTcontResetGet() == MV_TRUE) ||
-      (indicationBitMap & INDICATION_BIT_MAP_FORCE_TCONT_CLEAR))
-  {
-	rcode = onuGponAllocIdDeAssignAll();
-	if (rcode != MV_OK)
-	{
-	  mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-		     "ERROR: (%s:%d) onuGponPonMngClearOnuTconts\n", __FILE_DESC__, __LINE__);
-	  return(rcode);
-	}
+  if (onuGponDbTcontResetGet()==MV_TRUE) {
+      rcode = onuGponAllocIdDeAssignAll();
+      if (rcode != MV_OK)
+      {
+        mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+                   "ERROR: (%s:%d) onuGponAllocIdDeAssignAll\n", __FILE_DESC__, __LINE__);
+        return(rcode);
+      }
   }
 
   return(MV_OK);
@@ -1012,21 +988,14 @@ void onuGponPonMngOnuIdMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
     /* set Default allocId according to the onuId */
     rcode = onuGponAllocIdAssign(msgOnuId, 0);
-    if ((rcode != MV_OK) && (rcode != MV_NO_CHANGE))
+    if (rcode != MV_OK)
     {
-	    mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-		       "ERROR: (%s:%d) onuGponAllocIdAssign\n", __FILE_DESC__, __LINE__);
-		       return;
+      mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+                 "ERROR: (%s:%d) onuGponAllocIdAssign\n", __FILE_DESC__, __LINE__);
+      return;
     }
-    else if ((rcode != MV_OK) && (rcode == MV_NO_CHANGE))
-    {
-	    mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-		       "ERROR: (%s:%d) onuGponAllocIdAssign, Alloc Id exist\n", __FILE_DESC__, __LINE__);
-    }
-    else /* MV_OK */
-    {
-	    onuGponAllocIdMacAdd(msgOnuId, PON_ONU_DEFAULT_ALLOC_TCONT);
-    }
+
+    onuGponAllocIdMacAdd(msgOnuId, PON_ONU_DEFAULT_ALLOC_TCONT);
 
     /* Set delay received from OLT */
     equalizationDelayTemp = onuGponDbEqualizationDelayGet();
@@ -1294,12 +1263,12 @@ void onuGponPonMngRangeTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 		 __FILE_DESC__, __LINE__, currFinalDelay);
 
       /* Check if can change the TX Final Delay only */
-      if (changeDelay + currFinalDelay <= GPON_TX_FINAL_DELAY_MAX)
+      if (changeDelay + currFinalDelay > GPON_TX_FINAL_DELAY_MAX)
       {
         finalDelay = currFinalDelay + changeDelay;
 
 	mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
-		   "Range Debug Info: (%s:%d), State O5, Change delay + current Final delay <= MAX Final delay(0x3F), updated final delay, finalDelay = currFinalDelay + changeDelay, (0x%x)\n",
+		   "Range Debug Info: (%s:%d), State O5, Change delay + current Final delay > MAX Final delay(0x3F), updated final delay, finalDelay = currFinalDelay + changeDelay, (0x%x)\n",
 		   __FILE_DESC__, __LINE__, finalDelay);
       }
       else
@@ -1310,7 +1279,7 @@ void onuGponPonMngRangeTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 #endif /* MV_GPON_DEBUG_PRINT */
 
 	mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
-		   "Range Debug Info: (%s:%d), State O5, Change delay + Final delay > MAX Final delay = 0x3F, updated equalization delay\n",
+		   "Range Debug Info: (%s:%d), State O5, Change delay + Final delay < MAX Final delay = 0x3F, updated equalization delay\n",
 		   __FILE_DESC__, __LINE__);
 
         /* calc delay */
@@ -1403,7 +1372,7 @@ void onuGponPonMngDactOnuIdMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
   /* clear onu information */
   /* ===================== */
-  rcode = onuGponPonMngClearOnuInfo(INDICATION_BIT_MAP_FORCE_TCONT_CLEAR);
+  rcode = onuGponPonMngClearOnuInfo();
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
@@ -1499,7 +1468,7 @@ void onuGponPonMngDisSnMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
 		/* clear onu information */
 		/* ===================== */
-		rcode = onuGponPonMngClearOnuInfo(INDICATION_BIT_MAP_FORCE_TCONT_CLEAR);
+		rcode = onuGponPonMngClearOnuInfo();
 		if (rcode != MV_OK) {
 			mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
 					   "ERROR: (%s:%d) DISABLE: onuGponPonMngClearOnuInfo\n", __FILE_DESC__, __LINE__);
@@ -1871,7 +1840,7 @@ void onuGponPonMngAssignAllocIdMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
     if (newAllocStatus == MV_TRUE)
     {
       status = onuGponAllocIdAssign(allocId, 1);
-      if ((status != MV_OK) && (status != MV_NO_CHANGE))
+      if (status != MV_OK)
       {
         mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
                    "ERROR: (%s:%d) onuGponAllocIdAssign onuId(%d), allocId(%d)\n", __FILE_DESC__, __LINE__, onuId, allocId);
@@ -2662,7 +2631,7 @@ void onuGponPonMngTimerT01ExpireHndl(void)
 
   /* clear onu information */
   /* ===================== */
-  rcode = onuGponPonMngClearOnuInfo(INDICATION_BIT_MAP_FIBER_EVENT);
+  rcode = onuGponPonMngClearOnuInfo();
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
@@ -2735,7 +2704,7 @@ void onuGponPonMngTimerT02ExpireHndl(void)
 
   /* clear onu information */
   /* ===================== */
-  rcode = onuGponPonMngClearOnuInfo(INDICATION_BIT_MAP_FIBER_EVENT);
+  rcode = onuGponPonMngClearOnuInfo();
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
@@ -2919,7 +2888,7 @@ void onuGponPonMngGenCritAlarm(E_OnuGponAlarmType alarmType_e,
 
     /* clear onu information */
     /* ===================== */
-    rcode = onuGponPonMngClearOnuInfo(INDICATION_BIT_MAP_FIBER_EVENT);
+    rcode = onuGponPonMngClearOnuInfo();
     if (rcode != MV_OK)
     {
       mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,

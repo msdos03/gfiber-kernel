@@ -77,6 +77,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* Include Files
 ------------------------------------------------------------------------------*/
 #include "ponOnuHeader.h"
+#include "eponOnuDb.h"
 
 /* Local Constant
 ------------------------------------------------------------------------------*/                                               
@@ -92,6 +93,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Export Functions
 ------------------------------------------------------------------------------*/
+extern MV_STATUS mvEponApiSleepModeCtrl(MV_U32 enable);
 
 /* Local Functions
 ------------------------------------------------------------------------------*/
@@ -538,4 +540,126 @@ MV_STATUS onuEponSwitchOver(void)
   return(MV_OK);
 }
 #endif
+
+/*******************************************************************************
+**
+**  onuEponTxControlTimerHndl
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function is the timer callback when timer for 
+**               shutting the Tx is expired
+**
+**  PARAMETERS:  void
+**
+**  OUTPUTS:     void
+**
+**  RETURNS:     void
+**
+*******************************************************************************/
+void onuEponTxControlTimerHndl(void)
+{
+    unsigned long flags;
+    
+    spin_lock_irqsave(&onuPonIrqLock, flags);
+    
+    onuPonTimerDisable(&(onuPonResourceTbl_s.onuEponTxControlTimerId));
+
+    /* Turn off the tx power */
+    onuPonTxPowerOn(MV_FALSE);
+
+    spin_unlock_irqrestore(&onuPonIrqLock, flags);
+}
+
+/*******************************************************************************
+**
+**  onuEponMaxSleepTimerHndl
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function is the timer callback when timer for 
+**               keeping power saving mode is expired
+**
+**  PARAMETERS:  void
+**
+**  OUTPUTS:     void
+**
+**  RETURNS:     void
+**
+*******************************************************************************/
+void onuEponMaxSleepTimerHndl(void)
+{
+    unsigned long flags;
+    
+    spin_lock_irqsave(&onuPonIrqLock, flags);
+    
+    onuPonTimerDisable(&(onuPonResourceTbl_s.onuEponMaxSleepTimerId));
+
+    if (onuPonResourceTbl_s.onuEponSleepDurationTimerId.onuPonTimerActive == ONU_PON_TIMER_ACTIVE)
+    {
+        onuPonTimerDisable(&(onuPonResourceTbl_s.onuEponSleepDurationTimerId));
+    }
+
+    /* Leave power saving mode */
+    onuEponDbOnuSleepWakeupStatusSet(E_EPON_NOT_POWER_SAVING_STATUS);
+
+    /* Enable TX/RX */
+    mvEponApiSleepModeCtrl(MV_FALSE);
+
+    /* Send SleepStatusUpdate alarm to OLT */
+    // todo
+    
+
+    spin_unlock_irqrestore(&onuPonIrqLock, flags);
+}
+
+/*******************************************************************************
+**
+**  onuEponSleepWakeDurationTimerHndl
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function is the timer callback when periodical timer for
+**               switching between sleep status and wakeup status is expired
+**
+**  PARAMETERS:  void
+**
+**  OUTPUTS:     void
+**
+**  RETURNS:     void
+**
+*******************************************************************************/
+void onuEponSleepWakeDurationTimerHndl(void)
+{
+    unsigned long flags;
+    
+    spin_lock_irqsave(&onuPonIrqLock, flags);
+    
+    if (onuEponDbOnuSleepWakeupStatusGet() == E_EPON_POWER_SAVING_SLEEP_STATUS)
+    {
+        /* Change the status to wakeup */
+        onuEponDbOnuSleepWakeupStatusSet(E_EPON_POWER_SAVING_WAKEUP_STATUS);
+        
+        onuPonTimerUpdate(&(onuPonResourceTbl_s.onuEponSleepDurationTimerId), 
+                          0, 
+                          onuEponDbOnuWakeupDurationGet(), 
+                          1);
+
+        /* Enable TX/RX */
+        mvEponApiSleepModeCtrl(MV_FALSE);
+    }
+    else if(onuEponDbOnuSleepWakeupStatusGet() == E_EPON_POWER_SAVING_WAKEUP_STATUS)
+    {
+        /* Change the status to sleep */
+        onuEponDbOnuSleepWakeupStatusSet(E_EPON_POWER_SAVING_SLEEP_STATUS);
+        
+        onuPonTimerUpdate(&(onuPonResourceTbl_s.onuEponSleepDurationTimerId), 
+                          0, 
+                          onuEponDbOnuSleepDurationGet(), 
+                          1);
+
+        /* Disable TX/RX */
+        mvEponApiSleepModeCtrl(MV_TRUE);
+    }
+
+    spin_unlock_irqrestore(&onuPonIrqLock, flags);
+}
+
 #endif /* PON_FPGA */

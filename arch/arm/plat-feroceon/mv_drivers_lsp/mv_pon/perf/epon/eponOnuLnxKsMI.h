@@ -98,6 +98,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MVEPON_IOCTL_TDM_QUE_CFG   _IOW(MVPON_IOCTL_MAGIC, 14, unsigned int)
 #define MVEPON_IOCTL_ALARM_GET     _IOR(MVPON_IOCTL_MAGIC, 15, unsigned int)
 #define MVEPON_IOCTL_ROGUE_ONU_SET _IOW(MVPON_IOCTL_MAGIC, 16, unsigned int)
+#define MVEPON_IOCTL_LOS_TIME      _IOW(MVPON_IOCTL_MAGIC, 17, unsigned int)
+#define MVEPON_IOCTL_TX_CONTROL    _IOW(MVPON_IOCTL_MAGIC, 18, unsigned int)
+#define MVEPON_IOCTL_POWER_SAVING  _IOW(MVPON_IOCTL_MAGIC, 19, unsigned int)
+#define MVEPON_IOCTL_CONTROL_SLEEP _IOW(MVPON_IOCTL_MAGIC, 20, unsigned int)
 
 #define EPON_MAX_NUM_OF_MAC          (8)
 #define EPON_MAX_NUM_OF_QUEUE        (8)
@@ -142,8 +146,29 @@ typedef enum
 {
   E_EPON_IOCTL_STD_MODE,
   E_EPON_IOCTL_P2P_MODE,
-  E_EPON_IOCTL_MAX_MODE_NUM
+  E_EPON_IOCTL_MAX_MODE_NUM,
 }E_EponIoctlMode;
+
+typedef enum
+{
+    E_EPON_IOCTL_ENABLE_TX        = 0, 
+    E_EPON_IOCTL_DISABLE_TX       = 1, 
+    E_EPON_IOCTL_DISABLE_TX_DELAY = 2, 
+} E_EponIoctlTxControl;
+
+typedef enum
+{
+    E_GPON_SLEEP_ACTION_DISABLE = 0, 
+    E_GPON_SLEEP_ACTION_ENABLE  = 1, 
+    E_GPON_SLEEP_ACTION_CONFIG  = 2, 
+} E_GponSleepAction;
+
+typedef enum
+{
+    E_GPON_SLEEP_MODE_DO_NOTHING = 0, 
+    E_GPON_SLEEP_MODE_TX         = 1, 
+    E_GPON_SLEEP_MODE_TX_RX      = 2, 
+} E_GponSleepMode;
 
 /* Typedefs
 ------------------------------------------------------------------------------*/
@@ -292,6 +317,32 @@ typedef struct
   MV_U32 holdoverTime;
 }S_EponIoctlHoldOver;
 
+typedef struct
+{
+    uint16_t optical_los_time;
+    uint16_t mac_los_time;
+} S_EponIoctlLosTime;
+
+typedef struct
+{
+    uint16_t action;
+    uint16_t time;
+} S_EponIoctlTxControl;
+
+typedef struct
+{
+    uint8_t  earlyWakeUp;
+    uint64_t maxSleepDuration;
+} S_EponIoctlPowerSaving;
+
+typedef struct
+{
+    uint8_t  action;
+    uint8_t  sleepMode;
+    uint32_t sleepDuration;
+    uint32_t waitDuration;
+} S_EponIoctlControlSleep;
+
 /* Silence */
 typedef struct
 {
@@ -334,6 +385,11 @@ typedef struct
 MV_STATUS onuEponMngInterfaceCreate(void);
 MV_STATUS onuEponMngInterfaceRelease(void);
 void      onuEponMiNotifyCallback(MV_U32 onuState);
+
+MV_STATUS onuEponMiLosTimeConfig(S_EponIoctlLosTime *ioctlLosTime);
+MV_STATUS onuEponMiTxPowerControlConfig(S_EponIoctlTxControl *ioctlTxControl);
+MV_STATUS onuEponMiPowerSavingConfig(S_EponIoctlPowerSaving *ioctlPowerSaving);
+MV_STATUS onuEponMiControlSleepConfig(S_EponIoctlControlSleep *ioctlControlSleep);
 
 MV_STATUS mvP2PStart(void);
 MV_STATUS mvP2PStop(void);

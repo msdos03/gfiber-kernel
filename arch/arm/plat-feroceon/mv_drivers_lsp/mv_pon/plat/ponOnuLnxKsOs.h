@@ -184,10 +184,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define ONU_PON_TIMER_HW_RPRT_T0_INTERVAL    (2)     /* 2 msec */
 #define ONU_PON_TIMER_HW_RPRT_T1_INTERVAL    (150)   /* 150 msec */
 #define ONU_PON_TIMER_HOLDOVER_INTERVAL      (200)   /* 200 msec */
+#define ONU_PON_TIMER_MAX_SLEEP_INTERVAL     (60000) /* 60 sec */
+#define ONU_PON_TIMER_SLEEP_DURATION         (500)    /* 0.5 sec */
+#define ONU_PON_TIMER_WAKEUP_DURATION        (500)    /* 0.5 sec */
 #define ONU_PON_TIMER_SILENCE_INTERVAL       (60000) /* 60 sec */
 #define ONU_PON_TIMER_TX_MOD_INTERVAL        (1)   /* 1 msec */
 #define ONU_PON_TIMER_EVENT_MISS_INTERVAL    (10)   /* 10 msec */
-#define ONU_PON_TIMER_TX_PWR_INTERVAL        (6000)  /* 1   sec  */
+#define ONU_PON_TIMER_TX_PWR_INTERVAL        (1000)  /* 1 sec */
 
 #define ONU_PON_TIMER_ACTIVE                 (1)
 #define ONU_PON_TIMER_NOT_ACTIVE             (0)
@@ -256,6 +259,11 @@ typedef struct
   S_OnuPonTimer onuPonTxPwrTimerId;         /* ONU PON TX Power timer */
   S_OnuPonTimer onuPonPmTimerId;            /* ONU PON PM timer */
   S_OnuPonTimer onuPonPatternBurstTimerId;  /* ONU PON Pattern Burst timer */
+
+    S_OnuPonTimer onuEponTxControlTimerId;      /* EPON tx_control delay timer */
+    S_OnuPonTimer onuEponMaxSleepTimerId;       /* EPON power_saving mode: max sleep duration timer */
+    S_OnuPonTimer onuEponSleepDurationTimerId;  /* EPON power_saving mode: sleep duration and wait duration timer */
+  
 #ifndef PON_FPGA                            
   S_OnuPonTimer onuPonIsrXvrRstTimerId;     /* ONU PON XVR Reset timer */
 #endif /* PON_FPGA */                       
@@ -275,6 +283,7 @@ typedef struct
 /* Global variables
 ------------------------------------------------------------------------------*/
 extern S_OnuPonResourceTbl onuPonResourceTbl_s;
+extern spinlock_t onuPonIrqLock;
 
 /* Global functions
 ------------------------------------------------------------------------------*/
@@ -314,6 +323,8 @@ extern MV_STATUS ponOnuCheckPrintStatus(MV_U32 printLevel, MV_U32 moduleOptions)
 extern MV_STATUS ponOnuChangePrintStatus(MV_U32 module, MV_U32 printLevel, MV_U32 moduleOptions);
 extern MV_STATUS ponOnuGetPrintStatus(MV_U32 module, MV_U32 *printLevel, MV_U32 *moduleOptions);
 extern int       ponOnuPrintStatus(char* buf);
+
+extern int 	 onuGponUiCfgPrbsUserPattern(char* buf);
 
 /* Macros
 ------------------------------------------------------------------------------*/    

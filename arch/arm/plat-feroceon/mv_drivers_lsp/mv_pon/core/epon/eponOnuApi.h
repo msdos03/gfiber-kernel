@@ -83,6 +83,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Include Files
 ------------------------------------------------------------------------------*/
+#include "eponOnuDb.h"
  
 /* Definitions
 ------------------------------------------------------------------------------*/ 
@@ -144,6 +145,14 @@ MV_BOOL onuEponLinkIsUp(void);
 
 /* Config API */
 MV_STATUS mvEponApi2kSupportedSet(MV_U32 pkt2kSupported);
+
+MV_STATUS mvEponApiLosTimeConfig(MV_U16 opticalLosTime, MV_U16 macLosTime);
+MV_STATUS mvEponApiTxPowerCtrlConfig(MV_U16 action, MV_U16 time);
+MV_STATUS mvEponApiPowerSavingConfig(MV_U8 earlyWakeup, MV_U64 maxSleepDuration);
+MV_STATUS mvEponApiSleepModeCtrl(MV_U32 enable);
+MV_STATUS mvEponApiSleepCtrlDisable(void);
+MV_STATUS mvEponApiSleepCtrlEnable(void);
+MV_STATUS mvEponApiSleepCtrlCfg(MV_U8 mode, MV_U32 sleepDuration, MV_U32 wakeupDuration);
 
 /* Macros
 ------------------------------------------------------------------------------*/    

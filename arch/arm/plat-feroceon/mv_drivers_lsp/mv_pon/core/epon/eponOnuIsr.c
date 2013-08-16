@@ -1096,84 +1096,87 @@ MV_STATUS mvP2PStart(void)
 		return(MV_ERROR);
 	  }
 	}
-	/* KW2 ASIC Rev Z2 */
-	/* =============== */
-	else if (mvCtrlRevGet() == ONU_ASIC_REV_Z2)
-	{
-	  /* PHY control register - output status*/
-	  PON_GPIO_GET(BOARD_GPP_PON_XVR_TX, gpioGroup, gpioMask);
-	  if (gpioMask != PON_GPIO_NOT_USED)
-	  {
-	  	status = mvGppTypeSet(gpioGroup, gpioMask, ~gpioMask/*output*/);
-	  	if (status != MV_OK)
-	  	{
-	  	  mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-	  			   "ERROR: (%s:%d) mvGppTypeSet\n\r", __FILE_DESC__, __LINE__);
-	  	  return(MV_ERROR);
-	  	}
+   else
+   {
+	   /* KW2 ASIC Rev Z2 */
+	   /* =============== */
+	   if (mvCtrlRevGet() == ONU_ASIC_REV_Z2)
+	   {
+		/* PHY control register - output status*/
+		PON_GPIO_GET(BOARD_GPP_PON_XVR_TX, gpioGroup, gpioMask);
+		if (gpioMask != PON_GPIO_NOT_USED)
+		{
+		     status = mvGppTypeSet(gpioGroup, gpioMask, ~gpioMask/*output*/);
+		     if (status != MV_OK)
+		     {
+		       mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+					"ERROR: (%s:%d) mvGppTypeSet\n\r", __FILE_DESC__, __LINE__);
+		       return(MV_ERROR);
+		     }
 
-	  	status = mvGppValueSet(gpioGroup, gpioMask, gpioMask /*enable*/);
-	  	if (status != MV_OK)
-	  	{
-	  	  mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-	  			   "ERROR: (%s:%d) mvGppTypeSet\n\r", __FILE_DESC__, __LINE__);
-	  	  return(MV_ERROR);
-	  	}
-	  }
+		     status = mvGppValueSet(gpioGroup, gpioMask, gpioMask /*enable*/);
+		     if (status != MV_OK)
+		     {
+		       mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+					"ERROR: (%s:%d) mvGppTypeSet\n\r", __FILE_DESC__, __LINE__);
+		       return(MV_ERROR);
+		     }
+		}
 
-	  status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_INPUT, 0);
-	  if (status != MV_OK)
-	  {
-	    mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-	  		   "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
-	    return(MV_ERROR);
-	  }
-	}
+		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_INPUT, 0);
+		if (status != MV_OK)
+		{
+		 mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+				"ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
+		 return(MV_ERROR);
+		}
+	   }
 
-	/* KW2 ASIC Rev A0 */
-	/* =============== */
-	else if (mvCtrlRevGet() == ONU_ASIC_REV_A0)
-	{
-      status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_OUTPUT, 0);
-	  if (status != MV_OK)
-	  {
-	    mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-	  		 "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
-	    return(MV_ERROR);
-	  }
-
-	  /* PHY control register - force enable */
-	  status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_EN, 1, 0);
-	  if (status != MV_OK)
-	  {
-		mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+	   /* KW2 ASIC Rev A0 */
+	   /* =============== */
+	   else if (mvCtrlRevGet() == ONU_ASIC_REV_A0)
+	   {
+		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_OUTPUT, 0);
+		if (status != MV_OK)
+		{
+		  mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
 			       "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
-		return(MV_ERROR);
-	  }
+		  return(MV_ERROR);
+		}
 
-      polarity = onuP2PDbXvrBurstEnablePolarityGet();
+		/* PHY control register - force enable */
+		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_EN, 1, 0);
+		if (status != MV_OK)
+		{
+		      mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+				     "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
+		      return(MV_ERROR);
+		}
 
-	  /* XVR polarity */
-	  /* XVR polarity == 0, Active High, transmit 1 to the line  */
-	  /* XVR polarity == 1, Active Low, transmit 0 to the line  */
+		polarity = onuP2PDbXvrBurstEnablePolarityGet();
 
-	  /* P2P mode */
-	  /* Force Value == 0, transmit 0 to the line  */
-	  /* Force Value == 1, transmit 1 to the line  */
+		/* XVR polarity */
+		/* XVR polarity == 0, Active High, transmit 1 to the line  */
+		/* XVR polarity == 1, Active Low, transmit 0 to the line  */
 
-	  /* Setting P2P should be reversed from XVR polarity */
-	  /* XVR polarity == 0, Active High, write 1 for Force Value */
-	  /* XVR polarity == 1, Active Low, write 0 for Force Value */
+		/* P2P mode */
+		/* Force Value == 0, transmit 0 to the line  */
+		/* Force Value == 1, transmit 1 to the line  */
 
-	  /* PHY control register - force enable value - according to polarity */
-	  status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_VAL, polarity, 0);
-	  if (status != MV_OK)
-	  {
-		mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-			       "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
-		return(MV_ERROR);
-	  }
-	}
+		/* Setting P2P should be reversed from XVR polarity */
+		/* XVR polarity == 0, Active High, write 1 for Force Value */
+		/* XVR polarity == 1, Active Low, write 0 for Force Value */
+
+		/* PHY control register - force enable value - according to polarity */
+		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_VAL, polarity, 0);
+		if (status != MV_OK)
+		{
+		      mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+				     "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
+		      return(MV_ERROR);
+		}
+	   }
+   }
 
 	/* Read current FEC configuration */
     status = mvOnuEponMacRxpEncConfigGet(&isrP2pPreviousFecState);
@@ -1324,69 +1327,73 @@ MV_STATUS mvP2PStop(void)
 		 return(MV_ERROR);
 	   }
    }
-	/* KW2 ASIC Rev Z2 */
-	/* =============== */
-	else if (mvCtrlRevGet() == ONU_ASIC_REV_Z2)
-	{
-	  PON_GPIO_GET(BOARD_GPP_PON_XVR_TX, gpioGroup, gpioMask);
-	  if (gpioMask != PON_GPIO_NOT_USED)
-	  {
-	  	status = mvGppTypeSet(gpioGroup, gpioMask, ~gpioMask/*output*/);
-	  	if (status != MV_OK)
-	  	{
-	  	  mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-	  			     "ERROR: (%s:%d) mvGppTypeSet\n\r", __FILE_DESC__, __LINE__);
-	  	  return(MV_ERROR);
-	  	}
+   else
+   {
+	   /* KW2 ASIC Rev Z2 */
+	   /* =============== */
+	   if (mvCtrlRevGet() == ONU_ASIC_REV_Z2)
+	   {
+		PON_GPIO_GET(BOARD_GPP_PON_XVR_TX, gpioGroup, gpioMask);
+		if (gpioMask != PON_GPIO_NOT_USED)
+		{
+		     status = mvGppTypeSet(gpioGroup, gpioMask, ~gpioMask/*output*/);
+		     if (status != MV_OK)
+		     {
+		       mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+					  "ERROR: (%s:%d) mvGppTypeSet\n\r", __FILE_DESC__, __LINE__);
+		       return(MV_ERROR);
+		     }
 
-	  	status = mvGppValueSet(gpioGroup, gpioMask, ~gpioMask/*disable*/);
-	  	if (status != MV_OK)
-	  	{
-	  	  mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-	  			     "ERROR: (%s:%d) mvGppValueSet\n\r", __FILE_DESC__, __LINE__);
-	  	  return(MV_ERROR);
-	  	}
+		     status = mvGppValueSet(gpioGroup, gpioMask, ~gpioMask/*disable*/);
+		     if (status != MV_OK)
+		     {
+		       mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+					  "ERROR: (%s:%d) mvGppValueSet\n\r", __FILE_DESC__, __LINE__);
+		       return(MV_ERROR);
+		     }
 
-	  	status = mvGppTypeSet(gpioGroup, gpioMask, gpioMask/*input*/);
-	  	if (status != MV_OK)
-	  	{
-	  	  mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-	  			     "ERROR: (%s:%d) mvGppTypeSet\n\r", __FILE_DESC__, __LINE__);
-	  	  return(MV_ERROR);
-	  	}
-	  }
+		     status = mvGppTypeSet(gpioGroup, gpioMask, gpioMask/*input*/);
+		     if (status != MV_OK)
+		     {
+		       mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+					  "ERROR: (%s:%d) mvGppTypeSet\n\r", __FILE_DESC__, __LINE__);
+		       return(MV_ERROR);
+		     }
+		}
 
-	  /* PHY control register - output status set */
-	  status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_OUTPUT, 0);
-	  if (status != MV_OK)
-      {
-	    mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-	  		       "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
-	    return(MV_ERROR);
-	  }
-	}
-	/* KW2 ASIC Rev A0 */
-	/* =============== */
-	else if (mvCtrlRevGet() == ONU_ASIC_REV_A0)
-	{
-	  /* PHY control register - output status set */
-	  status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_OUTPUT, 0);
-	  if (status != MV_OK)
-	  {
-	    mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-	  		        "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
-	    return(MV_ERROR);
-	  }
+		/* PHY control register - output status set */
+		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_OUTPUT, 0);
+		if (status != MV_OK)
+		{
+			 mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+					    "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
+			 return(MV_ERROR);
+		}
+	   }
 
-	  /* PHY control register - force disable */
-	  status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_EN, 0, 0);
-	  if (status != MV_OK)
-	  {
-		mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
-			       "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
-		return(MV_ERROR);
-	  }
-	}
+	   /* KW2 ASIC Rev A0 */
+	   /* =============== */
+	   else if (mvCtrlRevGet() == ONU_ASIC_REV_A0)
+	   {
+		/* PHY control register - output status set */
+		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_OUTPUT, 0);
+		if (status != MV_OK)
+		{
+		  mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+				      "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
+		  return(MV_ERROR);
+		}
+
+		/* PHY control register - force disable */
+		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_FORCE_BEN_IO_EN, 0, 0);
+		if (status != MV_OK)
+		{
+		      mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
+				     "ERROR: (%s:%d) asicOntMiscRegWrite\n\r", __FILE_DESC__, __LINE__);
+		      return(MV_ERROR);
+		}
+	   }
+   }
 
 		if (onuEponDbP2PForceModeGet())
 		{

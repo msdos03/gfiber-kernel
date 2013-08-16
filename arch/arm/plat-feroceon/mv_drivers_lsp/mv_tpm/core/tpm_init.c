@@ -3152,6 +3152,7 @@ int32_t tpm_init_switch(void)
 	uint32_t i;
 	uint32_t sw_port_bmp = 0;
 	unsigned char gq_da[6] = { 0x01, 0x00, 0x5e, 0x00, 0x00, 0x01 };
+	unsigned char gq_mld_da[6] = { 0x33, 0x33, 0x00, 0x00, 0x00, 0x01 };
 	tpm_gmacs_enum_t gmac_i;
 	int32_t switch_port;
 
@@ -3322,7 +3323,9 @@ int32_t tpm_init_switch(void)
 	}
 	if (mv_switch_mac_addr_set(gq_da, 0, sw_port_bmp, 1))
 		TPM_OS_WARN(TPM_INIT_MOD, "mv_switch_mac_addr_set err. sw_port_bmp 0X%x\n", sw_port_bmp);
-
+	if (mv_switch_mac_addr_set(gq_mld_da, 0, sw_port_bmp, 1))
+		TPM_OS_WARN(TPM_INIT_MOD, "mv_switch_mac_addr_set err.for mld general query sw_port_bmp 0X%x\n", sw_port_bmp);
+    
 	/* If Switch port MAC no connected to PHY, disable GMAC PHY polling */
 	for (gmac_i = TPM_ENUM_GMAC_0; gmac_i < TPM_MAX_NUM_GMACS; gmac_i++) {
 		if (TPM_FALSE == tpm_init.gmac_port_conf[gmac_i].valid)

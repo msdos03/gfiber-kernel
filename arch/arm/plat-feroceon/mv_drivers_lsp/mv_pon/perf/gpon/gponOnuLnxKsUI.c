@@ -2946,10 +2946,11 @@ void onuGponUiDebugUponModeSet(MV_U32 uponMode)
 }
 
 /*******************************************************************************
-****  onuGponUiCfgSetPatternBurst
+****  onuGponUiCfgSetUserPatternBurst
 **  ____________________________________________________________________________
 **
-**  DESCRIPTION: The function config start onu transmission of pattern burst
+**  DESCRIPTION: The function config start onu transmission of user-defined
+**               pattern burst
 **
 **  PARAMETERS:  char* buf
 **
@@ -2958,11 +2959,34 @@ void onuGponUiDebugUponModeSet(MV_U32 uponMode)
 **  RETURNS:     void
 **
 *******************************************************************************/
-void onuGponUiCfgSetPatternBurst(MV_U32 enable,MV_U32 pattern, MV_U32 burst, MV_U32 duration, MV_U32 period)
+void onuGponUiCfgSetUserPatternBurst(MV_U32 patternMSB, MV_U32 pattern, MV_U32 patternLSB)
+{
+  MV_U32 userPattern[3];
+
+  userPattern[0] = patternLSB;
+  userPattern[1] = pattern;
+  userPattern[2] = patternMSB;
+
+  mvOnuPonMacPrbsUserDefinedPatternSet(userPattern);
+}
+/*******************************************************************************
+****  onuGponUiCfgSetDefinedPatternBurst
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function config start onu transmission of pre-defined
+**               pattern burst
+**
+**  PARAMETERS:  char* buf
+**
+**  OUTPUTS:     char* buf
+**
+**  RETURNS:     void
+**
+*******************************************************************************/
+void onuGponUiCfgSetDefinedPatternBurst(MV_U32 enable, MV_U32 pattern, MV_U32 burst, MV_U32 duration, MV_U32 period)
 {
 
-    if (enable == 0)
-    {
+    if (enable == 0) {
       onuPonPatternBurstOff();
     }
     else
@@ -3190,6 +3214,33 @@ void onuGponUiT02IntervalConfig(MV_U32 interval)
 
 /*******************************************************************************
 **
+**  onuGponUiCfgPrbsUserPattern
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function print PRBS user defined pattern
+**
+**  PARAMETERS:  char* buf
+**
+**  OUTPUTS:     char* buf
+**
+**  RETURNS:     void
+**
+*******************************************************************************/
+int onuGponUiCfgPrbsUserPattern(char* buf)
+{
+  MV_U32 userPattern[3];
+  int off = 0;
+
+  mvOnuPonMacPrbsUserDefinedPatternGet(userPattern);
+
+  off += mvOsSPrintf(buf+off, "PRBS User Pattern 0x%4x%8x%8x\n",
+		     userPattern[2], userPattern[1], userPattern[0]);
+
+  return(off);
+}
+
+/*******************************************************************************
+**
 **  onuGponUiSyncLogEnable
 **  ____________________________________________________________________________
 **
@@ -3267,17 +3318,15 @@ int onuGponUiMiscHelpShow(char* buf)
 	off += mvOsSPrintf(buf+off, " echo [module] [Level] [Options] > printMask       - change printing options\n");
 	off += mvOsSPrintf(buf+off, " echo [state]                    > adminCfg        - "
 						"change PON BE (TX EN) state 0=Enable, 1=Disable\n");
-	off += mvOsSPrintf(buf+off, " echo [enable][pattern][burst][duration][period] > pattern\n");
-	off += mvOsSPrintf(buf+off, "                                                   - "
-						"start enable[1] or stop [0] transmission of\n");
-	off += mvOsSPrintf(buf+off, "                                                     "
-						"pattern: 0x1-1T, 0x2-2T, 0x80-RPBS-9, 0x82-RPBS-15, 0x83-RPBS-23\n");
-	off += mvOsSPrintf(buf+off, "                                                     "
-						"burst: 0-static, 1-periodic\n");
-	off += mvOsSPrintf(buf+off, "                                                     "
-						"duration: peak time interval[micro seconds]\n");
-	off += mvOsSPrintf(buf+off, "                                                     "
-						"period - full cicle time interval[micro seconds]\n");
+  off += mvOsSPrintf(buf+off, " echo [patternMSB][pattern][patternLSB]\n");
+  off += mvOsSPrintf(buf+off, "                                 > prbsUserDefinedPattern - /* 80bit user data: 16bit patternMLSB + 32bit pattern + 32bit patternLSB\n");
+  off += mvOsSPrintf(buf+off, " echo [enable][pattern][burst][duration][period]\n");
+  off += mvOsSPrintf(buf+off, "                                 > prbsPreDefinedPattern\n");
+  off += mvOsSPrintf(buf+off, "                                                   - start enable[1] or stop [0] transmission of\n");
+  off += mvOsSPrintf(buf+off, "                                                     pattern: 0x1-1T, 0x2-2T, 0x5-User, 0x80-PRBS-7, 0x81-PRBS-9, 0x82-PRBS-15\n");
+  off += mvOsSPrintf(buf+off, "                                                     burst: 0-static, 1-periodic\n");
+  off += mvOsSPrintf(buf+off, "                                                     duration: peak time interval[micro seconds]\n");
+  off += mvOsSPrintf(buf+off, "                                                     period - full cycle time interval[micro seconds]\n");
 	off += mvOsSPrintf(buf+off, " echo [T01 Interval]             > t01IntervalCfg  - "
 						"config T01 timer interval in mS\n");
 	off += mvOsSPrintf(buf+off, " echo [T02 Interval]             > t02IntervalCfg  - "
@@ -3296,7 +3345,7 @@ int onuGponUiMiscHelpShow(char* buf)
 int onuGponUiSyncLogEnableShow()
 {
     printk("The Sync Log is ");
-    
+
     if (onuGponLogEnable == MV_TRUE)
     {
         printk("enabled\r\n");
@@ -3305,7 +3354,7 @@ int onuGponUiSyncLogEnableShow()
     {
         printk("disabled\r\n");
     }
-    
+
     return 0;
 }
 
@@ -3342,6 +3391,8 @@ static ssize_t misc_show(struct device *dev,
 
 	if (!strcmp(name, "printMask"))
 		return ponOnuPrintStatus(buf);
+  else if (!strcmp(name, "prbsUserPattern"))
+  	return onuGponUiCfgPrbsUserPattern(buf);
 	else if (!strcmp(name, "helpMisc"))
 		return onuGponUiMiscHelpShow(buf);
 	else if (!strcmp(name, "syncLogEnable"))	/* sync log enable or disable */
@@ -3399,9 +3450,10 @@ static ssize_t misc_store(struct device *dev,
 #endif /* MV_GPON_PERFORMANCE_CHECK */
 	else if (!strcmp(name, "printMask"))		/* module, print level, options */
 		ponOnuChangePrintStatus((MV_U32)param1, (MV_U32)param2, (MV_U32)param3);
-	else if (!strcmp(name, "pattern"))		/* pattern type, burst type, duration, period */
-		onuGponUiCfgSetPatternBurst((MV_U32)param1, (MV_U32)param2, (MV_U32)param3 ,
-					    (MV_U32)param4 , (MV_U32)param5);
+  else if (!strcmp(name, "prbsUserDefinedPattern"))
+    onuGponUiCfgSetUserPatternBurst((MV_U32)param1, (MV_U32)param2, (MV_U32)param3); /* 80bit user data: 16bit patternMLSB + 32bit pattern + 32bit patternLSB\n" */
+  else if (!strcmp(name, "prbsPreDefinedPattern"))
+    onuGponUiCfgSetDefinedPatternBurst((MV_U32)param1, (MV_U32)param2, (MV_U32)param3 , (MV_U32)param4 , (MV_U32)param5);  /* pattern type, burst type, duration, period */
 	else if (!strcmp(name, "adminCfg"))		/* admin 0=enable 1 = disable */
 		onuGponUiDebugAdminMode((MV_U32)param1);
 	else if (!strcmp(name, "t01IntervalCfg"))	/* T01 interval in mS */
@@ -3435,10 +3487,12 @@ static DEVICE_ATTR(stopPonSw,             S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(pmCheck,               S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(pmClear,               S_IWUSR, misc_show, misc_store);
 #endif /* MV_GPON_PERFORMANCE_CHECK */
-static DEVICE_ATTR(printMask,             S_IRUSR | S_IWUSR, misc_show, misc_store);
-static DEVICE_ATTR(pattern,               S_IWUSR, misc_show, misc_store);
+static DEVICE_ATTR(prbsUserDefinedPattern,S_IWUSR, misc_show, misc_store);
+static DEVICE_ATTR(prbsPreDefinedPattern, S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(adminCfg,              S_IWUSR, misc_show, misc_store);
+static DEVICE_ATTR(printMask,             S_IRUSR | S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(helpMisc,              S_IRUSR, misc_show, misc_store);
+static DEVICE_ATTR(prbsUserPattern,       S_IRUSR | S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(t01IntervalCfg,        S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(t02IntervalCfg,        S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(syncLogEnable,         S_IRUSR | S_IWUSR, misc_show, misc_store);
@@ -3459,10 +3513,12 @@ static struct attribute *misc_attrs[] = {
 	&dev_attr_pmCheck.attr,
 	&dev_attr_pmClear.attr,
 #endif /* MV_GPON_PERFORMANCE_CHECK */
+	&dev_attr_prbsUserDefinedPattern.attr,
+	&dev_attr_prbsPreDefinedPattern.attr,
+	&dev_attr_adminCfg.attr,
 	&dev_attr_printMask.attr,
 	&dev_attr_helpMisc.attr,
-	&dev_attr_pattern.attr,
-	&dev_attr_adminCfg.attr,
+	&dev_attr_prbsUserPattern.attr,
 	&dev_attr_t01IntervalCfg.attr,
 	&dev_attr_t02IntervalCfg.attr,
 	&dev_attr_syncLogEnable.attr,
@@ -3505,8 +3561,8 @@ static ssize_t protocol_show(struct device *dev,
 	else if (devId == MV_6601_DEV_ID) {
 		if (!strcmp(name, "acCoupling"))
 			return onuGponUiDebugManagerAcCouplingGet(buf);
-		else if (!strcmp(name, "activeTxBm"))
-			return onuGponUiDebugManagerActiveTxBitmapGet(buf);
+	        else if (!strcmp(name, "activeTxBm"))
+                        return onuGponUiDebugManagerActiveTxBitmapGet(buf);
 	}
 	return 0;
 }
@@ -3564,7 +3620,7 @@ static ssize_t protocol_store(struct device *dev,
 	else if (!strcmp(name, "fifoSupport"))		/* enable/disable */
 		onuGponUiDebugManagerFifoSupportSet((MV_U32)param1);
 	else if (devId == MV_6601_DEV_ID) {
-		if (!strcmp(name, "acCoupling"))	
+		if (!strcmp(name, "acCoupling"))
             /* mode, time, pattern1, pattern2 */
 			onuGponUiDebugManagerAcCouplingSet((MV_U32)param1, (MV_U32)param2, (MV_U32)param3, (MV_U32)param4);
 		else if (!strcmp(name, "activeTxBm"))				/* bitmap, valid */
@@ -3619,7 +3675,7 @@ static struct attribute *protocol_attrs[] = {
 	&dev_attr_ploamBurstCfg.attr,
 	&dev_attr_clearFifoCnts.attr,
 	&dev_attr_fifoSupport.attr,
-	&dev_attr_acCoupling.attr, 
+	&dev_attr_acCoupling.attr,
 	&dev_attr_activeTxBm.attr,
 	&dev_attr_helpProto.attr,
 	NULL

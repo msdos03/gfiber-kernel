@@ -392,7 +392,7 @@ MV_STATUS onuGponDbBwTcontExist(MV_U32 tcontNum, MV_BOOL *exist);
 MV_STATUS onuGponDbBwTcontClear(MV_U32 tcontNum);
 MV_STATUS onuGponDbBwTcontAlloc(MV_U32 tcontNum, MV_U32 allocId);
 MV_STATUS onuGponDbBwTcontConnectCheck(MV_U32 allocId, MV_U32 *tcontNum, MV_BOOL *valid);
-MV_STATUS onuGponDbBwTcontFreeGet(MV_U32 allocId, MV_U32 *tcontNum);
+MV_BOOL   onuGponDbBwTcontFreeGet(MV_U32 allocId, MV_U32 *tcontNum);
 
 MV_STATUS onuGponDbBwMapCntDumpSet(MV_U32 enable);
 MV_BOOL   onuGponDbBwMapCntDumpGet(void);

@@ -93,6 +93,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Global functions
 ------------------------------------------------------------------------------*/
+void onuEponTxControlTimerHndl(void);
+void onuEponMaxSleepTimerHndl(void);
+void onuEponSleepWakeDurationTimerHndl(void);
 
 #ifndef PON_FPGA
 MV_STATUS onuEponSerdesInit(void);

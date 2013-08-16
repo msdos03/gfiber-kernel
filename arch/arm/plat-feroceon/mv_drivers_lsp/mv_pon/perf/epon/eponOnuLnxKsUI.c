@@ -101,7 +101,6 @@ extern MV_U32 regRandomMaskThreshold;
 /* Local Variables
 ------------------------------------------------------------------------------*/
 MV_BOOL infoEponCntReadClearInd = MV_TRUE;
-static S_EponIoctlDba ioctlDba;
 
 /* Export Functions
 ------------------------------------------------------------------------------*/
@@ -882,14 +881,15 @@ int onuEponUiCfgHelpShow(char* buf)
 										"Interrupt\n");
 	off += mvOsSPrintf(buf+off, " echo [#Queue][Thresh]> dgCfg            - configure Dying Gasp DBA report\n");
 	off += mvOsSPrintf(buf+off, " echo [module][Level][Options] > printMask - change printing options\n");
-	off += mvOsSPrintf(buf+off, " echo [enable][pattern][burst][duration]\n");
-	off += mvOsSPrintf(buf+off, "      [period]        > pattern          - start enable[1] or stop[0] transmission"
-										" of pattern: 0x1-1T, 0x2-2T, 0x80-RPBS"
-										"-9, 0x82-RPBS-15, 0x83-RPBS-23 in "
-										"burst: 0-static, 1- periodic for "
-										"duration: peac time interval"
-										"[micro seconds] in period - full cicle"
-										" time interval[micro seconds]\n");
+    off += mvOsSPrintf(buf+off, " echo [action][time]  > txPowerControl   - action(0:enable,1:disable,2:shut down then enable)\n");
+    off += mvOsSPrintf(buf+off, " echo [enable][time]  > powerSaving      - configure early wakeup and max sleep duration\n");
+    off += mvOsSPrintf(buf+off, " echo [action][mode][time][time] > sleepControl - configure sleep/wakeup parameters\n");
+    off += mvOsSPrintf(buf+off, " echo [patternMSB][pattern][patternLSB]\n");
+    off += mvOsSPrintf(buf+off, "                      > prbsUserDefinedPattern - 80bit user data: 16bit patternMLSB + 32bit pattern + 32bit patternLSB\n");
+    off += mvOsSPrintf(buf+off, " echo [enable][pattern][burst][duration][period] \n");
+    off += mvOsSPrintf(buf+off, "                      > prbsPreDefinedPattern - start enable[1] or stop [0] transmission of\n");
+    off += mvOsSPrintf(buf+off, "                                           pattern: 0x1-1T, 0x2-2T, 0x5-User, 0x80-PRBS-7, 0x81-PRBS-9, 0x82-PRBS-15, 0x83-PRBS-23\n");
+    off += mvOsSPrintf(buf+off, "                                           burst: 0-static, 1-periodic\n");
 	if (devId == MV_6601_DEV_ID) {
 		off += mvOsSPrintf(buf+off, " echo [latency][size] > pcsFrameLimits   - Configure PCS Frame Size "
 											"limits\n");
@@ -904,6 +904,7 @@ int onuEponUiCfgHelpShow(char* buf)
 	off += mvOsSPrintf(buf+off, "============================================================================\n");
 	off += mvOsSPrintf(buf+off, " cat printMask                           - dump printing options\n");
 	off += mvOsSPrintf(buf+off, " cat dbaSwCfgPrint                       - dump DBA cfg\n");
+   off += mvOsSPrintf(buf+off, " cat prbsUserPattern                     - dump PRBS user defined pattern\n");
 	if (devId == MV_6601_DEV_ID) {
 		off += mvOsSPrintf(buf+off, " cat pcsFrameLimits                     - dump PCS Frame Size Limits\n");
 		off += mvOsSPrintf(buf+off, " cat rxDataFifoThresh                   - dump RX Parser Data FIFO "
@@ -1089,6 +1090,7 @@ void onuEponUiCfgDbaSwDebug(MV_U32 queueSet, MV_U32 queueBitMap,
   MV_U32         idx;
   MV_U32         qsetidx;
   MV_U32         numOfQueues = 0;
+  S_EponIoctlDba ioctlDba;
 
   memset (&ioctlDba, 0, sizeof(S_EponIoctlDba));
 
@@ -1283,7 +1285,32 @@ int onuEponUiCfgDbaStaticCfgPrint(char* buf)
   return(off);
 }
 
+/*******************************************************************************
+**
+**  onuEponUiCfgPrbsUserPattern
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function print PRBS user defined pattern
+**
+**  PARAMETERS:  char* buf
+**
+**  OUTPUTS:     char* buf
+**
+**  RETURNS:     void
+**
+*******************************************************************************/
+int onuEponUiCfgPrbsUserPattern(char* buf)
+{
+  MV_U32 userPattern[3];
+  int off = 0;
 
+  mvOnuPonMacPrbsUserDefinedPatternGet(userPattern);
+
+  off += mvOsSPrintf(buf+off, "PRBS User Pattern 0x%4x%8x%8x\n",
+		     userPattern[2], userPattern[1], userPattern[0]);
+
+  return(off);
+}
 
 /*******************************************************************************
 **
@@ -1390,10 +1417,11 @@ void onuEponUiCfgDgDebug(MV_U32 dummy)
 
 /*******************************************************************************
 **
-**  onuEponUiCfgSetPatternBurst
+**  onuEponUiCfgSetUserPatternBurst
 **  ____________________________________________________________________________
 **
-**  DESCRIPTION: The function config start/stop onu transmission of pattern burst
+**  DESCRIPTION: The function config start/stop onu transmission of user defined
+**               pattern burst
 **
 **  PARAMETERS:  char* buf
 **
@@ -1402,7 +1430,33 @@ void onuEponUiCfgDgDebug(MV_U32 dummy)
 **  RETURNS:     void
 **
 *******************************************************************************/
-void onuEponUiCfgSetPatternBurst(MV_U32 enable, MV_U32 pattern, MV_U32 burst, MV_U32 duration, MV_U32 period)
+void onuEponUiCfgSetUserPatternBurst(MV_U32 patternMSB, MV_U32 pattern, MV_U32 patternLSB)
+{
+  MV_U32 userPattern[3];
+
+  userPattern[0] = patternLSB;
+  userPattern[1] = pattern;
+  userPattern[2] = patternMSB;
+
+  mvOnuPonMacPrbsUserDefinedPatternSet(userPattern);
+}
+
+/*******************************************************************************
+**
+**  onuEponUiCfgSetDefinedPatternBurst
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function config start/stop onu transmission of pre-defined
+**               pattern burst
+**
+**  PARAMETERS:  char* buf
+**
+**  OUTPUTS:     char* buf
+**
+**  RETURNS:     void
+**
+*******************************************************************************/
+void onuEponUiCfgSetDefinedPatternBurst(MV_U32 enable, MV_U32 pattern, MV_U32 burst, MV_U32 duration, MV_U32 period)
 {
   if (enable == 0)
   {
@@ -1413,6 +1467,139 @@ void onuEponUiCfgSetPatternBurst(MV_U32 enable, MV_U32 pattern, MV_U32 burst, MV
     onuPonTxPowerOn(MV_TRUE);
     onuPonPatternBurstOn(pattern, (MV_BOOL)burst, period, duration);
   }
+}
+
+/*******************************************************************************
+**
+**  onuEponUiCfgLosTime
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets the time duration to be used 
+**               when no optical detected and no GATE MPCPDU received
+**
+**  PARAMETERS:  opticalLosTime - time duration to be used when no optical detected
+**               macLosTime     - time duration to be used when no GATE MPCPDU received
+**  OUTPUTS:     void
+**
+**  RETURNS:     void
+**
+*******************************************************************************/
+void onuEponUiCfgLosTime(MV_U32 opticalLosTime, MV_U32 macLosTime)
+{
+    onuEponDbOnuOpticalLosTimeSet(opticalLosTime);
+    onuEponDbOnuMacLosTimeSet(macLosTime);
+
+    /* If the holdover timer is not active, we add the OpticalLosTimer to the holdover time and save */
+    if (onuPonResourceTbl_s.onuPonHoldoverTimerId.onuPonTimerActive == ONU_PON_TIMER_NOT_ACTIVE)
+    {
+        /* Add the configured OptLosTime to holdover time and save for next holdover */
+        onuPonTimerUpdate(&(onuPonResourceTbl_s.onuPonHoldoverTimerId), 0, 
+                          onuEponDbOnuHoldoverTimeGet() + onuEponDbOnuOpticalLosTimeGet(), 0);
+    }
+}
+
+/*******************************************************************************
+**
+**  onuEponUiCfgTxPowerControl
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function controls the TX power on and off
+**
+**  PARAMETERS:  action - turn on and turn off the TX power, or turn off after 
+**                        certain time duration.
+**               time   - time duration to be expired before turning off TX
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_TRUE or MV_FLASE
+**
+*******************************************************************************/
+void onuEponUiCfgTxPowerControl(MV_U32 action, MV_U32 time)
+{
+    if (action == E_EPON_IOCTL_ENABLE_TX)
+    {
+        onuPonTimerDisable(&(onuPonResourceTbl_s.onuEponTxControlTimerId));
+        onuPonTxPowerOn(MV_TRUE);
+    }
+    else if (action == E_EPON_IOCTL_DISABLE_TX)
+    {
+        onuPonTimerDisable(&(onuPonResourceTbl_s.onuEponTxControlTimerId));
+        onuPonTxPowerOn(MV_FALSE);
+    }
+    else if (action == E_EPON_IOCTL_DISABLE_TX_DELAY)
+    {        
+        onuPonTimerUpdate(&(onuPonResourceTbl_s.onuEponTxControlTimerId), 0, time, 1);
+    }
+}
+
+/*******************************************************************************
+**
+**  onuEponUiCfgPowerSaving
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets the parameters for power saving mode
+**
+**  PARAMETERS:  earlyWakeup - set the ability of supporting early wake up
+**               maxSleepDuration - time period for keeping power saving mode
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_TRUE or MV_FLASE
+**
+*******************************************************************************/
+void onuEponUiCfgPowerSaving(MV_U32 earlyWakeup, MV_U32 maxSleepDuration)
+{    
+    if ((onuEponDbOnuSleepDurationGet() + onuEponDbOnuWakeupDurationGet()) >= maxSleepDuration)
+    {
+        mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+        	       "ERROR: Wrong parameters, sleep(%d) + wakeup(%d) >= maxSleepDuration(%d)\r\n", 
+        	       onuEponDbOnuSleepDurationGet(), onuEponDbOnuWakeupDurationGet(), 
+        	       maxSleepDuration);
+
+        return MV_BAD_PARAM;
+    }
+
+    onuEponDbOnuPowerSavingWakeupSet(earlyWakeup);
+    onuEponDbOnuPowerSavingMaxSleepDurationSet(maxSleepDuration);
+
+    if (onuPonResourceTbl_s.onuEponMaxSleepTimerId.onuPonTimerActive == ONU_PON_TIMER_ACTIVE)
+    {
+        onuPonTimerUpdate(&(onuPonResourceTbl_s.onuEponMaxSleepTimerId), 0, 
+                          maxSleepDuration, 1);
+    }
+}
+
+/*******************************************************************************
+**
+**  onuEponUiCfgControlSleep
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function triggers the action of power mode transformation
+**
+**  PARAMETERS:  action         - enable, disable or configure
+**               sleepMode      - turn off tx or tx/rx
+**               sleepDuration  - periodical time duration for sleep
+**               wakeupDuration - periodical time duration for wakeup
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+void onuEponUiCfgControlSleep(MV_U32 action, MV_U32 sleepMode, MV_U32 sleepDuration, MV_U32 wakeupDuration)
+{
+    if (action == E_GPON_SLEEP_ACTION_DISABLE)
+    {
+        mvEponApiSleepCtrlDisable();
+    }
+    else if (action == E_GPON_SLEEP_ACTION_ENABLE)
+    {
+        mvEponApiSleepCtrlEnable();
+    }
+    else if (action == E_GPON_SLEEP_ACTION_CONFIG)
+    {
+        mvEponApiSleepCtrlCfg(sleepMode, sleepDuration, wakeupDuration);
+    }
 }
 
 /*******************************************************************************
@@ -1573,9 +1760,9 @@ int onuEponUiCfgShowPkt2kEnable(char* buf)
 		off += mvOsSPrintf(buf+off, "Failed to obtain 2K packet support related register value!\r\n");
 	else {
 		off += mvOsSPrintf(buf+off, "\r\n");
-		off += mvOsSPrintf(buf+off, "PcsFrameSizeLimitSize    = %#d\r\n", frameSizeLimitSize);
-        off += mvOsSPrintf(buf+off, "PcsFrameSizeLimitLatency = %#d\r\n", frameSizeLimitLatency);
-        off += mvOsSPrintf(buf+off, "DataFifoThreshold        = %#d\r\n", dataFifoThreshold);
+		off += mvOsSPrintf(buf+off, "PcsFrameSizeLimitSize    = %d\r\n", frameSizeLimitSize);
+        off += mvOsSPrintf(buf+off, "PcsFrameSizeLimitLatency = %d\r\n", frameSizeLimitLatency);
+        off += mvOsSPrintf(buf+off, "DataFifoThreshold        = %d\r\n", dataFifoThreshold);
 	}
 
 	return(off);
@@ -1848,6 +2035,8 @@ static ssize_t cfg_show(struct device *dev,
 		return(onuEponUiCfgDbaCfgPrint(buf));
 	else if (!strcmp(name, "dbaStaticCfgPrint"))
 		return(onuEponUiCfgDbaStaticCfgPrint(buf));
+    else if (!strcmp(name, "prbsUserPattern"))
+        return (onuEponUiCfgPrbsUserPattern(buf));
 	else if (!strcmp(name, "helpCfg"))
 		return(onuEponUiCfgHelpShow(buf));
 	else if (devId == MV_6601_DEV_ID) {
@@ -1920,8 +2109,22 @@ static ssize_t cfg_store(struct device *dev,
 		onuEponUiCfgDgCfg((MV_U32)param1, (MV_U32)param2);
 	else if (!strcmp(name, "printMask"))					/* module, print level, options */
 		ponOnuChangePrintStatus((MV_U32)param1, (MV_U32)param2, (MV_U32)param3);
-	else if (!strcmp(name, "pattern"))
-		onuEponUiCfgSetPatternBurst((MV_U32)param1,(MV_U32)param2,(MV_U32)param3,(MV_U32)param4,(MV_U32)param5);
+    else if (!strcmp(name, "txPowerControl"))
+    {
+        onuEponUiCfgTxPowerControl((MV_U32)param1, (MV_U32)param2);
+    }
+    else if (!strcmp(name, "powerSaving"))
+    {
+        onuEponUiCfgPowerSaving((MV_U32)param1, (MV_U32)param2);
+    }
+    else if (!strcmp(name, "sleepControl"))
+    {
+        onuEponUiCfgControlSleep((MV_U32)param1, (MV_U32)param2, (MV_U32)param3, (MV_U32)param4);
+    }
+    else if (!strcmp(name, "prbsUserDefinedPattern"))
+        onuEponUiCfgSetUserPatternBurst((MV_U32)param1, (MV_U32)param2, (MV_U32)param3); /* 80bit user data: 16bit patternMLSB + 32bit pattern + 32bit patternLSB\n" */
+    else if (!strcmp(name, "prbsPreDefinedPattern"))
+        onuEponUiCfgSetDefinedPatternBurst((MV_U32)param1, (MV_U32)param2, (MV_U32)param3 , (MV_U32)param4 , (MV_U32)param5);  /* pattern type, burst type, duration, period */
 	else if (devId == MV_6601_DEV_ID) {
 		if (!strcmp(name, "pcsFrameLimits"))
 			onuEponUiCfgSetPcsFrameLimits((MV_U32)param1, (MV_U32)param2);
@@ -1964,12 +2167,17 @@ static DEVICE_ATTR(silenceMode,             S_IWUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(silenceSim,              S_IWUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(dgDebug,                 S_IWUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(dgCfg,                   S_IWUSR, cfg_show, cfg_store);
-static DEVICE_ATTR(pattern,                 S_IWUSR, cfg_show, cfg_store);
+static DEVICE_ATTR(prbsUserPattern,         S_IRUSR, cfg_show, cfg_store);
+static DEVICE_ATTR(prbsUserDefinedPattern,  S_IWUSR, cfg_show, cfg_store);
+static DEVICE_ATTR(prbsPreDefinedPattern,   S_IWUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(printMask,               S_IRUSR | S_IWUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(pcsFrameLimits,          S_IWUSR | S_IRUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(rxDataFifoThresh,        S_IWUSR | S_IRUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(ddmTxPolarity,           S_IWUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(pkt2kEn,                 S_IWUSR | S_IRUSR, cfg_show, cfg_store);
+static DEVICE_ATTR(txPowerControl,          S_IWUSR, cfg_show, cfg_store);
+static DEVICE_ATTR(powerSaving,             S_IWUSR, cfg_show, cfg_store);
+static DEVICE_ATTR(sleepControl,            S_IWUSR, cfg_show, cfg_store);
 static DEVICE_ATTR(helpCfg,                 S_IRUSR, cfg_show, cfg_store);
  
 static struct attribute *cfg_attrs[] = {
@@ -1990,12 +2198,17 @@ static struct attribute *cfg_attrs[] = {
 	&dev_attr_silenceSim.attr,
 	&dev_attr_dgDebug.attr,
 	&dev_attr_dgCfg.attr,
-	&dev_attr_pattern.attr,
+	&dev_attr_prbsUserPattern.attr,
+	&dev_attr_prbsUserDefinedPattern.attr,
+	&dev_attr_prbsPreDefinedPattern.attr,
 	&dev_attr_printMask.attr,
 	&dev_attr_pcsFrameLimits.attr,
 	&dev_attr_rxDataFifoThresh.attr, 
 	&dev_attr_ddmTxPolarity.attr,
 	&dev_attr_pkt2kEn.attr, 
+	&dev_attr_txPowerControl.attr, 
+	&dev_attr_powerSaving.attr, 
+	&dev_attr_sleepControl.attr, 
 	&dev_attr_helpCfg.attr,
 	NULL
 };

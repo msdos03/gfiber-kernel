@@ -252,6 +252,52 @@ MV_STATUS onuEponRtosResourceInit(void)
     return(MV_ERROR);
   }
 
+    /* ONU EPON tx_power supply control timer */
+     retcode = onuPonTimerCreate(&(onuPonResourceTbl_s.onuEponTxControlTimerId),    /* timer Id */
+                                 "epon_TxControlTimer",                             /* timer description */
+                                 (PTIMER_FUNCPTR)onuEponTxControlTimerHndl,         /* timer function */
+                                 0,                                                 /* timer function param */
+                                 ONU_PON_TIMER_NOT_ACTIVE ,                         /* init value */
+                                 0);                                                /* periodic value */
+    if (retcode != MV_OK)
+    {
+        mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+                   "ERROR: (%s:%d) EPON Tx power control timer create\n\r", 
+                   __FILE_DESC__, __LINE__);
+        return (MV_ERROR);
+    }
+
+     /* ONU EPON sleep mode: max sleep timer */
+     retcode = onuPonTimerCreate(&(onuPonResourceTbl_s.onuEponMaxSleepTimerId),     /* timer Id */
+                                 "epon_MaxSleepTimer",                              /* timer description */
+                                 (PTIMER_FUNCPTR)onuEponMaxSleepTimerHndl,          /* timer function */
+                                 0,                                                 /* timer function param */
+                                 ONU_PON_TIMER_NOT_ACTIVE,                          /* init value */
+                                 0);                                                /* periodic value */
+    if (retcode != MV_OK)
+    {
+        mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+                   "ERROR: (%s:%d) EPON power saving mode: max sleep timer create\n\r", 
+                   __FILE_DESC__, __LINE__);
+        return (MV_ERROR);
+    }
+
+    /* ONU EPON sleep mode: sleep duration and wait duration timer */
+    retcode = onuPonTimerCreate(&(onuPonResourceTbl_s.onuEponSleepDurationTimerId), /* timer Id */
+                                "epon_SleepWakeDurationTimer",                      /* timer description */
+                                (PTIMER_FUNCPTR)onuEponSleepWakeDurationTimerHndl,  /* timer function */
+                                0,                                                  /* timer function param */
+                                ONU_PON_TIMER_NOT_ACTIVE ,                          /* init value */ 
+                                0);                                                 /* periodic value */ 
+    if (retcode != MV_OK)
+    {
+        mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
+                   "ERROR: (%s:%d) EPON power saving mode: sleep and wait duration timer create\n\r", 
+                   __FILE_DESC__, __LINE__);
+        return(MV_ERROR);
+    }
+  
+
   /* onu epon silence timer */
   for (idx = 0; idx < EPON_MAX_MAC_NUM; idx++) 
   {

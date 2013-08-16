@@ -736,6 +736,11 @@ MV_STATUS mvOnuEponMacCpqTxCtrlHeaderQueueWrite(MV_U32 data, MV_U32 macId);
 MV_STATUS mvOnuEponMacCpqTxCtrlQueueFree(MV_U32 *freeCount, MV_U32 macId);
 MV_STATUS mvOnuEponMacCpqTxCtrlQueueWrite(MV_U32 data, MV_U32 macId);
 
+/* ========================================================================== */
+/*                        SERDES Functions Section                            */
+/* ========================================================================== */
+MV_STATUS mvOnuEponMacSerdesPuRxWrite(MV_U32 enable);
+
 /******************************************************************************/
 /******************************************************************************/
 /* ========================================================================== */

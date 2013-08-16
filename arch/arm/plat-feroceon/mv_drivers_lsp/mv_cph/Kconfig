@@ -1,0 +1,37 @@
+menu "SoC CPH support"
+depends on MV_INCLUDE_CPH
+
+config  MV_CPH
+        bool "Support for Marvell CPU Packet Handler Driver"
+        default y
+        ---help---
+
+comment "CPH Driver Options"
+depends on MV_CPH
+
+config  MV_CPH_IGMP_HANDLE
+        bool "Enable MV_CPH IGMP handling"
+        default y
+        ---help---
+
+config  MV_CPH_MLD_HANDLE
+        bool "Enable MV_CPH MLD handling"
+        default y
+        ---help---
+
+config  MV_CPH_BC_HANDLE
+        bool "Enable MV_CPH broadcast handling"
+        default y
+        ---help---
+        
+config  MV_CPH_UDP_SAMPLE_HANDLE
+        bool "Enable MV_CPH sample UDP handling"
+        default n
+        ---help---
+
+config  MV_CPH_FLOW_MAP_HANDLE
+        bool "Enable MV_CPH flow mapping handling"
+        default y
+        ---help---        
+
+endmenu

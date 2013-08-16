@@ -4181,6 +4181,37 @@ tpm_error_code_t tpm_active_tcont(uint32_t tcont_num);
 *******************************************************************************/
 tpm_error_code_t tpm_deactive_tcont(uint32_t tcont_num);
 
+/*******************************************************************************
+* tpm_sw_set_static_multicast_mac
+*
+* DESCRIPTION:
+*       This function creates or destory a static MAC entry in the MAC address table for taget
+*       UNI port bitmap in the integrated switch
+*
+* INPUTS:
+*       owner_id    	- APP owner id, should be used for all API calls.
+*       tpm_trg_port    - target port bm in UNI port index, TPM_TRG_UNI_0 | TPM_TRG_UNI_1 | ...
+*       static_mac  	- 6 byte network order MAC source address.
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success - TPM_RC_OK.
+*       On error different types are returned according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*       None.
+*
+*******************************************************************************/
+tpm_error_code_t tpm_sw_set_static_multicast_mac
+(
+    uint32_t            owner_id,
+    tpm_trg_port_type_t tpm_trg_port,
+    uint8_t             static_mac[6]
+);
+
+
 /* OLD API functions */
 #define tpm_add_l2_prim_acl_rule                            tpm_add_l2_rule
 #define tpm_add_l3_type_acl_rule                            tpm_add_l3_type_rule

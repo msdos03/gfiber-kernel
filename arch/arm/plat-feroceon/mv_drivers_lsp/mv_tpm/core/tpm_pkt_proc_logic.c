@@ -84,9 +84,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "tpm_common.h"
 #include "tpm_header.h"
 
-/* Local definitions */
-extern MV_STATUS mv_cust_set_tcont_state(uint32_t tcont, bool state);
-
+extern int cph_set_tcont_state(unsigned int tcont, bool state);
 typedef tpm_error_code_t (*tpm_proc_common_int_del_func_t) (uint32_t, uint32_t);
 
 int32_t tpm_proc_virt_uni_trg_port_validation(tpm_trg_port_type_t trg_port);
@@ -14250,7 +14248,7 @@ tpm_error_code_t tpm_proc_delete_ipvx_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 		ret_code = tpm_db_api_entry_invalidate(api_section, stream_num);
 		IF_ERROR(ret_code);
 
-		
+
 		if (TPM_IP_VER_6 == ip_version) {
 			/* remove SIP PNC entry */
 			ret_code = tpm_db_get_ipv6_mc_stream_entry(stream_num, &mc_stream);
@@ -17825,7 +17823,7 @@ tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint
 
 	//TPM_OS_INFO(TPM_PNCL_MOD, "port = %d txp = %d enable = %d\n", port, txp, enable);
 
-    printk(KERN_DEBUG "TPM T-Cont API, port(%d), txp(%d) enable(%d)\n", port, txp, enable);
+	printk("TPM T-Cont API, port(%d), txp(%d) enable(%d)\n", port, txp, enable);
 
 	tx_mod = port + txp;
 
@@ -17855,7 +17853,7 @@ tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint
 
 			/* enable/disable hwf */
 			if (enable == true)
-                printk(KERN_DEBUG "HWF T-Cont active, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+				printk("HWF T-Cont active, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
 
 			mvNetaHwfTxqEnable((queue_owner - 1), port, txp, q_num, enable);
 
@@ -17864,7 +17862,7 @@ tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint
 			if ((!enable) && (curr_state))
 			{
 				//TPM_OS_INFO(TPM_PNCL_MOD, "Call mv_eth_txq_clean - current state: %d, enable %d\n", curr_state, enable);
-                printk(KERN_DEBUG "HWF T-Cont stop/clean, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+				printk("HWF T-Cont stop/clean, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
 				mv_eth_txq_clean(port, txp, q_num);
 			}
 		}
@@ -17874,14 +17872,14 @@ tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint
 		{
 			if (!enable)
 			{
-                printk(KERN_DEBUG "SWF T-Cont stop/clean, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
-				mv_cust_set_tcont_state(txp, false);
+				printk("SWF T-Cont stop/clean, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+				cph_set_tcont_state(txp, false);
 				mv_eth_txq_clean(port, txp, q_num);
 			}
 			else
 			{
-                printk(KERN_DEBUG "SWF T-Cont active, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
-				mv_cust_set_tcont_state(txp, true);
+				printk("SWF T-Cont active, port(%d), txp(%d), que(%d)\n", port, txp, q_num);
+				cph_set_tcont_state(txp, true);
 			}
 		}
 	}

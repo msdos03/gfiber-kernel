@@ -282,10 +282,18 @@ MV_STATUS onuEponOnuGenTblInit(void)
 
 	/* set holdover */
 	onuEponDbOnuHoldoverStateSet(ONU_HOLDOVER_NOT_ACTIVE);
+    onuEponDbOnuHoldoverTimeSet(ONU_PON_TIMER_HOLDOVER_INTERVAL);
+    onuEponDbOnuOpticalLosTimeSet(0);
+
+    onuEponDbOnuPowerSavingMaxSleepDurationSet(ONU_PON_TIMER_MAX_SLEEP_INTERVAL);
+    onuEponDbOnuPowerSavingWakeupSet(0);
+    onuEponDbOnuSleepModeSet(E_EPON_SLEEP_MODE_CTRL_TX);
+    onuEponDbOnuSleepDurationSet(ONU_PON_TIMER_SLEEP_DURATION);
+    onuEponDbOnuWakeupDurationSet(ONU_PON_TIMER_WAKEUP_DURATION);
+    onuEponDbOnuSleepWakeupStatusSet(E_EPON_NOT_POWER_SAVING_STATUS);
 
 	/* set silence */
 	onuEponDbOnuSilenceStateSet(ONU_SILENCE_NOT_ACTIVE);
-
 
 	/* SW DBA params */
 	onuEponDbOnuSwRprtTimerTypeSet(ONU_EPON_SW_DBA_RPRT_TIMER);
@@ -1450,6 +1458,332 @@ MV_STATUS onuEponDbOnuHoldoverExecSet(MV_U32 state)
 MV_U32 onuEponDbOnuHoldoverExecGet(void)
 {
   return(onuEponDb_s.onuEponGenTbl_s.onuEponHoldoverExecute);
+}
+
+/*******************************************************************************
+ **
+ **  onuEponDbOnuOpticalLosTimeSet
+ **  ____________________________________________________________________________
+ ** 
+ **  DESCRIPTION: The function sets time duration value in database 
+ **               when no optical signal is detected
+ **               
+ **  PARAMETERS:  losTime - time duration
+ **
+ **  OUTPUTS:     None
+ **
+ **  RETURNS:     
+ **                   
+ *******************************************************************************/
+MV_STATUS onuEponDbOnuOpticalLosTimeSet(MV_U16 losTime)
+{
+    onuEponDb_s.onuEponGenTbl_s.onuEponOpticalLosTime = losTime;
+    
+    return MV_OK;
+}
+
+/*******************************************************************************
+**
+**  onuEponDbOnuOpticalLosTimeGet
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function returns time duration to be used 
+**               when no optical signal is detected
+**               
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     time duration value
+**                   
+*******************************************************************************/
+MV_U32 onuEponDbOnuOpticalLosTimeGet()
+{
+    return onuEponDb_s.onuEponGenTbl_s.onuEponOpticalLosTime;
+}
+
+/*******************************************************************************
+ **
+ **  onuEponDbOnuMacLosTimeSet
+ **  ____________________________________________________________________________
+ ** 
+ **  DESCRIPTION: The function sets time duration value in database 
+ **               when no GATE MPCPDU is received
+ **
+ **  PARAMETERS:  losTime - time duration
+ **
+ **  OUTPUTS:     None
+ **
+ **  RETURNS:     
+ **                   
+ *******************************************************************************/
+MV_STATUS onuEponDbOnuMacLosTimeSet(MV_U16 losTime)
+{
+    onuEponDb_s.onuEponGenTbl_s.onuEponMacLosTime = losTime;
+    
+    return MV_OK;
+}
+
+/*******************************************************************************
+**
+**  onuEponDbOnuMacLosTimeGet
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function returns time duration to be used 
+**               when no GATE MPCPDU is received
+**               
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     time duration value
+**                   
+*******************************************************************************/
+MV_U32 onuEponDbOnuMacLosTimeGet()
+{
+    return onuEponDb_s.onuEponGenTbl_s.onuEponMacLosTime;
+}
+
+/*******************************************************************************
+ **
+ **  onuEponDbOnuPowerSavingWakeupSet
+ **  ____________________________________________________________________________
+ ** 
+ **  DESCRIPTION: The function sets the support for early wakeup 
+ **               in power saving mode
+ **
+ **  PARAMETERS:  wakeUpEnable - Enable or disable the early wakeup support
+ **
+ **  OUTPUTS:     None
+ **
+ **  RETURNS:     
+ **                   
+ *******************************************************************************/
+MV_STATUS onuEponDbOnuPowerSavingWakeupSet(MV_U8 wakeUpEnable)
+{
+    onuEponDb_s.onuEponGenTbl_s.onuEponPowerSavingWakeup = wakeUpEnable;
+
+    return (MV_OK);
+}
+
+/*******************************************************************************
+**
+**  onuEponDbOnuPowerSavingWakeupGet
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function returns the support for early wakeup
+**               
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     enable or disable
+**                   
+*******************************************************************************/
+MV_U32 onuEponDbOnuPowerSavingWakeupGet()
+{
+    return onuEponDb_s.onuEponGenTbl_s.onuEponPowerSavingWakeup;
+}
+
+/*******************************************************************************
+ **
+ **  onuEponDbOnuPowerSavingMaxSleepDurationSet
+ **  ____________________________________________________________________________
+ ** 
+ **  DESCRIPTION: The function sets the max sleep duration 
+ **               in power saving mode
+ **
+ **  PARAMETERS:  maxSleepDuration - max sleep duration
+ **
+ **  OUTPUTS:     None
+ **
+ **  RETURNS:     
+ **                   
+ *******************************************************************************/
+MV_STATUS onuEponDbOnuPowerSavingMaxSleepDurationSet(MV_U64 maxSleepDuration)
+{
+    onuEponDb_s.onuEponGenTbl_s.onuEponPowerSavingMaxSleepDuration= maxSleepDuration;
+
+    return (MV_OK);
+}
+
+/*******************************************************************************
+**
+**  onuEponDbOnuPowerSavingMaxSleepDurationGet
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function returns the max sleep duration in power saving mode
+**               
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     max sleep duration
+**                   
+*******************************************************************************/
+MV_U32 onuEponDbOnuPowerSavingMaxSleepDurationGet()
+{
+    return onuEponDb_s.onuEponGenTbl_s.onuEponPowerSavingMaxSleepDuration;
+}
+
+/*******************************************************************************
+ **
+ **  onuEponDbOnuSleepModeSet
+ **  ____________________________________________________________________________
+ ** 
+ **  DESCRIPTION: The function sets control mode for power saving
+ **
+ **  PARAMETERS:  mode - turn off tx or tx/rx
+ **
+ **  OUTPUTS:     None
+ **
+ **  RETURNS:     
+ **                   
+ *******************************************************************************/
+MV_STATUS onuEponDbOnuSleepModeSet(MV_U8 mode)
+{
+    onuEponDb_s.onuEponGenTbl_s.onuEponSleepMode = mode;
+
+    return MV_OK;
+}
+
+/*******************************************************************************
+**
+**  onuEponDbOnuSleepModeGet
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function returns the sleep mode for power saving mode
+**               
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     sleep mode
+**                   
+*******************************************************************************/
+E_EponSleepCtrlMode onuEponDbOnuSleepModeGet()
+{
+    return onuEponDb_s.onuEponGenTbl_s.onuEponSleepMode;
+}
+
+/*******************************************************************************
+ **
+ **  onuEponDbOnuSleepDurationSet
+ **  ____________________________________________________________________________
+ ** 
+ **  DESCRIPTION: The function sets the periodical sleep duration 
+ **               for power saving
+ **
+ **  PARAMETERS:  sleepDuration - periodical sleep duration
+ **
+ **  OUTPUTS:     None
+ **
+ **  RETURNS:     
+ **                   
+ *******************************************************************************/
+MV_STATUS onuEponDbOnuSleepDurationSet(MV_U32 sleepDuration)
+{
+    onuEponDb_s.onuEponGenTbl_s.onuEponSleepDuration = sleepDuration;
+
+    return MV_OK;
+}
+
+/*******************************************************************************
+**
+**  onuEponDbOnuSleepDurationGet
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function returns the periodical sleep duration for power saving
+**               
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     max sleep duration
+**                   
+*******************************************************************************/
+MV_U32 onuEponDbOnuSleepDurationGet()
+{
+    return onuEponDb_s.onuEponGenTbl_s.onuEponSleepDuration;
+}
+
+/*******************************************************************************
+ **
+ **  onuEponDbOnuWakeupDurationSet
+ **  ____________________________________________________________________________
+ ** 
+ **  DESCRIPTION: The function sets the periodical wakeup duration 
+ **               for power saving
+ **
+ **  PARAMETERS:  wakeupDuration - periodical wakeup duration
+ **
+ **  OUTPUTS:     None
+ **
+ **  RETURNS:     
+ **                   
+ *******************************************************************************/
+MV_STATUS onuEponDbOnuWakeupDurationSet(MV_U32 wakeupDuration)
+{
+    onuEponDb_s.onuEponGenTbl_s.onuEponWakeupDuration = wakeupDuration;
+
+    return MV_OK;
+}
+
+/*******************************************************************************
+**
+**  onuEponDbOnuWakeupDurationGet
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function returns the periodical wakeup duration for power saving
+**               
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     max sleep duration
+**                   
+*******************************************************************************/
+MV_U32 onuEponDbOnuWakeupDurationGet()
+{
+    return onuEponDb_s.onuEponGenTbl_s.onuEponWakeupDuration;
+}
+
+/*******************************************************************************
+ **
+ **  onuEponDbOnuSleepWakeupStatusSet
+ **  ____________________________________________________________________________
+ ** 
+ **  DESCRIPTION: The function sets power saving status
+ **
+ **  PARAMETERS:  status - no power saving/sleep/wakeup
+ **
+ **  OUTPUTS:     None
+ **
+ **  RETURNS:     
+ **                   
+ *******************************************************************************/
+MV_STATUS onuEponDbOnuSleepWakeupStatusSet(MV_U32 status)
+{
+    onuEponDb_s.onuEponGenTbl_s.onuEponPowerSavingStatus = status;
+}
+
+/*******************************************************************************
+**
+**  onuEponDbOnuSleepWakeupStatusGet
+**  ____________________________________________________________________________
+** 
+**  DESCRIPTION: The function returns the power saving status
+**               
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     power saving status
+**                   
+*******************************************************************************/
+MV_U32 onuEponDbOnuSleepWakeupStatusGet()
+{
+    return onuEponDb_s.onuEponGenTbl_s.onuEponPowerSavingStatus;
 }
 
 /*******************************************************************************

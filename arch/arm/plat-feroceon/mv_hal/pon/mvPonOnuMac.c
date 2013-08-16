@@ -8197,6 +8197,30 @@ MV_STATUS mvOnuEponMacCpqTxCtrlQueueWrite(MV_U32 data, MV_U32 macId)
   return(status);
 }
 
+/*******************************************************************************
+**
+**  mvOnuEponMacSerdesPuRxWrite
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function write to serdes power up receiver 
+**
+**  PARAMETERS:  enable - 0: power down, 1:  power up
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK or MV_ERROR
+**
+*******************************************************************************/
+MV_STATUS mvOnuEponMacSerdesPuRxWrite(MV_U32 enable)
+{
+    MV_STATUS status;
+
+    status = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_0_PU_RX, enable, 0);
+
+    return(status);
+}
+
+
 /******************************************************************************/
 /******************************************************************************/
 /* ========================================================================== */

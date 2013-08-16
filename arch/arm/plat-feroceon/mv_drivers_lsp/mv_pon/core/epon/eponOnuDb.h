@@ -83,6 +83,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Include Files
 ------------------------------------------------------------------------------*/
+#include "eponOnuLnxKsMI.h"
  
 /* Definitions
 ------------------------------------------------------------------------------*/ 
@@ -330,6 +331,20 @@ typedef struct
   MV_U32 shadow;                              
 }S_OnuEponDbaShadowRegMap;
 
+typedef enum
+{
+    E_EPON_SLEEP_MODE_CTRL_NOTHING = 0,
+    E_EPON_SLEEP_MODE_CTRL_TX      = 1,
+    E_EPON_SLEEP_MODE_CTRL_TX_RX   = 2, 
+} E_EponSleepCtrlMode;
+
+typedef enum
+{
+    E_EPON_NOT_POWER_SAVING_STATUS    = 0, 
+    E_EPON_POWER_SAVING_SLEEP_STATUS  = 1, 
+    E_EPON_POWER_SAVING_WAKEUP_STATUS = 2, 
+} E_EponPowerSavingStatus;
+
 typedef struct                                         
 {                                                      
   MV_U32           onuEponValid[EPON_MAX_MAC_NUM];      /* ONU Valid for sync */  
@@ -358,7 +373,16 @@ typedef struct
   MV_U32           onuEponOverHead;             
   MV_U32           onuEponPhyOutput;             
   MV_U32           onuEponXvrBurstEnPolarity;
-}S_OnuEponGenTbl;                                     
+  MV_U32           onuEponOpticalLosTime;
+  MV_U32           onuEponMacLosTime;
+  MV_U32           onuEponPowerSavingWakeup;
+  MV_U32           onuEponPowerSavingMaxSleepDuration;
+  MV_U32           onuEponSleepAction;
+  MV_U32           onuEponSleepMode;
+  MV_U32           onuEponSleepDuration;
+  MV_U32           onuEponWakeupDuration;
+  MV_U32           onuEponPowerSavingStatus;
+}S_OnuEponGenTbl;
 
 /* ONU EPON Data Path tables */
 typedef struct
@@ -464,6 +488,24 @@ MV_STATUS onuEponDbOnuHoldoverTimeSet(MV_U32 time);
 MV_U32    onuEponDbOnuHoldoverTimeGet(void);
 MV_STATUS onuEponDbOnuHoldoverExecSet(MV_U32 state);
 MV_U32    onuEponDbOnuHoldoverExecGet(void);
+MV_STATUS onuEponDbOnuOpticalLosTimeSet(MV_U16 losTime);
+MV_U32    onuEponDbOnuOpticalLosTimeGet(void);
+MV_STATUS onuEponDbOnuMacLosTimeSet(MV_U16 losTime);
+MV_U32    onuEponDbOnuMacLosTimeGet(void);
+MV_STATUS onuEponDbOnuPowerSavingWakeupSet(MV_U8 wakeUpEnable);
+MV_U32    onuEponDbOnuPowerSavingWakeupGet(void);
+MV_STATUS onuEponDbOnuPowerSavingMaxSleepDurationSet(MV_U64 maxSleepDuration);
+MV_U32    onuEponDbOnuPowerSavingMaxSleepDurationGet(void);
+MV_STATUS onuEponDbOnuSleepActionSet(MV_U8 action);
+MV_U32    onuEponDbOnuSleepActionGet(void);
+MV_STATUS onuEponDbOnuSleepModeSet(MV_U8 mode);
+MV_U32    onuEponDbOnuSleepModeGet(void);
+MV_STATUS onuEponDbOnuSleepDurationSet(MV_U32 sleepDuration);
+MV_U32    onuEponDbOnuSleepDurationGet(void);
+MV_STATUS onuEponDbOnuWakeupDurationSet(MV_U32 wakeupDuration);
+MV_U32    onuEponDbOnuWakeupDurationGet(void);
+MV_STATUS onuEponDbOnuSleepWakeupStatusSet(MV_U32 status);
+MV_U32    onuEponDbOnuSleepWakeupStatusGet(void);
 MV_STATUS onuEponDbOnuSilenceStateSet(MV_U32 state);
 MV_U32    onuEponDbOnuSilenceStateGet(void);
 MV_STATUS onuEponDbOnuSwRprtTimerTypeSet(MV_U32 timerType);

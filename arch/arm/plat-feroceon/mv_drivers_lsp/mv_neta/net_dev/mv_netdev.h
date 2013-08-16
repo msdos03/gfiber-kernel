@@ -333,7 +333,7 @@ struct eth_port {
 #endif /* CONFIG_MV_ETH_RX_CSUM_OFFLOAD */
 #ifdef CONFIG_MV_ETH_RX_SPECIAL
 	void    (*rx_special_proc)(int port, int rxq, struct net_device *dev,
-					struct sk_buff *skb, struct neta_rx_desc *rx_desc);
+					struct eth_pbuf *pkt, struct neta_rx_desc *rx_desc);
 #endif /* CONFIG_MV_ETH_RX_SPECIAL */
 #ifdef CONFIG_MV_ETH_TX_SPECIAL
 	int     (*tx_special_check)(int port, struct net_device *dev, struct sk_buff *skb,
@@ -723,7 +723,7 @@ void        mv_eth_tx_special_check_func(int port, int (*func)(int port, struct 
 
 #ifdef CONFIG_MV_ETH_RX_SPECIAL
 void        mv_eth_rx_special_proc_func(int port, void (*func)(int port, int rxq, struct net_device *dev,
-							struct sk_buff *skb, struct neta_rx_desc *rx_desc));
+							struct eth_pbuf *pkt, struct neta_rx_desc *rx_desc));
 #endif /* CONFIG_MV_ETH_RX_SPECIAL */
 
 #ifdef CONFIG_MV_MAC_LEARN

@@ -1695,6 +1695,16 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
                   ret = 0;
                   break;
 
+              /* ====== MV_TPM_IOCTL_SW_SET_STATIC_MULTICAST_MAC ========= */
+              case MV_TPM_IOCTL_SW_SET_STATIC_MULTICAST_MAC:
+                  rcode = tpm_sw_set_static_multicast_mac(  tpm_sw_mac_security->owner_id,
+                                                  tpm_sw_mac_security->port_vector,
+                                                &(tpm_sw_mac_security->static_mac[0]));
+                  if(rcode != TPM_OK)
+                    goto ioctlErr;
+                  ret = 0;
+                  break;
+
               default:
                 ret = -EINVAL;
           }
@@ -3800,6 +3810,7 @@ EXPORT_SYMBOL(tpm_sw_set_port_mirror);
 EXPORT_SYMBOL(tpm_sw_get_port_mirror);
 EXPORT_SYMBOL(tpm_sw_set_isolate_eth_port_vector);
 EXPORT_SYMBOL(tpm_sw_get_isolate_eth_port_vector);
+EXPORT_SYMBOL(tpm_sw_set_static_multicast_mac);
 EXPORT_SYMBOL(tpm_sw_set_port_tagged);
 EXPORT_SYMBOL(tpm_sw_set_port_untagged);
 EXPORT_SYMBOL(tpm_sw_set_port_def_vlan);

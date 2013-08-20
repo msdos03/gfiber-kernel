@@ -1157,7 +1157,14 @@ CONFIG_GPIOLIB=y
 # CONFIG_POWER_SUPPLY is not set
 # CONFIG_HWMON is not set
 # CONFIG_THERMAL is not set
-# CONFIG_WATCHDOG is not set
+CONFIG_WATCHDOG=y
+# CONFIG_WATCHDOG_NOWAYOUT is not set
+
+#
+# Watchdog Device Drivers
+#
+CONFIG_ORION_WATCHDOG=y
+
 CONFIG_SSB_POSSIBLE=y
 
 #

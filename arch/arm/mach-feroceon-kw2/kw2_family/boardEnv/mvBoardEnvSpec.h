@@ -496,22 +496,21 @@ MPP#	NAME			IN/OUT
  6 I2C_SCLK (out)         ...
  7 UART0_TX (out)         ...
  8 UART0_RX (in)          ...
- 9 VDD_MARGIN_EN (out)    ---
-10 VDD_MARGIN_CTRL (out)  ---
-11 PON_LINK_LED (out)     PON_LED_RED (out)
-12 PON_ERROR_LED (out)    PON_LED_BLUE (out)
+ 9 VDD_MARGIN_EN (out)    PON_LED_BLUE (out)
+10 VDD_MARGIN_CTRL (out)  PON_LED_RED (out)
+11 PON_LINK_LED (out)     ---
+12 PON_ERROR_LED (out)    ---
 13 BOARD_VER[0] (in)      ...
 14 ---                    GE_LINK_LED (out)
 15 BOARD_VER[1] (in)      ...
 17 SW_RESET (out)         ...
 18 BOARD_VER[2] (in)      ...
 21 PON_TX_DIS (out)       ...
-22 ---                    DOLOS_DETECT (in)
 23 GE_DATA_LED (out)      ---
 24 GE_LINK_LED (out)      PTP_TRIG_GEN (out)
 25 ---                    PTP_EVENT_REQ (in)
 26 PON_C2_DATA (out)      GE_DATA_LED (out)
-27 PON_C2_CLK (out)       PTP_CLK (in)
+27 PON_C2_CLK (out)       DOLOS_DETECT (in)
 28 SPI_WP_L (out)         ...
 29 PON_RX_LOS (in)        ...
 31 UART1_RX (out)         ...
@@ -529,11 +528,11 @@ MPP#	NAME			IN/OUT
 #define GFLT200_EVT1_GPP_POL_LOW	0x0
 #define GFLT200_EVT1_GPP_POL_MID	0x0
 
-#define GFLT200_EVT2_GPP_OUT_ENA_LOW	(BIT13 | BIT15 | BIT18 | BIT22 | BIT29)
+#define GFLT200_EVT2_GPP_OUT_ENA_LOW	(BIT13 | BIT15 | BIT18 | BIT27 | BIT29)
 #define GFLT200_EVT2_GPP_OUT_ENA_MID	(BIT4)
 
 #define GFLT200_EVT2_GPP_OUT_VAL_LOW	(BIT21 | BIT28)
-#define GFLT200_EVT2_GPP_OUT_VAL_MID	0x0
+#define GFLT200_EVT2_GPP_OUT_VAL_MID	(BIT5)
 
 #define GFLT200_EVT2_GPP_POL_LOW	0x0
 #define GFLT200_EVT2_GPP_POL_MID	0x0

@@ -81,7 +81,7 @@ COMMON_OBJS	= $(COMMON_DIR)/mvDebug.o $(COMMON_DIR)/mvCommon.o $(COMMON_DIR)/mvS
 
 OSSERVICES_OBJS	= $(OSSERV_DIR)/mvOs.o
 
-HAL_OBJS	= $(HAL_RTC_DIR)/mvRtc.o  $(HAL_DRAM_SPD_DIR)/mvSpd.o		\
+HAL_OBJS	= $(HAL_DRAM_SPD_DIR)/mvSpd.o					\
                   $(HAL_CNTMR_DIR)/mvCntmr.o					\
 		  $(HAL_TWSI_DIR)/mvTwsi.o					\
                   $(HAL_UART_DIR)/mvUart.o $(HAL_GPP_DIR)/mvGpp.o               \
@@ -116,7 +116,7 @@ NOR_OBJS	= $(HAL_NOR_DIR)/mvAmdFlash.o $(HAL_NOR_DIR)/mvFlash.o				\
 		  $(HAL_NOR_DIR)/mvFlashCom.o $(HAL_NOR_DIR)/mvIntelFlash.o
 
 LSP_OBJS        = $(LSP_DIR)/core.o $(LSP_DIR)/irq.o $(LSP_DIR)/time.o  	\
-                  $(LSP_DIR)/leds.o $(LSP_DIR)/sysmap.o  $(LSP_DIR)/rtc.o 	\
+                  $(LSP_DIR)/leds.o $(LSP_DIR)/sysmap.o 			\
 		  $(LSP_DIR)/export.o $(LSP_DIR)/clock.o
 
 obj-y   				:=  feroceon.o
@@ -130,6 +130,7 @@ feroceon-$(CONFIG_MV_INCLUDE_PEX) 	+= $(HAL_PEX_DIR)/mvPex.o					\
 					   $(HAL_IF_DIR)/mvSysPex.o $(HAL_PEX_DIR)/mvPexAddrDec.o
 feroceon-$(CONFIG_MV_INCLUDE_USB) 	+= $(HAL_USB_DIR)/mvUsb.o $(HAL_USB_DIR)/mvUsbAddrDec.o		\
 					   $(HAL_IF_DIR)/mvSysUsb.o
+feroceon-$(CONFIG_MV_INCLUDE_RTC)	+= $(HAL_RTC_DIR)/mvRtc.o $(LSP_DIR)/rtc.o
 feroceon-y				+= $(HAL_ETHPHY_DIR)/mvEthPhy.o $(HAL_IF_DIR)/mvSysEthPhy.o
 
 ifneq ($(CONFIG_MV_ETH_NFP),m)

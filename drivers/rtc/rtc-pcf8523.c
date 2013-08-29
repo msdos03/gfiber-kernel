@@ -10,7 +10,9 @@
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/rtc.h>
+#ifdef CONFIG_OF
 #include <linux/of.h>
+#endif
 
 #define DRIVER_NAME "rtc-pcf8523"
 
@@ -313,13 +315,27 @@ static struct i2c_driver pcf8523_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
 		.owner = THIS_MODULE,
+#ifdef CONFIG_OF
 		.of_match_table = of_match_ptr(pcf8523_of_match),
+#endif
 	},
 	.probe = pcf8523_probe,
 	.remove = pcf8523_remove,
 	.id_table = pcf8523_id,
 };
-module_i2c_driver(pcf8523_driver);
+
+static int __init pcf8523_init(void)
+{
+	return i2c_add_driver(&pcf8523_driver);
+}
+
+static void __exit pcf8523_exit(void)
+{
+	i2c_del_driver(&pcf8523_driver);
+}
+
+module_init(pcf8523_init);
+module_exit(pcf8523_exit);
 
 MODULE_AUTHOR("Thierry Reding <thierry.reding@avionic-design.de>");
 MODULE_DESCRIPTION("NXP PCF8523 RTC driver");

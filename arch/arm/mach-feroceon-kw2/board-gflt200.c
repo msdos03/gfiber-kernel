@@ -1,6 +1,7 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
+#include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
@@ -23,6 +24,12 @@ static ssize_t board_hw_ver_show(struct device *dev,
 }
 
 static DEVICE_ATTR(hw_ver, S_IRUGO, board_hw_ver_show, NULL);
+
+static struct i2c_board_info board_i2c_devices[] = {
+	{
+		I2C_BOARD_INFO("pcf8523", 0x68),
+	},
+};
 
 int __init board_init(void)
 {
@@ -47,6 +54,12 @@ int __init board_init(void)
 	rc = device_create_file(&pdev->dev, &dev_attr_hw_ver);
 	if (rc)
 		pr_err(BOARD_NAME ": error %d creating attribute 'hw_ver'\n",
+			rc);
+
+	rc = i2c_register_board_info(0, board_i2c_devices,
+					ARRAY_SIZE(board_i2c_devices));
+	if (rc)
+		pr_err(BOARD_NAME ": error %d registering board I2C devices\n",
 			rc);
 
 	return 0;

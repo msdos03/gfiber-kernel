@@ -301,6 +301,13 @@ config LEDS_TRIGGER_DEFAULT_ON
 	  This allows LEDs to be initialised in the ON state.
 	  If unsure, say Y.
 
+config LEDS_TRIGGER_DONT_CLOBBER_BRIGHTNESS
+	bool "Don't clobber brightness"
+	depends on LEDS_TRIGGERS
+	help
+	  This prevents the LED brightness from being clobbered when setting
+	  triggers.
+
 comment "iptables trigger is under Netfilter config (LED target)"
 	depends on LEDS_TRIGGERS
 

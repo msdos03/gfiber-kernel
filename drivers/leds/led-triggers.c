@@ -112,7 +112,9 @@ void led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trigger)
 		if (led_cdev->trigger->deactivate)
 			led_cdev->trigger->deactivate(led_cdev);
 		led_cdev->trigger = NULL;
+#ifndef CONFIG_LEDS_TRIGGER_DONT_CLOBBER_BRIGHTNESS
 		led_set_brightness(led_cdev, LED_OFF);
+#endif
 	}
 	if (trigger) {
 		write_lock_irqsave(&trigger->leddev_list_lock, flags);

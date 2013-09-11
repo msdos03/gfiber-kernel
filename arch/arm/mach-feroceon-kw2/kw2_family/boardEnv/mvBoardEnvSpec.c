@@ -1306,12 +1306,17 @@ MV_BOARD_MPP_TYPE_INFO gflt200InfoBoardMppTypeInfo[] = {
 	}
 };
 
-MV_BOARD_GPP_INFO gflt200InfoBoardGppInfo[] = {
+MV_BOARD_GPP_INFO gflt200Evt1InfoBoardGppInfo[] = {
 	/* {{MV_BOARD_GPP_CLASS devClass, MV_U8 gppPinNum}} */
 	/*{BOARD_GPP_PON_XVR_TX, 17, 0},*/
 	/*{BOARD_GPP_PON_XVR_TX_IND, 24, 0},*/
 	{BOARD_GPP_PON_XVR_TX, 21, 1},
 	{BOARD_GPP_PON_XVR_TX_POWER, 37, 1},
+};
+
+MV_BOARD_GPP_INFO gflt200Evt2InfoBoardGppInfo[] = {
+	{BOARD_GPP_PON_XVR_TX, 21, 1},
+	{BOARD_GPP_PON_XVR_TX_POWER, 37, 0},
 };
 
 MV_DEV_CS_INFO gflt200InfoBoardDeCsInfo[] = {
@@ -1376,6 +1381,9 @@ static MV_VOID gflt200BoardInit(MV_BOARD_INFO *pBoardInfo)
 			= MV_ARRAY_SIZE(gflt200Evt1InfoBoardMppConfigValue);
 		pBoardInfo->pBoardMppConfigValue
 			= gflt200Evt1InfoBoardMppConfigValue;
+		pBoardInfo->numBoardGppInfo
+			= MV_ARRAY_SIZE(gflt200Evt1InfoBoardGppInfo),
+		pBoardInfo->pBoardGppInfo = gflt200Evt1InfoBoardGppInfo,
 		pBoardInfo->gppOutEnValLow = GFLT200_EVT1_GPP_OUT_ENA_LOW;
 		pBoardInfo->gppOutEnValMid = GFLT200_EVT1_GPP_OUT_ENA_MID;
 		pBoardInfo->gppOutValLow = GFLT200_EVT1_GPP_OUT_VAL_LOW;
@@ -1392,6 +1400,9 @@ static MV_VOID gflt200BoardInit(MV_BOARD_INFO *pBoardInfo)
 			= MV_ARRAY_SIZE(gflt200Evt2InfoBoardMppConfigValue);
 		pBoardInfo->pBoardMppConfigValue
 			= gflt200Evt2InfoBoardMppConfigValue;
+		pBoardInfo->numBoardGppInfo
+			= MV_ARRAY_SIZE(gflt200Evt2InfoBoardGppInfo),
+		pBoardInfo->pBoardGppInfo = gflt200Evt2InfoBoardGppInfo,
 		pBoardInfo->gppOutEnValLow = GFLT200_EVT2_GPP_OUT_ENA_LOW;
 		pBoardInfo->gppOutEnValMid = GFLT200_EVT2_GPP_OUT_ENA_MID;
 		pBoardInfo->gppOutValLow = GFLT200_EVT2_GPP_OUT_VAL_LOW;
@@ -1416,8 +1427,6 @@ MV_BOARD_INFO gflt200Info = {
 	.pBoardTwsiDev = gflt200InfoBoardTwsiDev,
 	.numBoardMacInfo = MV_ARRAY_SIZE(gflt200InfoBoardMacInfo),
 	.pBoardMacInfo = gflt200InfoBoardMacInfo,
-	.numBoardGppInfo = MV_ARRAY_SIZE(gflt200InfoBoardGppInfo),
-	.pBoardGppInfo = gflt200InfoBoardGppInfo,
 	.activeLedsNumber = 0,
 	.pLedGppPin = NULL,
 	.ledsPolarity = 0,

@@ -16,6 +16,62 @@
 #define GPIO_BOARD_VER_0	13
 #define GPIO_BOARD_VER_1	15
 #define GPIO_BOARD_VER_2	18
+#define GPIO_PON_PWR_EN		37
+#define GPIO_PON_TX_DIS		21
+
+struct board_gpio {
+	unsigned	gpio;
+	const char	*label;
+};
+
+static struct board_gpio board_gpios[] = {
+	{
+		.gpio = GPIO_PON_PWR_EN,
+		.label = "power-enable",
+	},
+	{
+		.gpio = GPIO_PON_TX_DIS,
+		.label = "tx-disable",
+	},
+};
+
+static int board_gpio_export(struct board_gpio *gpio, struct device *dev)
+{
+	int rc;
+
+	rc = gpio_request(gpio->gpio, gpio->label);
+	if (rc) {
+		pr_err(BOARD_NAME ": error %d requesting gpio %u (%s)\n", rc,
+			gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	/* this is needed to set gpiolib's out flag for the gpio */
+	rc = gpio_direction_output(gpio->gpio, gpio_get_value(gpio->gpio));
+	if (rc) {
+		pr_err(BOARD_NAME ": error %d setting gpio %u (%s) direction\n",
+			rc, gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	rc = gpio_export(gpio->gpio, false);
+	if (rc) {
+		pr_err(BOARD_NAME ": error %d exporting gpio %u (%s)\n", rc,
+			gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	rc = gpio_export_link(dev, gpio->label, gpio->gpio);
+	if (rc) {
+		pr_err(BOARD_NAME ": error %d linking gpio %u (%s)\n", rc,
+			gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	rc = 0;
+exit:
+	return rc;
+}
 
 static int board_hw_ver(void)
 {
@@ -123,6 +179,7 @@ static struct i2c_board_info board_i2c_devices[] = {
 
 int __init board_init(void)
 {
+	int i;
 	int rc;
 	int hw_ver;
 	struct platform_device *pdev;
@@ -156,6 +213,10 @@ int __init board_init(void)
 				"board");
 	if (rc)
 		pr_err(BOARD_NAME ": error %d creating link 'board'\n", rc);
+
+	/* /sys/devices/platform/board/<gpio_name> */
+	for (i = 0; i < ARRAY_SIZE(board_gpios); i++)
+		board_gpio_export(&board_gpios[i], &pdev->dev);
 
 	/* /sys/devices/platform/board/hw_ver */
 	rc = device_create_file(&pdev->dev, &dev_attr_hw_ver);

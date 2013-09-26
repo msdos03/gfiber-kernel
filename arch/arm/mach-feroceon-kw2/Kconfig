@@ -18,6 +18,10 @@ config MACH_GFLT200
 	bool "GFLT200 board"
 	depends on MV88F6500
 
+config MACH_GFLT110
+	bool "GFLT110 board"
+	depends on MV88F6500
+
 endchoice
 
 endif

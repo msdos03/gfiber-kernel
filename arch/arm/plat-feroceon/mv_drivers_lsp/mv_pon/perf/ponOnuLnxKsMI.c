@@ -192,15 +192,19 @@ ponInitError:
 **  RETURNS:     (0)
 **
 *******************************************************************************/
+DECLARE_MUTEX(ioctl_lock);
+
 int mvPonCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int				ret = -EINVAL;
 	E_PonDriverMode drvMode;
 
 
+        down(&ioctl_lock);
 	switch (cmd) {
 	/* ====== MVPON_IOCTL_START ======= */
 	case MVPON_IOCTL_START:
+		printk(KERN_INFO "==== mvPonIoctl: MVPON_IOCTL_START called====\n");
 		if (ponDev.drvMode == E_PON_DRIVER_UNDEF_MODE) {
 			/* The driver only alows transition from Undefined to EPON or GPON mode */
 			ret = get_user(drvMode, (E_PonDriverMode __user *)arg);
@@ -291,7 +295,7 @@ int mvPonCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd, uns
 
 
 ioctlErr:
-
+        up(&ioctl_lock);
 	return(ret);
 }
 

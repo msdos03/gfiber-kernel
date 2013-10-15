@@ -513,10 +513,10 @@ MV_STATUS onuPonPatternBurstTransmit(MV_BOOL on)
 		if (status != MV_OK)
 			return(MV_ERROR);
 
-	} else if (mvCtrlRevGet() == ONU_ASIC_REV_A0) {
+	} else if ((mvCtrlRevGet() == ONU_ASIC_REV_A0) || (MV_6601_DEV_ID == mvCtrlModelGet())) {
 
-		/* ASIC Rev A0 */
-		/* =========== */
+		/* ASIC Rev A0 and MC */
+		/* ================== */
 		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_OUTPUT, 0);
 		if (status != MV_OK) {
 			mvPonPrint(PON_PRINT_ERROR, PON_ISR_MODULE,
@@ -691,10 +691,10 @@ MV_STATUS onuPonPatternBurstOn(MV_U32 pattern, MV_BOOL isPeriodic, MV_U32 period
 		if (status != MV_OK)
 			return(status);
 
-	} else if (mvCtrlRevGet() == ONU_ASIC_REV_A0) {
+	} else if ((mvCtrlRevGet() == ONU_ASIC_REV_A0) || (MV_6601_DEV_ID == mvCtrlModelGet())) {
 
-		/* ASIC Rev A0 */
-		/* =========== */
+		/* ASIC Rev A0 and MC */
+		/* ================== */
 		status  = asicOntMiscRegWrite(mvAsicReg_PON_SERDES_PHY_CTRL_1_BEN_IO_EN, ONU_PHY_OUTPUT, 0);
 		if (status != MV_OK)
 			return(status);

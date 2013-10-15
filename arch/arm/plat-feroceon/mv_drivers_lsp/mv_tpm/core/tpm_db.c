@@ -5658,6 +5658,32 @@ void tpm_db_reset_ipv6_mc_stream_entry(uint32_t stream_num)
 	memset(&(tpm_db.ipv6_mc_stream[stream_num]), 0, sizeof(tpm_db_ipv6_mc_stream_entry_t));
 }
 
+int32_t tpm_db_get_mc_mac_port_bm(uint8_t *mac_addr, uint32_t *uni_port_bm)
+{
+	uint32_t entry_id;
+	uint32_t port_nr;
+
+	*uni_port_bm = 0;
+
+	for (entry_id = 0; entry_id < TPM_MC_MAX_MAC_NUM; entry_id++) {
+		if (tpm_db_mc_mac_table[entry_id] != NULL)
+			if (!memcmp(tpm_db_mc_mac_table[entry_id]->mac_addr, mac_addr, 6 * sizeof(uint8_t)))
+				break;
+	}
+
+	if (entry_id == TPM_MC_MAX_MAC_NUM) {
+		/* no entry for this MAC */
+		*uni_port_bm = 0;
+		return TPM_DB_OK;
+	}
+
+	for (port_nr = TPM_SRC_PORT_UNI_0; port_nr <= TPM_SRC_PORT_UNI_VIRT; port_nr++)
+		if (tpm_db_mc_mac_table[entry_id]->user_num[port_nr])
+			*uni_port_bm |= (TPM_TRG_UNI_0 << port_nr);
+
+	return TPM_DB_OK;
+}
+
 int32_t tpm_db_increase_mc_mac_port_user_num(uint8_t *mac_addr, uint32_t uni_port)
 {
 	uint32_t entry_id, first_free = TPM_MC_MAX_MAC_NUM;

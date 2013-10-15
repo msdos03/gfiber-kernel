@@ -658,20 +658,23 @@ INT32 cph_data_flow_tx(INT32 port, struct net_device *dev, struct sk_buff *skb,
         {
             /* Handle multicat packets as unicast one */
             if (flow_rule.parse_bm & CPH_FLOW_PARSE_MC_PROTO) {
-                
                 flow_rule.parse_bm &= ~CPH_FLOW_PARSE_MC_PROTO;
-                rc = cph_flow_get_rule(&flow_rule);
-
+                rc = cph_flow_get_rule_by_vid(&flow_rule);
                 if (rc != MV_OK)
                 {
-                    flow_rule.is_default = TRUE;
                     rc = cph_flow_get_rule(&flow_rule);
+
                     if (rc != MV_OK)
                     {
-                        MV_CPH_PRINT(CPH_DEBUG_LEVEL, "%s():fail to call cph_flow_get_rule, rc<%d> \n", __FUNCTION__, rc);
-                        return 0;
+                        flow_rule.is_default = TRUE;
+                        rc = cph_flow_get_rule(&flow_rule);
+                        if (rc != MV_OK)
+                        {
+                            MV_CPH_PRINT(CPH_DEBUG_LEVEL, "%s():fail to call cph_flow_get_rule, rc<%d> \n", __FUNCTION__, rc);
+                            return 0;
+                        }
                     }
-                }                
+                }
             }
             else {
 
@@ -699,7 +702,7 @@ INT32 cph_data_flow_tx(INT32 port, struct net_device *dev, struct sk_buff *skb,
             skb->data  += MV_ETH_MH_SIZE;
             skb->len   -= MV_ETH_MH_SIZE;
         }
-        
+
         /* modify packet */
         rc = cph_flow_mod_frwd(&flow_rule, tx_spec_out);
         if (rc != MV_OK)

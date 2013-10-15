@@ -149,6 +149,15 @@ typedef enum
     CPH_FLOW_PARSE_MC_PROTO  = 0x10,  /* parsing multicast protocol                      */
 } CPH_FLOW_PARSE_E;
 
+typedef enum
+{
+    CPH_TCI_FIELD_VID,
+    CPH_TCI_FIELD_CFI,
+    CPH_TCI_FIELD_PBIT,
+    CPH_TCI_FIELD_VID_PBIT,
+    CPH_TCI_FIELD_ALL,
+} CPH_TCI_FIELD_E;
+
 typedef struct
 {
     BOOL               valid;
@@ -200,7 +209,7 @@ typedef struct {
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32 cph_flow_add_rule(CPH_FLOW_ENTRY_T *cph_flow);
@@ -218,7 +227,7 @@ INT32 cph_flow_add_rule(CPH_FLOW_ENTRY_T *cph_flow);
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32  cph_flow_del_rule(CPH_FLOW_ENTRY_T *cph_flow);
@@ -236,7 +245,7 @@ INT32  cph_flow_del_rule(CPH_FLOW_ENTRY_T *cph_flow);
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32 cph_flow_clear_rule(VOID);
@@ -254,7 +263,7 @@ INT32 cph_flow_clear_rule(VOID);
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32 cph_flow_clear_rule_by_mh(UINT16 mh);
@@ -273,10 +282,29 @@ INT32 cph_flow_clear_rule_by_mh(UINT16 mh);
 *                  T-CONT, queue and packet modification for VID, P-bits.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32  cph_flow_get_rule(CPH_FLOW_ENTRY_T *cph_flow);
+
+/******************************************************************************
+* cph_flow_get_rule_by_vid()
+* _____________________________________________________________________________
+*
+* DESCRIPTION: Get CPH flow mapping rule by VID, only used to compare packet and db rule.
+*
+* INPUTS:
+*       flow       - Flow parsing field values
+*       for_packet - Whether get rule for packet or for new CPH rule
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success, the function returns MV_OK.
+*       On error returns error code accordingly.
+*******************************************************************************/
+MV_STATUS cph_flow_get_rule_by_vid (CPH_FLOW_ENTRY_T *flow);
 
 /******************************************************************************
 * cph_flow_set_dscp_map()
@@ -291,7 +319,7 @@ INT32  cph_flow_get_rule(CPH_FLOW_ENTRY_T *cph_flow);
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32 cph_flow_set_dscp_map(CPH_DSCP_PBITS_T *dscp_map);
@@ -309,7 +337,7 @@ INT32 cph_flow_set_dscp_map(CPH_DSCP_PBITS_T *dscp_map);
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32 cph_flow_del_dscp_map(VOID);
@@ -449,6 +477,25 @@ BOOL cph_flow_compare_rules (CPH_FLOW_ENTRY_T *parse_rule, CPH_FLOW_ENTRY_T *db_
 BOOL cph_flow_compare_packet_and_rule (CPH_FLOW_ENTRY_T *packet_rule, CPH_FLOW_ENTRY_T *db_rule);
 
 /******************************************************************************
+* cph_flow_compare_packet_and_rule_vid()
+* _____________________________________________________________________________
+*
+* DESCRIPTION: Compare flow packet and rule w/ only VID.
+*
+* INPUTS:
+*       packet_rule - The parsing field values come from the packets
+*       db_rule     - The flow rule stored in flow database
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       In case same, return TRUE, 
+*       In case different, return FALSE.
+*******************************************************************************/
+BOOL cph_flow_compare_packet_and_rule_vid (CPH_FLOW_ENTRY_T *packet_rule, CPH_FLOW_ENTRY_T *db_rule);
+
+/******************************************************************************
 * cph_flow_parse_packet()
 * _____________________________________________________________________________
 *
@@ -463,7 +510,7 @@ BOOL cph_flow_compare_packet_and_rule (CPH_FLOW_ENTRY_T *packet_rule, CPH_FLOW_E
 *       flow - Flow parsing field values
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_parse_packet (INT32 port, UINT8 *data, BOOL rx, BOOL mh, CPH_FLOW_ENTRY_T *flow);
@@ -485,7 +532,7 @@ MV_STATUS cph_flow_parse_packet (INT32 port, UINT8 *data, BOOL rx, BOOL mh, CPH_
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_mod_packet (struct sk_buff *skb,  BOOL mh, CPH_FLOW_ENTRY_T *flow, INT32 *out_offset);
@@ -504,7 +551,7 @@ MV_STATUS cph_flow_mod_packet (struct sk_buff *skb,  BOOL mh, CPH_FLOW_ENTRY_T *
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_mod_frwd (CPH_FLOW_ENTRY_T *flow, struct mv_eth_tx_spec *tx_spec_out);
@@ -561,7 +608,7 @@ CHAR *cph_flow_lookup_op_type(INT32 enum_value);
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32 cph_flow_display_all(VOID);
@@ -579,7 +626,7 @@ INT32 cph_flow_display_all(VOID);
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32 cph_flow_init(VOID);

@@ -1295,16 +1295,6 @@ INT32 cph_app_rx_bc(INT32 port, struct net_device *dev, struct eth_pbuf *pkt, st
     /* U/S */
     if(flow_rule.dir == CPH_DIR_US)
     {  
-        /* Copy a new SKB */
-        skb_old->tail += rx_desc->dataSize;
-        skb_old->len   = rx_desc->dataSize;
-        skb_new = skb_copy(skb_old, GFP_ATOMIC);
-        if(skb_new == NULL)
-        {   
-            skb_new = skb_old;
-            goto out;
-        }
-        
         /* Forward packet to peer port */
         rc = cph_app_parse_peer_port(port, &peer_port);
         if (rc != MV_OK)
@@ -1313,8 +1303,21 @@ INT32 cph_app_rx_bc(INT32 port, struct net_device *dev, struct eth_pbuf *pkt, st
             return 0;
         }
 
+	MV_CPH_PRINT(CPH_DEBUG_LEVEL, "peer_port=%d\n", peer_port);
+
         /* Forward packet */
-        mv_net_devs[peer_port]->netdev_ops->ndo_start_xmit(skb_old, mv_net_devs[peer_port]);      
+        if (netif_running(mv_net_devs[peer_port])) {
+            /* Copy a new SKB */
+            skb_old->tail += rx_desc->dataSize;
+            skb_old->len   = rx_desc->dataSize;
+            skb_new = skb_copy(skb_old, GFP_ATOMIC);
+            if(skb_new == NULL)
+            {
+                skb_new = skb_old;
+                goto out;
+            }
+            mv_net_devs[peer_port]->netdev_ops->ndo_start_xmit(skb_old, mv_net_devs[peer_port]);      
+        }
     }
 out:
     /* Stripe VLAN tag, then send to Linux network stack */

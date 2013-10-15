@@ -1241,6 +1241,7 @@ void tpm_db_reset_mc_stream_entry(uint32_t stream_num);
 int32_t tpm_db_set_ipv6_mc_stream_entry(uint32_t stream_num, tpm_db_ipv6_mc_stream_entry_t *mc_stream);
 int32_t tpm_db_get_ipv6_mc_stream_entry(uint32_t stream_num, tpm_db_ipv6_mc_stream_entry_t *mc_stream);
 void tpm_db_reset_ipv6_mc_stream_entry(uint32_t stream_num);
+int32_t tpm_db_get_mc_mac_port_bm(uint8_t *mac_addr, uint32_t *uni_port_bm);
 int32_t tpm_db_increase_mc_mac_port_user_num(uint8_t *mac_addr, uint32_t uni_port);
 int32_t tpm_db_decrease_mc_mac_port_user_num(uint8_t *mac_addr, uint32_t uni_port);
 uint8_t tpm_db_get_mc_mac_port_user_num(uint8_t *mac_addr, uint32_t uni_port);

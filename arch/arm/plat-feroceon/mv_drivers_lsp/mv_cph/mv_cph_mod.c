@@ -128,7 +128,7 @@ static INT32 __init cph_mod_init(VOID)
         return MV_ERROR;
     }
 
-    printk(KERN_INFO "\nCPH module inserted - %s\n\n", CPH_MODULE_VERSION);
+    /* printk(KERN_INFO "\nCPH module inserted - %s\n\n", CPH_MODULE_VERSION); */
 
     return MV_OK;
 }

@@ -714,6 +714,8 @@ MV_STATUS onuGponApiGemOmccIdConfig(MV_U32 gemPortid, MV_BOOL valid)
     return(rcode);
   }
 
+  onuGponDbGemPortValidSet(gemPortid, valid);
+
 #ifdef MV_GPON_STATIC_GEM_PORT
   if (staticGemPortConfigFlag != 0)
   {

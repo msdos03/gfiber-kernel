@@ -1282,7 +1282,7 @@ MV_STATUS cph_db_display_parse_field(
     /* Print TX/RX direction */
     if (parse_bm & CPH_APP_PARSE_FIELD_RX_TX)
     {
-        printk(KERN_INFO "RX/TX(%s), ", cph_app_lookup_rx_tx(parse_key->dir));
+        printk(KERN_INFO "RX/TX(%s), ", cph_app_lookup_rx_tx(parse_key->rx_tx));
     }
 
     /* Print Marvell header */

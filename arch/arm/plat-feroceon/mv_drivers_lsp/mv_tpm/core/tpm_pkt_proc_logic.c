@@ -8352,7 +8352,7 @@ tpm_error_code_t tpm_proc_update_ipv4_mc_pnc_entry(tpm_mc_filter_mode_t filter_m
 	mc_stream.dest_port_bm = dest_port_bm;
 	mc_stream.u4_entry = rule_num;
 	memcpy(mc_stream.group_addr, ipv4_dst_add, 4 * sizeof(uint8_t));
-	if (ignore_ipv4_src)
+	if (!ignore_ipv4_src)
 		memcpy(mc_stream.src_addr, ipv4_src_add, 4 * sizeof(uint8_t));
 
 	ret_code = tpm_db_set_mc_stream_entry(stream_num, &mc_stream);
@@ -8412,15 +8412,18 @@ tpm_error_code_t tpm_proc_set_ipv4_mc_switch(tpm_mc_filter_mode_t filter_mode,
 		port = port << 1;
 	}
 
-	if (new_target != 0)
-		new_target |= TPM_TRG_PORT_CPU;	/* igmp report to CPU */
+	ret_code = tpm_db_get_mc_mac_port_bm(mc_mac, &trg_port_bm);
+	IF_ERROR(ret_code);
+
+	if (trg_port_bm != 0)
+		trg_port_bm |= TPM_TRG_PORT_CPU;	/* igmp report to CPU */
 
 	switch (filter_mode) {
 	case TPM_MC_COMBINED_IP_MAC_FILTER:
-		if (tpm_db_get_mc_per_uni_vlan_xlate() != 0 && new_target != 0)
-			new_target |= TPM_TRG_UNI_VIRT;	/* loopback G1 */
+		if (tpm_db_get_mc_per_uni_vlan_xlate() != 0 && trg_port_bm != 0)
+			trg_port_bm |= TPM_TRG_UNI_VIRT;	/* loopback G1 */
 	case TPM_MC_MAC_ONLY_FILTER:
-		trg_port_bm = tpm_db_trg_port_switch_port_get(new_target);
+		trg_port_bm = tpm_db_trg_port_switch_port_get(trg_port_bm);
 		break;
 	case TPM_MC_IP_ONLY_FILTER:
 		trg_port_bm = 0x3F;	/* all uni ports + CPU + G1/wifi */
@@ -8429,7 +8432,7 @@ tpm_error_code_t tpm_proc_set_ipv4_mc_switch(tpm_mc_filter_mode_t filter_mode,
 		break;
 	}
 
-	if (new_target == 0) {
+	if (trg_port_bm == 0) {
 		ret_code = tpm_sw_del_static_mac(TPM_MOD_OWNER_TPM, mc_mac);
 		IF_ERROR(ret_code);
 		tpm_db_reset_mc_mac_entry(mc_mac);

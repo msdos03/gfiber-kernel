@@ -127,9 +127,9 @@ static ssize_t cph_spec_proc_help(CHAR *buf)
 #ifdef CONFIG_MV_CPH_FLOW_MAP_HANDLE
     off += sprintf(buf+off, "---------------------------------------------------------------------------------------------------------------------------------------\n");
     off += sprintf(buf+off, "                         |Parse outer    |Parse inner             |Mod outer      |Mod Inner      |Forward\n");
-    off += sprintf(buf+off, "echo dir parse_bm mh ety  tpid vid pbits  tpid vid pbits  op_type  tpid vid pbits  tpid vid pbits  port queue hwf_queue gem > add_flow_rule - Add flow rule\n");
-    off += sprintf(buf+off, "echo dir parse_bm mh ety  tpid vid pbits  tpid vid pbits  > del_flow_rule   - delete flow mapping rule\n");
-    off += sprintf(buf+off, "echo dir parse_bm mh ety  tpid vid pbits  tpid vid pbits  > get_flow_rule   - get flow mapping rule\n");
+    off += sprintf(buf+off, "echo dir default parse_bm mh ety  tpid vid pbits  tpid vid pbits  op_type  tpid vid pbits  tpid vid pbits  port queue hwf_queue gem > add_flow_rule - Add flow rule\n");
+    off += sprintf(buf+off, "echo dir default parse_bm mh ety  tpid vid pbits  tpid vid pbits  > del_flow_rule   - delete flow mapping rule\n");
+    off += sprintf(buf+off, "echo dir default parse_bm mh ety  tpid vid pbits  tpid vid pbits  > get_flow_rule   - get flow mapping rule\n");
     off += sprintf(buf+off, "echo pbits0 pbits1 ... pbits62 pbits63                    > set_dscp_map    - set DSCP to P-bits mapping rules\n");
 #endif
     return off;
@@ -156,6 +156,7 @@ static ssize_t cph_spec_proc_help_add(CHAR *buf)
     off += sprintf(buf+off, "   0x01:FRWD_SET_TRG_PORT            0x02:FRWD_SET_TRG_QUEUE           0x04:FRWD_SET_GEM_PORT\n");
     off += sprintf(buf+off, "[Flow Parameters]\n");
     off += sprintf(buf+off, "dir: 0: U/S, 1:D/S, 2: Not care\n");    
+    off += sprintf(buf+off, "default: 0: not default, 1:default\n");    
     off += sprintf(buf+off, "bm:\n");
     off += sprintf(buf+off, "   0x01:PARSE_MH                     0x02:PARSE_EXT_VLAN               0x04:PARSE_TWO_VLAN               0x08:PARSE_ETH_TYPE\n");
     off += sprintf(buf+off, "mh(hex), ety(hex), tpid(hex), vid(dec), pbits(dec)\n");    
@@ -903,6 +904,7 @@ static ssize_t cph_spec_proc_flow_store(struct device *dev,
                                         const CHAR *buf, size_t len)
 {
     const CHAR    *name  = attr->attr.name;
+    UINT32         v0    = 0;        
     UINT32         v1    = 0;
     UINT32         v2    = 0;
     UINT32         v3    = 0;
@@ -932,14 +934,15 @@ static ssize_t cph_spec_proc_flow_store(struct device *dev,
         return -EPERM;
 
     /* Read input */
-    sscanf(buf, "%d %x %x %x %x %d %d %x %d %d %d %x %d %d %x %d %d %d %d %d %d", &v1, &v2, &v3, &v4, &v5, &v6, &v7, &v8, &v9, &v10, &v11, &v12, &v13, &v14, &v15, &v16, &v17, &v18, &v19, &v20, &v21);
+    sscanf(buf, "%d %d %x %x %x %x %d %d %x %d %d %d %x %d %d %x %d %d %d %d %d %d", &v0, &v1, &v2, &v3, &v4, &v5, &v6, &v7, &v8, &v9, &v10, &v11, &v12, &v13, &v14, &v15, &v16, &v17, &v18, &v19, &v20, &v21);
 
     raw_local_irq_save(flags);
 
 #ifdef CONFIG_MV_CPH_FLOW_MAP_HANDLE   
     if (!strcmp(name, "add_flow_rule")) {
         memset(&cph_flow, 0, sizeof(cph_flow));
-        cph_flow.dir       = (CPH_DIR_E)v1;
+        cph_flow.dir        = (CPH_DIR_E)v0;
+        cph_flow.is_default = v1? TRUE : FALSE;        
         cph_flow.parse_bm  = (CPH_FLOW_PARSE_E)v2;
         cph_flow.mh        = (UINT16)v3;
         cph_flow.eth_type  = (UINT16)v4;
@@ -972,7 +975,8 @@ static ssize_t cph_spec_proc_flow_store(struct device *dev,
     }   
     else if (!strcmp(name, "del_flow_rule")) {
         memset(&cph_flow, 0, sizeof(cph_flow));
-        cph_flow.dir       = (CPH_DIR_E)v1;
+        cph_flow.dir        = (CPH_DIR_E)v0;
+        cph_flow.is_default = v1? TRUE : FALSE;  
         cph_flow.parse_bm  = (CPH_FLOW_PARSE_E)v2;
         cph_flow.mh        = (UINT16)v3;
         cph_flow.eth_type  = (UINT16)v4;
@@ -994,7 +998,8 @@ static ssize_t cph_spec_proc_flow_store(struct device *dev,
     }
     else if (!strcmp(name, "get_flow_rule")) {
         memset(&cph_flow, 0, sizeof(cph_flow));
-        cph_flow.dir       = (CPH_DIR_E)v1;
+        cph_flow.dir        = (CPH_DIR_E)v0;
+        cph_flow.is_default = v1? TRUE : FALSE;  
         cph_flow.parse_bm  = (CPH_FLOW_PARSE_E)v2;
         cph_flow.mh        = (UINT16)v3;
         cph_flow.eth_type  = (UINT16)v4;
@@ -1009,10 +1014,11 @@ static ssize_t cph_spec_proc_flow_store(struct device *dev,
         if (rc == MV_OK) {
             printk("Succeed to get flow rule\n");
             printk(KERN_INFO "                        |Parse outer       |Parse inner       |Mod outer         |Mod Inner         |Forward\n");
-            printk(KERN_INFO "dir parse_bm mh   ety    tpid   vid  pbits  tpid   vid  pbits  tpid   vid  pbits  tpid   vid  pbits  port queue hwf_queue gem  op_type\n");
+            printk(KERN_INFO "dir default tparse_bm mh   ety    tpid   vid  pbits  tpid   vid  pbits  tpid   vid  pbits  tpid   vid  pbits  port queue hwf_queue gem  op_type\n");
             printk(KERN_INFO  
-                   "%2.2s  0x%04x   %-4d 0x%04x 0x%04x %4d %1d      0x%04x %4d %1d      0x%04x %4d %1d      0x%04x %4d %1d      %1d    %1d     %1d         %4d %s \n",
-                   cph_app_lookup_dir(cph_flow.dir), cph_flow.parse_bm, cph_flow.mh, cph_flow.eth_type,
+                   "%2.2s  %4.4s    0x%04x   %-4d 0x%04x 0x%04x %4d %1d      0x%04x %4d %1d      0x%04x %4d %1d      0x%04x %4d %1d      %1d    %1d     %1d         %4d %s \n",
+                   cph_app_lookup_dir(cph_flow.dir), (cph_flow.is_default == TRUE) ?"Yes":"No", cph_flow.parse_bm,
+                   cph_flow.mh, cph_flow.eth_type,
                    cph_flow.parse_outer_tci.tpid, cph_flow.parse_outer_tci.vid, cph_flow.parse_outer_tci.pbits, 
                    cph_flow.parse_inner_tci.tpid, cph_flow.parse_inner_tci.vid, cph_flow.parse_inner_tci.pbits,
                    cph_flow.mod_outer_tci.tpid,   cph_flow.mod_outer_tci.vid,   cph_flow.mod_outer_tci.pbits,
@@ -1200,7 +1206,6 @@ INT32 cph_sysfs_init(VOID)
     cph_sysfs_init_mod_db();    
     cph_sysfs_init_frwd_db();
 
-    printk(KERN_INFO "= CUST Module SYS FS init successfully =\n");
 out:
     return err;
 }
@@ -1218,5 +1223,5 @@ VOID cph_sysfs_exit(VOID)
 
     sysfs_remove_group(&pd->kobj, &cph_spec_proc_group);
 
-    printk(KERN_INFO "= CPH Module SYS FS exit successfully =\n");
+    /*printk(KERN_INFO "= CPH Module SYS FS exit successfully =\n");*/
 }

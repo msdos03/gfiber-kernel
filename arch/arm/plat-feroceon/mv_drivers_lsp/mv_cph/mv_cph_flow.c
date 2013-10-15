@@ -147,7 +147,7 @@ static MV_ENUM_ARRAY_T g_enum_array_op_type =
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_db_get_rule (CPH_FLOW_ENTRY_T *flow, BOOL for_packet)
@@ -201,6 +201,66 @@ MV_STATUS cph_flow_db_get_rule (CPH_FLOW_ENTRY_T *flow, BOOL for_packet)
 }
 
 /******************************************************************************
+* cph_flow_get_rule_by_vid()
+* _____________________________________________________________________________
+*
+* DESCRIPTION: Get CPH flow mapping rule by VID, only used to compare packet and db rule.
+*
+* INPUTS:
+*       flow       - Flow parsing field values
+*       for_packet - Whether get rule for packet or for new CPH rule
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       On success, the function returns MV_OK.
+*       On error returns error code accordingly.
+*******************************************************************************/
+MV_STATUS cph_flow_get_rule_by_vid (CPH_FLOW_ENTRY_T *flow)
+{
+    UINT32            idx         = 0;
+    UINT32            rule_idx    = 0;
+    CPH_FLOW_ENTRY_T *p_flow_rule = NULL;
+    BOOL              rc          = FALSE;
+    unsigned long     flags;
+
+    spin_lock_irqsave(&gs_flow_table.flow_lock, flags);
+    /* Traverse CPH flow rule table */
+    for (idx = 0, rule_idx = 0; (idx < CPH_FLOW_ENTRY_NUM) && (rule_idx < gs_flow_table.rule_num); idx++)
+    {
+        p_flow_rule = &gs_flow_table.flow_rule[idx];
+
+        /* Compare packet or new rule rule data base rule */
+        if (p_flow_rule->valid == TRUE)
+        {
+            rule_idx++;
+
+            rc = cph_flow_compare_packet_and_rule_vid(flow, p_flow_rule);
+            if (rc == TRUE)
+            {
+                flow->op_type = p_flow_rule->op_type;
+                memcpy(&flow->mod_outer_tci, &p_flow_rule->mod_outer_tci, sizeof(CPH_FLOW_TCI_T));
+                memcpy(&flow->mod_inner_tci, &p_flow_rule->mod_inner_tci, sizeof(CPH_FLOW_TCI_T));
+                memcpy(&flow->pkt_frwd,      &p_flow_rule->pkt_frwd,      sizeof(CPH_FLOW_FRWD_T));
+
+                /* Increase count */
+                if (p_flow_rule->count == 0xFFFFFFFF)
+                    p_flow_rule->count = 0;
+                else
+                    p_flow_rule->count++;
+
+                spin_unlock_irqrestore(&gs_flow_table.flow_lock, flags);
+                return MV_OK;
+            }
+        }
+    }
+    spin_unlock_irqrestore(&gs_flow_table.flow_lock, flags);
+
+    return MV_FAIL;
+}
+
+/******************************************************************************
 * cph_flow_db_add_rule()
 * _____________________________________________________________________________
 *
@@ -213,7 +273,7 @@ MV_STATUS cph_flow_db_get_rule (CPH_FLOW_ENTRY_T *flow, BOOL for_packet)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32  cph_flow_db_add_rule(CPH_FLOW_ENTRY_T *cph_flow)
@@ -278,7 +338,7 @@ INT32  cph_flow_db_add_rule(CPH_FLOW_ENTRY_T *cph_flow)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_db_del_rule (CPH_FLOW_ENTRY_T *flow)
@@ -330,7 +390,7 @@ MV_STATUS cph_flow_db_del_rule (CPH_FLOW_ENTRY_T *flow)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_db_clear_rule (VOID)
@@ -362,7 +422,7 @@ MV_STATUS cph_flow_db_clear_rule (VOID)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_db_clear_rule_by_mh (UINT16 mh)
@@ -403,7 +463,7 @@ MV_STATUS cph_flow_db_clear_rule_by_mh (UINT16 mh)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_db_init (VOID)
@@ -433,6 +493,7 @@ MV_STATUS cph_flow_db_init (VOID)
 * INPUTS:
 *       tci         - TPID, VLAN ID, P-bits information.
 *       parse_field - Whether the TCI is from parsing field.
+*       tci_field   - the TCI field need to be checked.
 *
 * OUTPUTS:
 *       None.
@@ -441,18 +502,16 @@ MV_STATUS cph_flow_db_init (VOID)
 *       On success, the function returns TRUE. 
 *       On error returns FALSE.
 *******************************************************************************/
-BOOL  cph_flow_verify_tci(CPH_FLOW_TCI_T *tci, BOOL parse_field)
+BOOL  cph_flow_verify_tci(CPH_FLOW_TCI_T *tci, BOOL parse_field, CPH_TCI_FIELD_E tci_field)
 {
     UINT16 max_vid   = 0;
     UINT16 max_pbits = 0;
     
-    if (parse_field == TRUE)
-    {
+    if (TRUE == parse_field) {
         max_vid   = MV_CPH_VID_NOT_CARE_VALUE;
         max_pbits = MV_CPH_PBITS_NOT_CARE_VALUE;
     }
-    else
-    {
+    else {
         max_vid   = MV_VLAN_ID_MAX;
         max_pbits = MV_PBITS_MAX;        
     }
@@ -467,15 +526,23 @@ BOOL  cph_flow_verify_tci(CPH_FLOW_TCI_T *tci, BOOL parse_field)
     }
 
     /* Check VID */
+    if ((tci_field == CPH_TCI_FIELD_VID) ||
+        (tci_field == CPH_TCI_FIELD_VID_PBIT) ||
+        (tci_field == CPH_TCI_FIELD_ALL)) {
     if (tci->vid > max_vid) {
         MV_CPH_PRINT(CPH_ERR_LEVEL, "vid[%d] exceeds maximum value[%d] \n", tci->vid, max_vid);
         return FALSE;
     }
+    }
     
     /* Check P-bits */
+    if ((tci_field == CPH_TCI_FIELD_PBIT) ||
+        (tci_field == CPH_TCI_FIELD_VID_PBIT) ||
+        (tci_field == CPH_TCI_FIELD_ALL)) {
     if (tci->pbits > max_pbits) {
         MV_CPH_PRINT(CPH_ERR_LEVEL, "pbits[%d] exceeds maximum value[%d] \n", tci->pbits, max_pbits);
         return FALSE;
+    }
     }
     
     return TRUE;
@@ -536,21 +603,78 @@ BOOL  cph_flow_verify_rule(CPH_FLOW_ENTRY_T *cph_flow, BOOL full)
     }
     
     /* Check TCI */
-    rc = cph_flow_verify_tci(&cph_flow->parse_outer_tci, TRUE);
+    if ((parse_bm & CPH_FLOW_PARSE_EXT_VLAN) ||
+        (parse_bm & CPH_FLOW_PARSE_TWO_VLAN)) {
+        rc = cph_flow_verify_tci(&cph_flow->parse_outer_tci, TRUE, CPH_TCI_FIELD_VID_PBIT);
     if (rc == FALSE) {
         return FALSE;
     }
-    rc = cph_flow_verify_tci(&cph_flow->parse_inner_tci, TRUE);
+    }
+
+    if (parse_bm & CPH_FLOW_PARSE_TWO_VLAN) {
+        rc = cph_flow_verify_tci(&cph_flow->parse_inner_tci, TRUE, CPH_TCI_FIELD_VID_PBIT);
+        if (rc == FALSE) {
+            return FALSE;
+        }
+    }
+
+    switch (cph_flow->op_type) {
+        case CPH_VLAN_OP_ASIS:
+        case CPH_VLAN_OP_DISCARD:
+        case CPH_VLAN_OP_REM:
+        case CPH_VLAN_OP_REM_2_TAGS:
+        case CPH_VLAN_OP_SWAP:
+            break;
+        case CPH_VLAN_OP_ADD:
+        case CPH_VLAN_OP_REPLACE:
+        case CPH_VLAN_OP_REPLACE_INNER_REM_OUTER:
+            rc = cph_flow_verify_tci(&cph_flow->mod_outer_tci, FALSE, CPH_TCI_FIELD_VID_PBIT);
+            if (rc == FALSE) {
+                return FALSE;
+            }
+            break;
+        case CPH_VLAN_OP_ADD_COPY_DSCP:
+        case CPH_VLAN_OP_ADD_COPY_OUTER_PBIT:
+        case CPH_VLAN_OP_ADD_COPY_INNER_PBIT:
+        case CPH_VLAN_OP_REPLACE_VID:
+            rc = cph_flow_verify_tci(&cph_flow->mod_outer_tci, FALSE, CPH_TCI_FIELD_VID);
     if (rc == FALSE) {
         return FALSE;
     }
-    rc = cph_flow_verify_tci(&cph_flow->mod_outer_tci, FALSE);
+            break;
+        case CPH_VLAN_OP_ADD_2_TAGS:
+        case CPH_VLAN_OP_REPLACE_2TAGS:
+        case CPH_VLAN_OP_REPLACE_INNER_ADD_OUTER:
+            rc = cph_flow_verify_tci(&cph_flow->mod_outer_tci, FALSE, CPH_TCI_FIELD_VID_PBIT);
+            if (rc == FALSE) {
+                return FALSE;
+            }
+            rc = cph_flow_verify_tci(&cph_flow->mod_inner_tci, FALSE, CPH_TCI_FIELD_VID_PBIT);
+            if (rc == FALSE) {
+                return FALSE;
+            }
+            break;
+        case CPH_VLAN_OP_ADD_2_TAGS_COPY_DSCP:
+        case CPH_VLAN_OP_ADD_2_TAGS_COPY_PBIT:
+        case CPH_VLAN_OP_REPLACE_2TAGS_VID:
+        case CPH_VLAN_OP_REPLACE_INNER_ADD_OUTER_COPY_PBIT:
+            rc = cph_flow_verify_tci(&cph_flow->mod_outer_tci, FALSE, CPH_TCI_FIELD_VID);
+            if (rc == FALSE) {
+                return FALSE;
+            }
+            rc = cph_flow_verify_tci(&cph_flow->mod_inner_tci, FALSE, CPH_TCI_FIELD_VID);
     if (rc == FALSE) {
         return FALSE;
     }
-    rc = cph_flow_verify_tci(&cph_flow->mod_inner_tci, FALSE);
+            break;
+        case CPH_VLAN_OP_REPLACE_PBIT:
+            rc = cph_flow_verify_tci(&cph_flow->mod_outer_tci, FALSE, CPH_TCI_FIELD_PBIT);
     if (rc == FALSE) {
         return FALSE;
+    }
+            break;
+        default:
+            break;
     }
     
     /* Check target port/queue/GEM port */ 
@@ -591,7 +715,7 @@ BOOL  cph_flow_verify_rule(CPH_FLOW_ENTRY_T *cph_flow, BOOL full)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 VOID  cph_flow_display_tci(CPH_FLOW_TCI_T *tci, UINT32 trace_level)
@@ -617,7 +741,7 @@ VOID  cph_flow_display_tci(CPH_FLOW_TCI_T *tci, UINT32 trace_level)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32  cph_flow_add_rule(CPH_FLOW_ENTRY_T *cph_flow)
@@ -666,7 +790,7 @@ INT32  cph_flow_add_rule(CPH_FLOW_ENTRY_T *cph_flow)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32  cph_flow_del_rule(CPH_FLOW_ENTRY_T *cph_flow)
@@ -704,7 +828,7 @@ INT32  cph_flow_del_rule(CPH_FLOW_ENTRY_T *cph_flow)
 *                  T-CONT, queue and packet modification for VID, P-bits.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32  cph_flow_get_rule(CPH_FLOW_ENTRY_T *cph_flow)
@@ -741,7 +865,7 @@ INT32  cph_flow_get_rule(CPH_FLOW_ENTRY_T *cph_flow)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32 cph_flow_clear_rule(VOID)
@@ -773,7 +897,7 @@ INT32 cph_flow_clear_rule(VOID)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32 cph_flow_clear_rule_by_mh(UINT16 mh)
@@ -805,7 +929,7 @@ INT32 cph_flow_clear_rule_by_mh(UINT16 mh)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32  cph_flow_set_dscp_map(CPH_DSCP_PBITS_T *dscp_map)
@@ -849,7 +973,7 @@ INT32  cph_flow_set_dscp_map(CPH_DSCP_PBITS_T *dscp_map)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32  cph_flow_del_dscp_map(VOID)
@@ -1090,7 +1214,7 @@ INLINE INT32 cph_flow_swap_vlan(BOOL mh, UINT8 *p_data)
 *       flow - Flow parsing field values
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_parse_packet (INT32 port, UINT8 *data, BOOL rx, BOOL mh, CPH_FLOW_ENTRY_T *flow)
@@ -1369,6 +1493,90 @@ BOOL cph_flow_compare_packet_and_rule (CPH_FLOW_ENTRY_T *packet_rule, CPH_FLOW_E
 }
 
 /******************************************************************************
+* cph_flow_compare_packet_and_rule_vid()
+* _____________________________________________________________________________
+*
+* DESCRIPTION: Compare flow packet and rule w/ only VID.
+*
+* INPUTS:
+*       packet_rule - The parsing field values come from the packets
+*       db_rule     - The flow rule stored in flow database
+*
+* OUTPUTS:
+*       None.
+*
+* RETURNS:
+*       In case same, return TRUE, 
+*       In case different, return FALSE.
+*******************************************************************************/
+BOOL cph_flow_compare_packet_and_rule_vid (CPH_FLOW_ENTRY_T *packet_rule, CPH_FLOW_ENTRY_T *db_rule)
+{
+    /* Check direction */
+    if ((packet_rule->dir != db_rule->dir) &&
+        (db_rule->dir != CPH_DIR_NOT_CARE))
+        return FALSE;
+
+    /* Check Multicast protocol */
+     if ((db_rule->parse_bm & CPH_FLOW_PARSE_MC_PROTO) != (packet_rule->parse_bm & CPH_FLOW_PARSE_MC_PROTO))
+    {
+            return FALSE;
+    }
+
+    /* Check MH if needed */
+    if ((db_rule->parse_bm & CPH_FLOW_PARSE_MH) &&
+        (packet_rule->parse_bm & CPH_FLOW_PARSE_MH) )
+    {
+        if (packet_rule->mh != db_rule->mh)
+            return FALSE;
+    }
+
+    /* Check if it is default rule */
+    if (packet_rule->is_default != db_rule->is_default)
+        return FALSE;
+
+    /* Check VLAN ID */
+    if ((packet_rule->parse_bm & (CPH_FLOW_PARSE_EXT_VLAN | CPH_FLOW_PARSE_TWO_VLAN))
+         != (db_rule->parse_bm & (CPH_FLOW_PARSE_EXT_VLAN | CPH_FLOW_PARSE_TWO_VLAN)))
+        return FALSE;
+    if (packet_rule->is_default == FALSE)
+    {
+        if ((db_rule->parse_bm & CPH_FLOW_PARSE_EXT_VLAN) ||
+            (db_rule->parse_bm & CPH_FLOW_PARSE_TWO_VLAN))
+        {
+            if (db_rule->parse_outer_tci.tpid != MV_CPH_TPID_NOT_CARE_VALUE)
+                return FALSE;
+
+            if (db_rule->parse_outer_tci.pbits != MV_CPH_PBITS_NOT_CARE_VALUE)
+                return FALSE;
+
+            if ((packet_rule->parse_outer_tci.vid != db_rule->parse_outer_tci.vid) &&
+                (db_rule->parse_outer_tci.vid != MV_CPH_VID_NOT_CARE_VALUE))
+                return FALSE;
+        }
+        if (db_rule->parse_bm & CPH_FLOW_PARSE_TWO_VLAN)
+        {
+            if (db_rule->parse_inner_tci.tpid != MV_CPH_TPID_NOT_CARE_VALUE)
+                return FALSE;
+
+            if (db_rule->parse_inner_tci.pbits != MV_CPH_PBITS_NOT_CARE_VALUE)
+                return FALSE;
+
+            if ((packet_rule->parse_inner_tci.vid != db_rule->parse_inner_tci.vid) &&
+                (db_rule->parse_inner_tci.vid != MV_CPH_VID_NOT_CARE_VALUE))
+                return FALSE;
+        }
+    }
+    /* Check Ethernet type if needed */
+    if (db_rule->parse_bm & CPH_FLOW_PARSE_ETH_TYPE)
+    {
+        if (packet_rule->eth_type != db_rule->eth_type)
+            return FALSE;
+    }
+
+    return TRUE;
+}
+
+/******************************************************************************
 * cph_flow_mod_packet()
 * _____________________________________________________________________________
 *
@@ -1385,7 +1593,7 @@ BOOL cph_flow_compare_packet_and_rule (CPH_FLOW_ENTRY_T *packet_rule, CPH_FLOW_E
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_mod_packet (struct sk_buff *skb,  BOOL mh, CPH_FLOW_ENTRY_T *flow, INT32 *out_offset)
@@ -1549,7 +1757,7 @@ MV_STATUS cph_flow_mod_packet (struct sk_buff *skb,  BOOL mh, CPH_FLOW_ENTRY_T *
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 MV_STATUS cph_flow_mod_frwd (CPH_FLOW_ENTRY_T *flow, struct mv_eth_tx_spec *tx_spec_out)
@@ -1772,7 +1980,7 @@ CHAR *cph_flow_lookup_op_type(INT32 enum_value)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32  cph_flow_display_all (VOID)
@@ -1847,7 +2055,7 @@ INT32  cph_flow_display_all (VOID)
 *       None.
 *
 * RETURNS:
-*       On success, the function returns MV_OK. 
+*       On success, the function returns MV_OK.
 *       On error returns error code accordingly.
 *******************************************************************************/
 INT32  cph_flow_init(VOID)

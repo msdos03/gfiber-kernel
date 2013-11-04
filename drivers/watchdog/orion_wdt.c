@@ -237,6 +237,8 @@ static int __devinit orion_wdt_probe(struct platform_device *pdev)
 {
 	struct orion_wdt_platform_data *pdata = pdev->dev.platform_data;
 	int ret;
+	u32 reg;
+	int time;
 
 	if (pdata) {
 		wdt_tclk = pdata->tclk;
@@ -259,6 +261,15 @@ static int __devinit orion_wdt_probe(struct platform_device *pdev)
 
 	printk(KERN_INFO "Orion Watchdog Timer: Initial timeout %d sec%s\n",
 				heartbeat, nowayout ? ", nowayout" : "");
+
+	reg = readl(TIMER_CTRL);
+	if (reg & WDT_EN) {
+		orion_wdt_get_timeleft(&time);
+		orion_wdt_ping();
+		pr_info("Orion Watchdog Timer: running at boot (%d sec left)"
+			", resetting", time);
+	}
+
 	return 0;
 }
 

@@ -54,19 +54,39 @@ static ssize_t goog_get_stat(struct device *dev,
 }
 
 // Stats for the UNI port.
+static GOOG_ATTR(rx_good_octets, uni, goog_get_stat, ETH_MIB_GOOD_OCTETS_RECEIVED_LOW, 0);
+static GOOG_ATTR(rx_bad_octets, uni, goog_get_stat, ETH_MIB_BAD_OCTETS_RECEIVED, 0);
 static GOOG_ATTR(rx_good_packets, uni, goog_get_stat, ETH_MIB_GOOD_FRAMES_RECEIVED, 0);
 static GOOG_ATTR(rx_bad_packets, uni, goog_get_stat, ETH_MIB_BAD_FRAMES_RECEIVED, 0);
 static GOOG_ATTR(rx_broadcast_packets, uni, goog_get_stat, ETH_MIB_BROADCAST_FRAMES_RECEIVED, 0);
 static GOOG_ATTR(rx_multicast_packets, uni, goog_get_stat, ETH_MIB_MULTICAST_FRAMES_RECEIVED, 0);
+static GOOG_ATTR(rx_bad_fc, uni, goog_get_stat, ETH_MIB_BAD_FC_RECEIVED, 0);
+static GOOG_ATTR(rx_undersized, uni, goog_get_stat, ETH_MIB_UNDERSIZE_RECEIVED, 0);
+static GOOG_ATTR(rx_fragments, uni, goog_get_stat, ETH_MIB_FRAGMENTS_RECEIVED, 0);
+static GOOG_ATTR(rx_oversized, uni, goog_get_stat, ETH_MIB_OVERSIZE_RECEIVED, 0);
+static GOOG_ATTR(rx_jabber, uni, goog_get_stat, ETH_MIB_JABBER_RECEIVED, 0);
+static GOOG_ATTR(rx_mac_error, uni, goog_get_stat, ETH_MIB_MAC_RECEIVE_ERROR, 0);
+static GOOG_ATTR(rx_crc_error, uni, goog_get_stat, ETH_MIB_BAD_CRC_EVENT, 0);
+static GOOG_ATTR(tx_good_octets, uni, goog_get_stat, ETH_MIB_GOOD_OCTETS_SENT_LOW, 0);
 static GOOG_ATTR(tx_good_packets, uni, goog_get_stat, ETH_MIB_GOOD_FRAMES_SENT, 0);
 static GOOG_ATTR(tx_broadcast_packets, uni, goog_get_stat, ETH_MIB_BROADCAST_FRAMES_SENT, 0);
 static GOOG_ATTR(tx_multicast_packets, uni, goog_get_stat, ETH_MIB_MULTICAST_FRAMES_SENT, 0);
 
 static struct attribute *goog_uni_attrs[] = {
+	&goog_attr_rx_good_octets_uni.dev_attr.attr,
+	&goog_attr_rx_bad_octets_uni.dev_attr.attr,
 	&goog_attr_rx_good_packets_uni.dev_attr.attr,
 	&goog_attr_rx_bad_packets_uni.dev_attr.attr,
 	&goog_attr_rx_multicast_packets_uni.dev_attr.attr,
 	&goog_attr_rx_broadcast_packets_uni.dev_attr.attr,
+	&goog_attr_rx_bad_fc_uni.dev_attr.attr,
+	&goog_attr_rx_undersized_uni.dev_attr.attr,
+	&goog_attr_rx_fragments_uni.dev_attr.attr,
+	&goog_attr_rx_oversized_uni.dev_attr.attr,
+	&goog_attr_rx_jabber_uni.dev_attr.attr,
+	&goog_attr_rx_mac_error_uni.dev_attr.attr,
+	&goog_attr_rx_crc_error_uni.dev_attr.attr,
+	&goog_attr_tx_good_octets_uni.dev_attr.attr,
 	&goog_attr_tx_good_packets_uni.dev_attr.attr,
 	&goog_attr_tx_broadcast_packets_uni.dev_attr.attr,
 	&goog_attr_tx_multicast_packets_uni.dev_attr.attr,
@@ -81,19 +101,39 @@ static struct attribute_group goog_uni_stats = {
 
 
 // Stats for the ANI port.
+static GOOG_ATTR(rx_good_octets, ani, goog_get_stat, ETH_MIB_GOOD_OCTETS_RECEIVED_LOW, 0);
+static GOOG_ATTR(rx_bad_octets, ani, goog_get_stat, ETH_MIB_BAD_OCTETS_RECEIVED, 0);
 static GOOG_ATTR(rx_good_packets, ani, goog_get_stat, ETH_MIB_GOOD_FRAMES_RECEIVED, MV_PON_PORT_ID);
 static GOOG_ATTR(rx_bad_packets, ani, goog_get_stat, ETH_MIB_BAD_FRAMES_RECEIVED, MV_PON_PORT_ID);
 static GOOG_ATTR(rx_broadcast_packets, ani, goog_get_stat, ETH_MIB_BROADCAST_FRAMES_RECEIVED, MV_PON_PORT_ID);
 static GOOG_ATTR(rx_multicast_packets, ani, goog_get_stat, ETH_MIB_MULTICAST_FRAMES_RECEIVED, MV_PON_PORT_ID);
+static GOOG_ATTR(rx_bad_fc, ani, goog_get_stat, ETH_MIB_BAD_FC_RECEIVED, 0);
+static GOOG_ATTR(rx_undersized, ani, goog_get_stat, ETH_MIB_UNDERSIZE_RECEIVED, 0);
+static GOOG_ATTR(rx_fragments, ani, goog_get_stat, ETH_MIB_FRAGMENTS_RECEIVED, 0);
+static GOOG_ATTR(rx_oversized, ani, goog_get_stat, ETH_MIB_OVERSIZE_RECEIVED, 0);
+static GOOG_ATTR(rx_jabber, ani, goog_get_stat, ETH_MIB_JABBER_RECEIVED, 0);
+static GOOG_ATTR(rx_mac_error, ani, goog_get_stat, ETH_MIB_MAC_RECEIVE_ERROR, 0);
+static GOOG_ATTR(rx_crc_error, ani, goog_get_stat, ETH_MIB_BAD_CRC_EVENT, 0);
+static GOOG_ATTR(tx_good_octets, ani, goog_get_stat, ETH_MIB_GOOD_OCTETS_SENT_LOW, 0);
 static GOOG_ATTR(tx_good_packets, ani, goog_get_stat, ETH_MIB_GOOD_FRAMES_SENT, MV_PON_PORT_ID);
 static GOOG_ATTR(tx_broadcast_packets, ani, goog_get_stat, ETH_MIB_BROADCAST_FRAMES_SENT, MV_PON_PORT_ID);
 static GOOG_ATTR(tx_multicast_packets, ani, goog_get_stat, ETH_MIB_MULTICAST_FRAMES_SENT, MV_PON_PORT_ID);
 
 static struct attribute *goog_ani_attrs[] = {
+	&goog_attr_rx_good_octets_ani.dev_attr.attr,
+	&goog_attr_rx_bad_octets_ani.dev_attr.attr,
 	&goog_attr_rx_good_packets_ani.dev_attr.attr,
 	&goog_attr_rx_bad_packets_ani.dev_attr.attr,
 	&goog_attr_rx_multicast_packets_ani.dev_attr.attr,
 	&goog_attr_rx_broadcast_packets_ani.dev_attr.attr,
+	&goog_attr_rx_bad_fc_ani.dev_attr.attr,
+	&goog_attr_rx_undersized_ani.dev_attr.attr,
+	&goog_attr_rx_fragments_ani.dev_attr.attr,
+	&goog_attr_rx_oversized_ani.dev_attr.attr,
+	&goog_attr_rx_jabber_ani.dev_attr.attr,
+	&goog_attr_rx_mac_error_ani.dev_attr.attr,
+	&goog_attr_rx_crc_error_ani.dev_attr.attr,
+	&goog_attr_tx_good_octets_ani.dev_attr.attr,
 	&goog_attr_tx_good_packets_ani.dev_attr.attr,
 	&goog_attr_tx_broadcast_packets_ani.dev_attr.attr,
 	&goog_attr_tx_multicast_packets_ani.dev_attr.attr,

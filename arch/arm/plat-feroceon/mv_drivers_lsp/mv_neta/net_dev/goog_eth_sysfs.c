@@ -101,20 +101,20 @@ static struct attribute_group goog_uni_stats = {
 
 
 // Stats for the ANI port.
-static GOOG_ATTR(rx_good_octets, ani, goog_get_stat, ETH_MIB_GOOD_OCTETS_RECEIVED_LOW, 0);
-static GOOG_ATTR(rx_bad_octets, ani, goog_get_stat, ETH_MIB_BAD_OCTETS_RECEIVED, 0);
+static GOOG_ATTR(rx_good_octets, ani, goog_get_stat, ETH_MIB_GOOD_OCTETS_RECEIVED_LOW, MV_PON_PORT_ID);
+static GOOG_ATTR(rx_bad_octets, ani, goog_get_stat, ETH_MIB_BAD_OCTETS_RECEIVED, MV_PON_PORT_ID);
 static GOOG_ATTR(rx_good_packets, ani, goog_get_stat, ETH_MIB_GOOD_FRAMES_RECEIVED, MV_PON_PORT_ID);
 static GOOG_ATTR(rx_bad_packets, ani, goog_get_stat, ETH_MIB_BAD_FRAMES_RECEIVED, MV_PON_PORT_ID);
 static GOOG_ATTR(rx_broadcast_packets, ani, goog_get_stat, ETH_MIB_BROADCAST_FRAMES_RECEIVED, MV_PON_PORT_ID);
 static GOOG_ATTR(rx_multicast_packets, ani, goog_get_stat, ETH_MIB_MULTICAST_FRAMES_RECEIVED, MV_PON_PORT_ID);
-static GOOG_ATTR(rx_bad_fc, ani, goog_get_stat, ETH_MIB_BAD_FC_RECEIVED, 0);
-static GOOG_ATTR(rx_undersized, ani, goog_get_stat, ETH_MIB_UNDERSIZE_RECEIVED, 0);
-static GOOG_ATTR(rx_fragments, ani, goog_get_stat, ETH_MIB_FRAGMENTS_RECEIVED, 0);
-static GOOG_ATTR(rx_oversized, ani, goog_get_stat, ETH_MIB_OVERSIZE_RECEIVED, 0);
-static GOOG_ATTR(rx_jabber, ani, goog_get_stat, ETH_MIB_JABBER_RECEIVED, 0);
-static GOOG_ATTR(rx_mac_error, ani, goog_get_stat, ETH_MIB_MAC_RECEIVE_ERROR, 0);
-static GOOG_ATTR(rx_crc_error, ani, goog_get_stat, ETH_MIB_BAD_CRC_EVENT, 0);
-static GOOG_ATTR(tx_good_octets, ani, goog_get_stat, ETH_MIB_GOOD_OCTETS_SENT_LOW, 0);
+static GOOG_ATTR(rx_bad_fc, ani, goog_get_stat, ETH_MIB_BAD_FC_RECEIVED, MV_PON_PORT_ID);
+static GOOG_ATTR(rx_undersized, ani, goog_get_stat, ETH_MIB_UNDERSIZE_RECEIVED, MV_PON_PORT_ID);
+static GOOG_ATTR(rx_fragments, ani, goog_get_stat, ETH_MIB_FRAGMENTS_RECEIVED, MV_PON_PORT_ID);
+static GOOG_ATTR(rx_oversized, ani, goog_get_stat, ETH_MIB_OVERSIZE_RECEIVED, MV_PON_PORT_ID);
+static GOOG_ATTR(rx_jabber, ani, goog_get_stat, ETH_MIB_JABBER_RECEIVED, MV_PON_PORT_ID);
+static GOOG_ATTR(rx_mac_error, ani, goog_get_stat, ETH_MIB_MAC_RECEIVE_ERROR, MV_PON_PORT_ID);
+static GOOG_ATTR(rx_crc_error, ani, goog_get_stat, ETH_MIB_BAD_CRC_EVENT, MV_PON_PORT_ID);
+static GOOG_ATTR(tx_good_octets, ani, goog_get_stat, ETH_MIB_GOOD_OCTETS_SENT_LOW, MV_PON_PORT_ID);
 static GOOG_ATTR(tx_good_packets, ani, goog_get_stat, ETH_MIB_GOOD_FRAMES_SENT, MV_PON_PORT_ID);
 static GOOG_ATTR(tx_broadcast_packets, ani, goog_get_stat, ETH_MIB_BROADCAST_FRAMES_SENT, MV_PON_PORT_ID);
 static GOOG_ATTR(tx_multicast_packets, ani, goog_get_stat, ETH_MIB_MULTICAST_FRAMES_SENT, MV_PON_PORT_ID);

@@ -275,6 +275,7 @@ MV_STATUS onuGponAsicDelayInit(void)
   MV_U32    equalizationDelay;
   MV_U32    constDelay;
   MV_U32    snForRandomSeed;
+  MV_U32    randomRange[2];
   MV_U8     sn[8];
 
 
@@ -313,10 +314,20 @@ MV_STATUS onuGponAsicDelayInit(void)
     return(rcode);
   }
 
+  rcode = onuGponSrvcRangingRandomInit();
+  if (rcode != MV_OK)
+  {
+    mvPonPrint(PON_PRINT_ERROR, PON_INIT_MODULE,
+                       "ERROR: (%s:%d) onuGponRangingRandomInit", __FILE_DESC__, __LINE__);
+    return (rcode);
+  }
+
+  get_random_bytes((void*)randomRange, sizeof(randomRange));
+
   /* Update two last bytes of Serial Number -Help Asic generate Random numbers
      for S/N Request answer delay */
   onuGponDbSerialNumGet(sn);
-  snForRandomSeed = sn[7] + (MV_U32)(sn[6] << 8);
+  snForRandomSeed = (MV_U32)(randomRange[1] & 0xFF) + (MV_U32)((randomRange[0] & 0xFF) << 8);
   rcode = mvOnuGponMacSerialNumberSet(snForRandomSeed);
   if (rcode != MV_OK)
   {

@@ -177,13 +177,13 @@ MV_STATUS onuGponApiInit(MV_U8 *serialNumber,
         return rcode;
     }
 
-  rcode = onuGponSrvcRangingRandomInit();
+  /*rcode = onuGponSrvcRangingRandomInit();
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
                "ERROR: (%s:%d) onuGponRangingRandomInit", __FILE_DESC__, __LINE__);
     return rcode;
-  }
+  }*/
 
   if (disabled == MV_TRUE)
   {

@@ -1084,6 +1084,7 @@ MV_STATUS onuGponSrvcRangingRandomInit(void)
 
   for (tmp_size=0; tmp_size<5; tmp_size++) 
   {
+    printk("INFO: input - type 0x%x code 0x%x, value 0x%x\n", randomType, randomCode, randomInternalDelayKey[tmp_size]);      
     add_input_randomness(randomType, randomCode, randomInternalDelayKey[tmp_size]);
   }
 
@@ -1304,12 +1305,12 @@ MV_STATUS onuGponWqTcontFlush(MV_U32 tcont)
     MV_STATUS rcode;
 
     if (tcont != 0xFF)
-	rcode = queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontCleanWork[tcont]);
+    	rcode = queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontCleanWork[tcont]);
     else
         rcode = queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontCleanAllWork);
 
     if(rcode == 0)
-	return(MV_ERROR);
+    	return(MV_ERROR);
 
     return(MV_OK);
 }
@@ -1336,7 +1337,7 @@ MV_STATUS onuGponWqTcontActivate(MV_U32 tcont)
     rcode = queue_work(gponTcontFlushWq.ponWq, (struct work_struct *)&gponTcontActiveWork[tcont]);
     if(rcode == 0)
         return(MV_ERROR);
-
+    
     return(MV_OK);
 }
 
@@ -1373,12 +1374,12 @@ void onuGponWqTcontFunc(struct work_struct *work)
 	{
 	   onuGponTcontFlushState[tcont] = TCONT_FLUSH_BLOCKING_STATE;
 	   tpm_deactive_tcont(tcont);
-	   printk("TCONT (%d) CLEAN_EVENT\n", tcont);
+	   //printk("TCONT (%d) CLEAN_EVENT\n", tcont);
 	   onuGponTcontFlushState[tcont] = TCONT_FLUSH_READY_STATE;
 	}
 	else
 	{
-	   printk("Received TCONT_CLEAN_EVENT while in T-CONT(%d) state(%s)\n", tcont, stateText[onuGponTcontFlushState[tcont]]);
+	    //printk("Received TCONT_CLEAN_EVENT while in T-CONT(%d) state(%s)\n", tcont, stateText[onuGponTcontFlushState[tcont]]);
 	}
     }
 
@@ -1392,12 +1393,12 @@ void onuGponWqTcontFunc(struct work_struct *work)
 	    {
 	       onuGponTcontFlushState[tcont] = TCONT_FLUSH_BLOCKING_STATE;
 	       tpm_deactive_tcont(tcont);
-	       printk("TCONT (%d) CLEAN_EVENT\n", tcont);
+	       //printk("TCONT (%d) CLEAN_EVENT\n", tcont);
 	       onuGponTcontFlushState[tcont] = TCONT_FLUSH_READY_STATE;
 	    }
 	    else
 	    {
-	       printk("Received TCONT_CLEAN_EVENT while in T-CONT(%d) state(%s)\n", tcont, stateText[onuGponTcontFlushState[tcont]]);
+		//printk("Received TCONT_CLEAN_EVENT while in T-CONT(%d) state(%s)\n", tcont, stateText[onuGponTcontFlushState[tcont]]);
 	    }
 	}
     }
@@ -1410,11 +1411,11 @@ void onuGponWqTcontFunc(struct work_struct *work)
        {
           onuGponTcontFlushState[tcont] = TCONT_FLUSH_RUNNING_STATE;
           tpm_active_tcont(tcont);
-          printk("TCONT (%d) ACTIVE_EVENT\n", tcont);
+          //printk("TCONT (%d) ACTIVE_EVENT\n", tcont);
        }
        else
        {
-           printk("Received TCONT_ACTIVE_EVENT while in T-CONT state(%s)\n", stateText[onuGponTcontFlushState[tcont]]);
+           //printk("Received TCONT_ACTIVE_EVENT while in T-CONT state(%s)\n", stateText[onuGponTcontFlushState[tcont]]);
        }
     }
 

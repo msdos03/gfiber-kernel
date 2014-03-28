@@ -78,7 +78,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Include Files
 ------------------------------------------------------------------------------*/
- 
+
 /* Definitions
 ------------------------------------------------------------------------------*/ 
 /* Disable Message disable/Enable Options */
@@ -90,8 +90,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define TIMER_T01_EXPIRE            (1)
 #define TIMER_T02_EXPIRE            (2)
 #define TIMER_PEE_EXPIRE            (3)
-                                   
-/* stats sub types */              
+
+/* stats sub types */
 #define STATS_ACCMULATE             (1)
 #define STATS_RESET                 (2)
 #define STATS_SHOW                  (3)
@@ -150,6 +150,7 @@ void      onuGponTimerFifoAuditHndl(unsigned long data);
 /* State Machine Functions */
 void      onuGponPonMngPloamProcess(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData);
 
+void 	  onuGponPonMngRandomDelayGen4SN_Equ(void);
 void      onuGponPonMngIsrNotExpected(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData);
 void      onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData);
 void      onuGponPonMngSerialNumberMaskMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData);

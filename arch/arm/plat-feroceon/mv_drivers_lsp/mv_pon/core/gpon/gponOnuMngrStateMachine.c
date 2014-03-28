@@ -83,6 +83,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* Local Constant
 ------------------------------------------------------------------------------*/
 #define __FILE_DESC__ "mv_pon/core/gpon/gponOnuStateMachine.c"
+#define CLEAR_BUFFER_EN   (1)
+#define CLEAR_BUFFER_DIS  (0)
 
 /* Global Variables
 ------------------------------------------------------------------------------*/
@@ -94,6 +96,9 @@ MV_BOOL            g_overheadManualMode = MV_FALSE;
 DISABLESTATSETFUNC g_onuGponDisableFunc = NULL;
 MV_BOOL            g_periodicTimerState = MV_FALSE;
 MV_U32             g_overheadPreAssignDelayForPopup = 0;
+MV_U32			   randomRange[2];
+MV_U32			   randomVal;
+
 /* Export Functions
 ------------------------------------------------------------------------------*/
 extern MV_STATUS onuGponAllocIdMacAdd(MV_U32 allocId, MV_U32 tcontId);
@@ -101,8 +106,8 @@ extern MV_STATUS onuGponAllocIdMacAdd(MV_U32 allocId, MV_U32 tcontId);
 /* Local Functions
 ------------------------------------------------------------------------------*/
 MV_STATUS onuGponPonMngrUpdateState(MV_U32 newState);
-MV_STATUS onuGponPonMngClearOnuInfo(void);
-MV_STATUS onuGponPonMngClearOnuBuffers(void);
+MV_STATUS onuGponPonMngClearOnuInfo(MV_U32 flag);
+MV_STATUS onuGponPonMngClearOnuBuffers(MV_U32 flag);
 MV_STATUS onuGponPonMngClearOnuTconts(void);
 MV_STATUS onuGponPonMngClearOnuPorts(void);
 MV_STATUS onuGponPonMngClearOnuId(void);
@@ -240,16 +245,19 @@ MV_STATUS onuGponPonMngrUpdateState(MV_U32 newState)
 **
 **  DESCRIPTION: The function reset onu buffers to its default state
 **
-**  PARAMETERS:  None
+**  PARAMETERS:  MV_U32 flag
 **
 **  OUTPUTS:     None
 **
 **  RETURNS:     MV_OK or error
 **
 *******************************************************************************/
-MV_STATUS onuGponPonMngClearOnuBuffers(void)
+MV_STATUS onuGponPonMngClearOnuBuffers(MV_U32 flag)
 {
    MV_STATUS rcode;
+
+   if (flag != CLEAR_BUFFER_EN)
+     return(MV_OK);
 
    rcode = onuGponAllocIdFreeAllBuffers();
    if (rcode != MV_OK)
@@ -269,14 +277,14 @@ MV_STATUS onuGponPonMngClearOnuBuffers(void)
 **  DESCRIPTION: The function reset onu information to its default state:
 **               asic & application
 **
-**  PARAMETERS:  None
+**  PARAMETERS:  MV_U32 flag
 **
 **  OUTPUTS:     None
 **
 **  RETURNS:     MV_OK or error
 **
 *******************************************************************************/
-MV_STATUS onuGponPonMngClearOnuInfo(void)
+MV_STATUS onuGponPonMngClearOnuInfo(MV_U32 flag)
 {
   MV_STATUS rcode;
 
@@ -294,7 +302,7 @@ MV_STATUS onuGponPonMngClearOnuInfo(void)
                "ERROR: (%s:%d) onuGponPonMngClearOnuTconts\n", __FILE_DESC__, __LINE__);    return(rcode);
   }
 
-  rcode = onuGponPonMngClearOnuBuffers();
+  rcode = onuGponPonMngClearOnuBuffers(flag);
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
@@ -580,6 +588,37 @@ void onuGponPonMngIsrNotExpected(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
 /*******************************************************************************
 **
+**  onuGponPonMngRandomDelayGen4SN_Equ
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function is called by PM task to generate random number
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+void onuGponPonMngRandomDelayGen4SN_Equ(void)
+{
+  static MV_U8 randomIndex = 0;
+  MV_U8 randomLeft;
+  MV_U8 randomRight;
+
+  randomIndex++;
+
+  if (randomIndex > 24) randomIndex = 0;
+
+  randomLeft  = randomIndex;
+  randomRight = 24 - randomIndex;
+
+  get_random_bytes((void*)randomRange, sizeof(randomRange));
+  randomVal = (((randomRange[0] >> randomLeft) & 0xDF) ^ ((randomRange[1] >> randomRight) & 0xDF));
+}
+
+/*******************************************************************************
+**
 **  onuGponPonMngOverheadMsg
 **  ____________________________________________________________________________
 **
@@ -617,7 +656,6 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
   MV_U32    extendedPreambleOperSize;
   MV_BOOL   extendedBurstOverride;
   MV_BOOL   delimiterOverride;
-  MV_U32    randomRange[2];
 
 #ifdef MV_GPON_PERFORMANCE_CHECK
   S_GponPerformanceCheckNode *tmpPmCheckNode = &(g_GponPmCheck.pmCheckNode[PON_OVERHEAD_PLOAM_PERFORMANCE]);
@@ -697,7 +735,6 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
       onuGponDbDelimiterSet (ONU_GPON_DELM_BYTE_02, (MV_U32)delimiterByte_02);
       onuGponDbDelimiterSet (ONU_GPON_DELM_BYTE_03, (MV_U32)delimiterByte_03);
       onuGponDbDelimiterSizeSet (GPON_TX_DELIMITER_DS);
-
     }
     else
     {
@@ -707,7 +744,6 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
       onuGponDbDelimiterSet (ONU_GPON_DELM_BYTE_01, (delimiter & 0xFF));
       onuGponDbDelimiterSet (ONU_GPON_DELM_BYTE_02, (delimiter >> 8)& 0xFF);
       onuGponDbDelimiterSet (ONU_GPON_DELM_BYTE_03, (delimiter >> 16)& 0xFF);
-
     }
 
     mvOnuGponMacTxDelimiterSet(delimiter, GPON_TX_DELIMITER_DS);
@@ -746,10 +782,7 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
       finalDelay        = M_ONU_GPON_RANG_MSG_FINAL_DELAY(preAssignDelayTemp);
       equalizationDelay = M_ONU_GPON_RANG_MSG_EQUAL_DELAY(preAssignDelayTemp);
 
-      /* update asic */
-      get_random_bytes((void*)randomRange, sizeof(randomRange));
-
-      equalizationDelay += ((randomRange[0] & 0x7F) + (randomRange[1] & 0x3F) + 24) * 32;
+      equalizationDelay += randomVal * 32;
 
       rcode = mvOnuGponMacRxEqualizationDelaySet(equalizationDelay);
       if (rcode != MV_OK)
@@ -761,7 +794,7 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
       }
 
       /* update asic */
-      finalDelay |= (MV_U32)GPON_TX_FINAL_DELAY_FD;
+      finalDelay += (MV_U32)GPON_TX_FINAL_DELAY_FD;
 
       rcode = mvOnuGponMacTxFinalDelaySet(finalDelay);
       if (rcode != MV_OK)
@@ -769,6 +802,14 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
         mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
                    "ERROR: (%s:%d) mvOnuGponMacTxFinalDelaySet finalDelay(%d)\n",
                    __FILE_DESC__, __LINE__, finalDelay);
+        return;
+      }
+
+	    rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_03_SERIAL_NUM);
+      if (rcode != MV_OK)
+      {
+        mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+                   "ERROR: (%s:%d) onuGponPonMngrUpdateState(3)\n", __FILE_DESC__, __LINE__);
         return;
       }
 
@@ -796,13 +837,13 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
   /* Before changing state check SN_Mask VALUE and serialNumberMaskDefaultStateFlag mode.
   ** Add Support for HW and SW state machine */
-  rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_03_SERIAL_NUM);
-  if (rcode != MV_OK)
-  {
-    mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-               "ERROR: (%s:%d) onuGponPonMngrUpdateState(3)\n", __FILE_DESC__, __LINE__);
-    return;
-  }
+  //rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_03_SERIAL_NUM);
+  //if (rcode != MV_OK)
+  //{
+  //  mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+  //             "ERROR: (%s:%d) onuGponPonMngrUpdateState(3)\n", __FILE_DESC__, __LINE__);
+  //  return;
+  //}
 
 #ifdef MV_GPON_PERFORMANCE_CHECK
   asicOntGlbRegReadNoCheck(mvAsicReg_GPON_GEN_MICRO_SEC_CNT,
@@ -1372,7 +1413,7 @@ void onuGponPonMngDactOnuIdMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
   /* clear onu information */
   /* ===================== */
-  rcode = onuGponPonMngClearOnuInfo();
+  rcode = onuGponPonMngClearOnuInfo(CLEAR_BUFFER_EN);
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
@@ -1468,7 +1509,7 @@ void onuGponPonMngDisSnMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
 		/* clear onu information */
 		/* ===================== */
-		rcode = onuGponPonMngClearOnuInfo();
+		rcode = onuGponPonMngClearOnuInfo(CLEAR_BUFFER_EN);
 		if (rcode != MV_OK) {
 			mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
 					   "ERROR: (%s:%d) DISABLE: onuGponPonMngClearOnuInfo\n", __FILE_DESC__, __LINE__);
@@ -2619,6 +2660,16 @@ void onuGponPonMngTimerT01ExpireHndl(void)
              "DEBUG: (%s:%d) TIMER TO1 Expired, state(%d)\n", __FILE_DESC__, __LINE__, onuGponDbOnuStateGet());
 #endif /* MV_GPON_DEBUG_PRINT */
 
+  /* clear onu information */
+  /* ===================== */
+  rcode = onuGponPonMngClearOnuInfo(CLEAR_BUFFER_EN);
+  if (rcode != MV_OK)
+  {
+    mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+               "ERROR: (%s:%d) onuGponPonMngClearOnuInfo\n", __FILE_DESC__, __LINE__);
+    return;
+  }
+
   /* state handling */
   /* ============== */
   rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_02_STANDBY);
@@ -2626,16 +2677,6 @@ void onuGponPonMngTimerT01ExpireHndl(void)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
                "ERROR: (%s:%d) onuGponPonMngrUpdateState(2)\n", __FILE_DESC__, __LINE__);
-    return;
-  }
-
-  /* clear onu information */
-  /* ===================== */
-  rcode = onuGponPonMngClearOnuInfo();
-  if (rcode != MV_OK)
-  {
-    mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-               "ERROR: (%s:%d) onuGponPonMngClearOnuInfo\n", __FILE_DESC__, __LINE__);
     return;
   }
 
@@ -2704,7 +2745,7 @@ void onuGponPonMngTimerT02ExpireHndl(void)
 
   /* clear onu information */
   /* ===================== */
-  rcode = onuGponPonMngClearOnuInfo();
+  rcode = onuGponPonMngClearOnuInfo(CLEAR_BUFFER_EN);
   if (rcode != MV_OK)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
@@ -2888,7 +2929,7 @@ void onuGponPonMngGenCritAlarm(E_OnuGponAlarmType alarmType_e,
 
     /* clear onu information */
     /* ===================== */
-    rcode = onuGponPonMngClearOnuInfo();
+    rcode = onuGponPonMngClearOnuInfo(CLEAR_BUFFER_EN);
     if (rcode != MV_OK)
     {
       mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,

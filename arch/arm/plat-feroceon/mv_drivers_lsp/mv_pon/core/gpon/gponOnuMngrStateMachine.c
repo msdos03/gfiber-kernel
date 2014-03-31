@@ -307,7 +307,7 @@ MV_STATUS onuGponPonMngClearOnuInfo(MV_U32 flag)
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
                "ERROR: (%s:%d) onuGponPonMngClearOnuBuffers\n", __FILE_DESC__, __LINE__);
-    return;
+    return(rcode);
   }
 
   rcode = onuGponPonMngClearOnuId();
@@ -615,6 +615,7 @@ void onuGponPonMngRandomDelayGen4SN_Equ(void)
 
   get_random_bytes((void*)randomRange, sizeof(randomRange));
   randomVal = (((randomRange[0] >> randomLeft) & 0xDF) ^ ((randomRange[1] >> randomRight) & 0xDF));
+    
 }
 
 /*******************************************************************************
@@ -782,7 +783,11 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
       finalDelay        = M_ONU_GPON_RANG_MSG_FINAL_DELAY(preAssignDelayTemp);
       equalizationDelay = M_ONU_GPON_RANG_MSG_EQUAL_DELAY(preAssignDelayTemp);
 
+      /*onuGponPonMngRandomDelayGen4SN_Equ();*/
+      
       equalizationDelay += randomVal * 32;
+      printk("onuGponPonMngOverheadMsg: equalizationDelay = 0x%x\n", equalizationDelay);
+	  
 
       rcode = mvOnuGponMacRxEqualizationDelaySet(equalizationDelay);
       if (rcode != MV_OK)
@@ -804,7 +809,7 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
                    __FILE_DESC__, __LINE__, finalDelay);
         return;
       }
-
+#if 0
 	    rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_03_SERIAL_NUM);
       if (rcode != MV_OK)
       {
@@ -812,7 +817,7 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
                    "ERROR: (%s:%d) onuGponPonMngrUpdateState(3)\n", __FILE_DESC__, __LINE__);
         return;
       }
-
+#endif
       /* update database */
       onuGponDbEqualizationDelaySet(preAssignDelay);
 
@@ -837,13 +842,15 @@ void onuGponPonMngOverheadMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
   /* Before changing state check SN_Mask VALUE and serialNumberMaskDefaultStateFlag mode.
   ** Add Support for HW and SW state machine */
-  //rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_03_SERIAL_NUM);
-  //if (rcode != MV_OK)
-  //{
-  //  mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-  //             "ERROR: (%s:%d) onuGponPonMngrUpdateState(3)\n", __FILE_DESC__, __LINE__);
-  //  return;
-  //}
+#if 1
+  	rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_03_SERIAL_NUM);
+  	if (rcode != MV_OK)
+  	{
+  	  mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+  	             "ERROR: (%s:%d) onuGponPonMngrUpdateState(3)\n", __FILE_DESC__, __LINE__);
+  	  return;
+  	}
+#endif
 
 #ifdef MV_GPON_PERFORMANCE_CHECK
   asicOntGlbRegReadNoCheck(mvAsicReg_GPON_GEN_MICRO_SEC_CNT,

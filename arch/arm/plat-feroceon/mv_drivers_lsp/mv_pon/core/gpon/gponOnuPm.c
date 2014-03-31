@@ -208,7 +208,7 @@ void onuGponPmTimerExpireHndl(void)
   S_RxBip8Pm inBip8Pm;
   unsigned long flags;
 
-	onuGponPonMngRandomDelayGen4SN_Equ();
+  onuGponPonMngRandomDelayGen4SN_Equ();
   onuGponPmCountersAdd();
   onuGponPmRxBip8PmGet(&inBip8Pm);
   spin_lock_irqsave(&onuPonIrqLock, flags);

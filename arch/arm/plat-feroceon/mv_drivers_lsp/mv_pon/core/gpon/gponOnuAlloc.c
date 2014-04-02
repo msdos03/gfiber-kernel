@@ -721,7 +721,6 @@ MV_STATUS onuGponAllocIdFreeAllBuffers(void)
                "DEBUG: (%s:%d) release All T-Conts buffers, tpm_deactive_tcont\n", __FILE_DESC__, __LINE__);
 #endif /* MV_GPON_DEBUG_PRINT */
 
-    printk("TCONT flush, FreeAllBuffers\n");
     status = onuGponWqTcontFlush(tcontNum);
     if (status != MV_OK)
     {

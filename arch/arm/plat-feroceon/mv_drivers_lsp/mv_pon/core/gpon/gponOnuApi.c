@@ -177,13 +177,6 @@ MV_STATUS onuGponApiInit(MV_U8 *serialNumber,
         return rcode;
     }
 
-  rcode = onuGponSrvcRangingRandomInit();
-  if (rcode != MV_OK)
-  {
-    mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
-               "ERROR: (%s:%d) onuGponRangingRandomInit", __FILE_DESC__, __LINE__);
-    return rcode;
-  }
 
   if (disabled == MV_TRUE)
   {
@@ -588,10 +581,6 @@ MV_STATUS onuGponApiGemConfig(MV_U32* gemmap, E_GponIoctlGemAction action){
                                          "ERROR: (%s:%d) onuGponApiGemConfig", __FILE_DESC__, __LINE__);
                               break;
                         }
-                        if (onuGponDbGemPortAesGet(portId) == MV_TRUE) {
-                            /*update HW as well*/
-                            mvOnuGponMacAesPortIdSet(portId,MV_TRUE);
-                        }
                     }
                     else{
                         rcode  = onuGponApiGemPortIdClear(portId);
@@ -600,10 +589,6 @@ MV_STATUS onuGponApiGemConfig(MV_U32* gemmap, E_GponIoctlGemAction action){
                               mvPonPrint(PON_PRINT_ERROR, PON_API_MODULE,
                                          "ERROR: (%s:%d) onuGponApiGemConfig", __FILE_DESC__, __LINE__);
                               break;
-                        }
-                        if (onuGponDbGemPortAesGet(portId) == MV_TRUE) {
-                            /*remove HW configuration but keep SW encryption indication*/
-                            mvOnuGponMacAesPortIdSet(portId,MV_FALSE);
                         }
                     }
 
@@ -765,6 +750,11 @@ MV_STATUS onuGponApiGemPortIdConfig(MV_U32 gemPortid)
   }
   onuGponDbGemPortValidSet(gemPortid, MV_TRUE);
 
+  if (onuGponDbGemPortAesGet(gemPortid) == MV_TRUE) {
+      /*update HW as well*/
+      mvOnuGponMacAesPortIdSet(gemPortid, MV_TRUE);
+  }
+
 #ifdef MV_GPON_STATIC_GEM_PORT
   if (staticGemPortConfigFlag == 0)
   {
@@ -808,6 +798,11 @@ MV_STATUS onuGponApiGemPortIdClear(MV_U32 gemPortid)
     return(rcode);
   }
   onuGponDbGemPortValidSet(gemPortid, MV_FALSE);
+
+  if (onuGponDbGemPortAesGet(gemPortid) == MV_TRUE) {
+      /*remove HW configuration but keep SW encryption indication*/
+      mvOnuGponMacAesPortIdSet(gemPortid, MV_FALSE);
+  }
 
   return(rcode);
 }

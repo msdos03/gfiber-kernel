@@ -328,7 +328,7 @@ MV_STATUS onuGponAsicDelayInit(void)
      for S/N Request answer delay */
   onuGponDbSerialNumGet(sn);
   snForRandomSeed = (MV_U32)(randomRange[1] & 0xFF) + (MV_U32)((randomRange[0] & 0xFF) << 8);
-  printk("snForRandomSeed = %d\n",snForRandomSeed);
+
   /* delay start up for the random time */
   mvOsDelay((snForRandomSeed & 0xFF));
   

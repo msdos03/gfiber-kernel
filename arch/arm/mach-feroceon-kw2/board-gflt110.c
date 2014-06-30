@@ -12,6 +12,12 @@
 
 #define BOARD_NAME		"gflt110"
 
+struct gflt_led_data {
+	unsigned gpio;
+	unsigned active_low;
+	struct led_classdev cdev;
+};
+
 static ssize_t board_hw_ver_show(struct device *dev,
 				 struct device_attribute *attr,
 				 char *buf)
@@ -20,82 +26,92 @@ static ssize_t board_hw_ver_show(struct device *dev,
 }
 
 static DEVICE_ATTR(hw_ver, S_IRUGO, board_hw_ver_show, NULL);
+static void gflt_led_brightness_set(struct led_classdev *led_cdev,
+				    enum led_brightness enum_brightness);
 
-static struct gpio_led board_gpio_leds[] = {
+static struct gflt_led_data board_gpio_leds[] = {
 	{
-		.name = "sys-blue",
 		.gpio = 12,
-		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+		.cdev = {
+			.name = "sys-blue",
+			.brightness_set = gflt_led_brightness_set,
+			.max_brightness = 100,
+		},
 	},
 	{
-		.name = "sys-red",
 		.gpio = 13,
-		.default_state = LEDS_GPIO_DEFSTATE_ON,
+		.cdev = {
+			.name = "sys-red",
+			.brightness_set = gflt_led_brightness_set,
+			.max_brightness = 100,
+		},
 	},
 };
 
-static int board_gpio_blink_set(unsigned gpio, unsigned long *delay_on,
-				unsigned long *delay_off);
-
-static struct gpio_led_platform_data board_gpio_leds_data = {
-	.gpio_blink_set = board_gpio_blink_set,
-};
-
-int board_gpio_blink_set(unsigned gpio, unsigned long *delay_on,
-			 unsigned long *delay_off)
+static void gflt_led_brightness_set(struct led_classdev *led_cdev,
+				    enum led_brightness enum_brightness)
 {
-	int i;
-	int active_low;
-	MV_U32 mask = 1 << (gpio %32);
+	struct gflt_led_data *led_data =
+               container_of(led_cdev, struct gflt_led_data, cdev);
+
+	unsigned gpio = led_data->gpio;
+	unsigned brightness = (unsigned)enum_brightness;
+
+	MV_U32 mask = 1 << (gpio % 32);
 	MV_U32 group = gpio / 32;
 	MV_U32 cycles_per_ms = mvBoardTclkGet() / 1000;
-	unsigned long max_delay = ~0 / cycles_per_ms;
 
-	for (i = 0; i < board_gpio_leds_data.num_leds; i++) {
-		if (gpio == board_gpio_leds_data.leds[i].gpio) {
-			active_low = board_gpio_leds_data.leds[i].active_low;
-			break;
-		}
-	}
+	if (brightness && brightness < led_cdev->max_brightness) {
+		unsigned long delay_on;
+		unsigned long delay_off;
 
-	if (i == board_gpio_leds_data.num_leds)
-		return -EINVAL;
-
-	*delay_on = min(*delay_on, max_delay);
-	*delay_off = min(*delay_off, max_delay);
-
-	if (*delay_on && *delay_off) {
-		if (active_low)
+		delay_on = cycles_per_ms * brightness / led_cdev->max_brightness;
+		delay_off = cycles_per_ms - delay_on;
+		if (led_data->active_low)
 			mvGppBlinkCntrSet(MV_GPP_BLINK_CNTR_A,
-                                          *delay_off * cycles_per_ms,
-                                          *delay_on * cycles_per_ms);
+					  delay_off,
+					  delay_on);
 		else
 			mvGppBlinkCntrSet(MV_GPP_BLINK_CNTR_A,
-                                          *delay_on * cycles_per_ms,
-                                          *delay_off * cycles_per_ms);
+					  delay_on,
+					  delay_off);
 
 		mvGppBlinkEn(group, mask, mask);
-	}
-	else
+	} else if(brightness) {
+		mvGppValueSet(group, mask, led_data->active_low ? 0 : mask);
 		mvGppBlinkEn(group, mask, 0);
-
-	return 0;
+	} else {
+		mvGppValueSet(group, mask, led_data->active_low ? mask : 0);
+		mvGppBlinkEn(group, mask, 0);
+	}
 }
 
-static struct platform_device board_gpio_leds_device = {
-        .name = "leds-gpio",
-        .id = -1,
-        .dev.platform_data = &board_gpio_leds_data,
-};
+static int register_gfltleds(struct platform_device *pdev,
+				struct gflt_led_data* gflt_leds,
+				unsigned gflt_leds_num_leds)
+{
+	int ret;
+	int i;
+
+	for (i = 0; i < gflt_leds_num_leds; i++) {
+		ret = led_classdev_register(&pdev->dev, &gflt_leds[i].cdev);
+		if (ret)
+			goto err_reg;
+	}
+	return 0;
+
+err_reg:
+	for (i-- ; i >= 0; i--)
+	{
+		led_classdev_unregister(&gflt_leds[i].cdev);
+	}
+	return ret;
+}
 
 int __init board_init(void)
 {
 	int rc;
 	struct platform_device *pdev;
-
-	board_gpio_leds_data.num_leds
-			= ARRAY_SIZE(board_gpio_leds);
-	board_gpio_leds_data.leds = board_gpio_leds;
 
 	/* /sys/devices/platform/<board_name> */
 	pdev = platform_device_register_simple(BOARD_NAME, -1, NULL, 0);
@@ -117,9 +133,9 @@ int __init board_init(void)
 		pr_err(BOARD_NAME ": error %d creating attribute 'hw_ver'\n",
 			rc);
 
-	rc = platform_device_register(&board_gpio_leds_device);
+	rc = register_gfltleds(pdev, board_gpio_leds, ARRAY_SIZE(board_gpio_leds));
 	if (rc)
-		pr_err(BOARD_NAME ": error %d registering GPIO LEDs device\n",
+		pr_err(BOARD_NAME ": error %d registering GFLT LED device\n",
 			rc);
 
 	return 0;

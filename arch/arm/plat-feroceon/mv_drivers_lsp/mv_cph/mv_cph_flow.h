@@ -101,6 +101,8 @@ extern "C" {
 #define MV_CPH_DEFAULT_SINGLE_TAG_RULE   (4096+2)/* Default sinlge tagged  rule*/
 #define MV_CPH_DEFAULT_DOUBLE_UNTAG_RULE (4096+3)/* Default double tagged  rule*/
 
+#define MV_CPH_IP_TYPE_ANY               (0)   /* Dummy IP type, do not care IP type*/
+
 /* CPH flow mapping rule definition
 ------------------------------------------------------------------------------*/
 typedef enum
@@ -168,6 +170,7 @@ typedef struct
     CPH_FLOW_TCI_T     parse_outer_tci;
     CPH_FLOW_TCI_T     parse_inner_tci;
     UINT16             eth_type;
+    UINT16             ip_type;
     CPH_VLAN_OP_TYPE_E op_type;
     CPH_FLOW_TCI_T     mod_outer_tci;
     CPH_FLOW_TCI_T     mod_inner_tci;

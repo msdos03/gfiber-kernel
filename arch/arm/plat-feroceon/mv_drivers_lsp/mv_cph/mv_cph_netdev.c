@@ -630,6 +630,8 @@ INT32 cph_data_flow_tx(INT32 port, struct net_device *dev, struct sk_buff *skb,
     BOOL             l_mh;
     BOOL             state  = FALSE;
     MV_STATUS        rc     = MV_OK;
+    UINT16  		old_vid;
+    UINT8   		old_pbits;
 
     if (MV_PON_PORT_ID != port)
         return 0;
@@ -654,31 +656,46 @@ INT32 cph_data_flow_tx(INT32 port, struct net_device *dev, struct sk_buff *skb,
         /* Get CPH data flow rule */
         flow_rule.is_default = FALSE;
         rc = cph_flow_get_rule(&flow_rule);
-        if (rc != MV_OK)
-        {
-            /* Handle multicat packets as unicast one */
-            if (flow_rule.parse_bm & CPH_FLOW_PARSE_MC_PROTO) {
-                flow_rule.parse_bm &= ~CPH_FLOW_PARSE_MC_PROTO;
-                rc = cph_flow_get_rule_by_vid(&flow_rule);
-                if (rc != MV_OK)
-                {
-                    rc = cph_flow_get_rule(&flow_rule);
+        if (rc != MV_OK) {
+		if (flow_rule.parse_bm & CPH_FLOW_PARSE_MC_PROTO) {
+			/*search */
+			flow_rule.is_default = TRUE;
+			old_vid = flow_rule.parse_outer_tci.vid;
+			old_pbits = flow_rule.parse_outer_tci.pbits;
+			flow_rule.parse_outer_tci.vid   = MV_CPH_VID_NOT_CARE_VALUE;
+			flow_rule.parse_outer_tci.pbits = MV_CPH_PBITS_NOT_CARE_VALUE;
+			rc = cph_flow_get_rule(&flow_rule);
 
-                    if (rc != MV_OK)
-                    {
-                        flow_rule.is_default = TRUE;
-                        rc = cph_flow_get_rule(&flow_rule);
-                        if (rc != MV_OK)
-                        {
-                            MV_CPH_PRINT(CPH_DEBUG_LEVEL, "%s():fail to call cph_flow_get_rule, rc<%d> \n", __FUNCTION__, rc);
-                            return 0;
-                        }
-                    }
-                }
-            }
+			/* Handle multicat packets as unicast one */
+			if (rc != MV_OK)
+			{
+				flow_rule.parse_outer_tci.vid   = old_vid;
+				flow_rule.parse_outer_tci.pbits = old_pbits;
+				flow_rule.is_default = FALSE;
+				flow_rule.parse_bm &= ~CPH_FLOW_PARSE_MC_PROTO;
+				rc = cph_flow_get_rule_by_vid(&flow_rule);
+				if (rc != MV_OK)
+					rc = cph_flow_get_rule(&flow_rule);
+
+				if (rc != MV_OK)
+				{
+					flow_rule.is_default = TRUE;
+					flow_rule.parse_outer_tci.vid   = MV_CPH_VID_NOT_CARE_VALUE;
+					flow_rule.parse_outer_tci.pbits = MV_CPH_PBITS_NOT_CARE_VALUE;
+					rc = cph_flow_get_rule(&flow_rule);
+					if (rc != MV_OK)
+					{
+						MV_CPH_PRINT(CPH_DEBUG_LEVEL, "%s():fail to call cph_flow_get_rule, rc<%d> \n", __FUNCTION__, rc);
+						return 0;
+					}
+				}
+			}
+		}
             else {
 
-                flow_rule.is_default = TRUE;
+		flow_rule.is_default = TRUE;
+		flow_rule.parse_outer_tci.vid   = MV_CPH_VID_NOT_CARE_VALUE;
+		flow_rule.parse_outer_tci.pbits = MV_CPH_PBITS_NOT_CARE_VALUE;
                 rc = cph_flow_get_rule(&flow_rule);
                 if (rc != MV_OK)
                 {

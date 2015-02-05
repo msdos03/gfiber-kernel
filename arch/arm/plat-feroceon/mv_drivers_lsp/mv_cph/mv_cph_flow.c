@@ -1298,8 +1298,10 @@ MV_STATUS cph_flow_parse_packet (INT32 port, UINT8 *data, BOOL rx, BOOL mh, CPH_
         p_field += MV_IPV4_PROTO_OFFSET;
         proto = *(UINT8 *)p_field;
 
-        if (IPPROTO_IGMP == proto)
+        if (IPPROTO_IGMP == proto) {
             flow->parse_bm |= CPH_FLOW_PARSE_MC_PROTO;
+            flow->ip_type   = IPPROTO_IGMP;
+	}
     }
     else if (MV_CPH_ETH_TYPE_IPV6 == flow->eth_type) {
         p_ipv6_hdr = (struct ipv6hdr *)(p_field + MV_CPH_ETH_TYPE_LEN);
@@ -1316,6 +1318,7 @@ MV_STATUS cph_flow_parse_packet (INT32 port, UINT8 *data, BOOL rx, BOOL mh, CPH_
                     case ICMPV6_MGM_REDUCTION:
                     case ICMPV6_MLD2_REPORT:
                         flow->parse_bm |= CPH_FLOW_PARSE_MC_PROTO;
+			flow->ip_type = IPPROTO_ICMPV6;
                         break;
                     default:
                         break;
@@ -1401,6 +1404,12 @@ BOOL cph_flow_compare_rules (CPH_FLOW_ENTRY_T *parse_rule, CPH_FLOW_ENTRY_T *db_
             return FALSE;
     }
 
+    if (db_rule->parse_bm & CPH_FLOW_PARSE_MC_PROTO)
+    {
+        if (parse_rule->ip_type != db_rule->ip_type)
+            return FALSE;
+    }
+
     return TRUE;
 }
 
@@ -1433,6 +1442,11 @@ BOOL cph_flow_compare_packet_and_rule (CPH_FLOW_ENTRY_T *packet_rule, CPH_FLOW_E
     {
             return FALSE;
     }
+
+	if (packet_rule->parse_bm & CPH_FLOW_PARSE_MC_PROTO) {
+		if ((db_rule->ip_type != MV_CPH_IP_TYPE_ANY) && (db_rule->ip_type != packet_rule->ip_type))
+			return false;
+	}
 
     /* Check MH if needed */
     if ((db_rule->parse_bm & CPH_FLOW_PARSE_MH) &&
@@ -1521,6 +1535,11 @@ BOOL cph_flow_compare_packet_and_rule_vid (CPH_FLOW_ENTRY_T *packet_rule, CPH_FL
     {
             return FALSE;
     }
+
+	if (packet_rule->parse_bm & CPH_FLOW_PARSE_MC_PROTO) {
+		if ((db_rule->ip_type != MV_CPH_IP_TYPE_ANY) && (db_rule->ip_type != packet_rule->ip_type))
+			return false;
+	}
 
     /* Check MH if needed */
     if ((db_rule->parse_bm & CPH_FLOW_PARSE_MH) &&
@@ -1997,7 +2016,7 @@ INT32  cph_flow_display_all (VOID)
 
     printk(KERN_INFO "-------------------------------------------------------------------------------------------------------------------------------------------------------\n");
     printk(KERN_INFO "                                |Parse outer       |Parse inner       |Mod outer         |Mod Inner         |Forward\n");
-    printk(KERN_INFO "dir default parse_bm mh   ety    tpid   vid  pbits  tpid   vid  pbits  tpid   vid  pbits  tpid   vid  pbits  port queue hwf_queue gem  count    op_type\n");
+    printk(KERN_INFO "dir default parse_bm mh   ety    tpid   vid  pbits  tpid   vid  pbits  tpid   vid  pbits  tpid   vid  pbits  port queue hwf_queue gem  count    ip_type op_type\n");
     /* Traverse CPH flow rule tale */
     for (idx = 0, rule_idx = 0; (idx < CPH_FLOW_ENTRY_NUM) && (rule_idx < gs_flow_table.rule_num); idx++)
     {
@@ -2009,7 +2028,7 @@ INT32  cph_flow_display_all (VOID)
             rule_idx++;
 
             printk(KERN_INFO  
-                   "%2.2s  %3.3s     0x%04x   %-4d 0x%04x 0x%04x %-4d %1d      0x%04x %-4d %1d      0x%04x %-4d %1d      0x%04x %-4d %1d      %1d    %1d     %1d         %-4d %-8d %s\n",
+                   "%2.2s  %3.3s     0x%04x   %-4d 0x%04x 0x%04x %-4d %1d      0x%04x %-4d %1d      0x%04x %-4d %1d      0x%04x %-4d %1d      %1d    %1d     %1d         %-4d %-8d %7d %s\n",
                    cph_app_lookup_dir(p_flow_rule->dir), (p_flow_rule->is_default == TRUE)? "Yes":"No ", 
                    p_flow_rule->parse_bm,             p_flow_rule->mh,                  p_flow_rule->eth_type,
                    p_flow_rule->parse_outer_tci.tpid, p_flow_rule->parse_outer_tci.vid, p_flow_rule->parse_outer_tci.pbits, 
@@ -2017,7 +2036,7 @@ INT32  cph_flow_display_all (VOID)
                    p_flow_rule->mod_outer_tci.tpid,   p_flow_rule->mod_outer_tci.vid,   p_flow_rule->mod_outer_tci.pbits,
                    p_flow_rule->mod_inner_tci.tpid,   p_flow_rule->mod_inner_tci.vid,   p_flow_rule->mod_inner_tci.pbits,
                    p_flow_rule->pkt_frwd.trg_port,    p_flow_rule->pkt_frwd.trg_queue,  p_flow_rule->pkt_frwd.trg_hwf_queue, p_flow_rule->pkt_frwd.gem_port, 
-                   p_flow_rule->count,                cph_flow_lookup_op_type(p_flow_rule->op_type));
+                   p_flow_rule->count,                p_flow_rule->ip_type,             cph_flow_lookup_op_type(p_flow_rule->op_type));
         }
     }   
 

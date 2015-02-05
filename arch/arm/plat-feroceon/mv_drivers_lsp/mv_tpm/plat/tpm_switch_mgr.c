@@ -83,6 +83,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 uint32_t trace_sw_dbg_flag = 0;
 
+static tpm_swport_pm_1_t g_mc_tpm_swport_pm_1;
+static tpm_swport_pm_3_all_t g_mc_tpm_swport_pm_3;
+
 #define IF_ERROR(ret)\
     if (ret != TPM_DB_OK) {\
         printk(KERN_ERR "ERROR: (%s) call not allowed, switch not initialized\n", __FUNCTION__);\
@@ -7582,6 +7585,57 @@ tpm_error_code_t tpm_sw_pm_1_read
             printk(KERN_ERR "ERROR: (%s:%d) tpm_sw_pm_3_from_gmac failed\n", __FUNCTION__, __LINE__);
             return ERR_GENERAL;
         }
+
+	g_mc_tpm_swport_pm_1.fcsErrors                       += tpm_swport_pm_1->fcsErrors;
+        g_mc_tpm_swport_pm_1.excessiveCollisionCounter       += tpm_swport_pm_1->excessiveCollisionCounter;
+        g_mc_tpm_swport_pm_1.lateCollisionCounter            += tpm_swport_pm_1->lateCollisionCounter;
+        g_mc_tpm_swport_pm_1.frameTooLongs                   += tpm_swport_pm_1->frameTooLongs;
+        g_mc_tpm_swport_pm_1.bufferOverflowsOnReceive        += tpm_swport_pm_1->bufferOverflowsOnReceive;
+        g_mc_tpm_swport_pm_1.bufferOverflowsOnTransmit       += tpm_swport_pm_1->bufferOverflowsOnTransmit;
+        g_mc_tpm_swport_pm_1.singleCollisionFrameCounter     += tpm_swport_pm_1->singleCollisionFrameCounter;
+        g_mc_tpm_swport_pm_1.multipleCollisionsFrameCounter  += tpm_swport_pm_1->multipleCollisionsFrameCounter;
+        g_mc_tpm_swport_pm_1.sqeCounter                      += tpm_swport_pm_1->sqeCounter;
+        g_mc_tpm_swport_pm_1.deferredTransmissionCounter     += tpm_swport_pm_1->deferredTransmissionCounter;
+        g_mc_tpm_swport_pm_1.internalMacTransmitErrorCounter += tpm_swport_pm_1->internalMacTransmitErrorCounter;
+        g_mc_tpm_swport_pm_1.carrierSenseErrorCounter        += tpm_swport_pm_1->carrierSenseErrorCounter;
+        g_mc_tpm_swport_pm_1.alignmentErrorCounter           += tpm_swport_pm_1->alignmentErrorCounter;
+        g_mc_tpm_swport_pm_1.internalMacReceiveErrorCounter  += tpm_swport_pm_1->internalMacReceiveErrorCounter;
+
+	g_mc_tpm_swport_pm_3.dropEvents		+= tpm_swport_pm_3.dropEvents;
+        g_mc_tpm_swport_pm_3.InGoodOctetsLo	+= tpm_swport_pm_3.InGoodOctetsLo;
+        g_mc_tpm_swport_pm_3.InGoodOctetsHi	+= tpm_swport_pm_3.InGoodOctetsHi;
+        g_mc_tpm_swport_pm_3.InBadOctets	+= tpm_swport_pm_3.InBadOctets;
+        g_mc_tpm_swport_pm_3.OutFCSErr		+= tpm_swport_pm_3.OutFCSErr;
+        g_mc_tpm_swport_pm_3.InUnicasts		+= tpm_swport_pm_3.InUnicasts;
+        g_mc_tpm_swport_pm_3.Deferred		+= tpm_swport_pm_3.Deferred;
+        g_mc_tpm_swport_pm_3.InBroadcasts	+= tpm_swport_pm_3.InBroadcasts;
+        g_mc_tpm_swport_pm_3.InMulticasts	+= tpm_swport_pm_3.InMulticasts;
+        g_mc_tpm_swport_pm_3.Octets64		+= tpm_swport_pm_3.Octets64;
+        g_mc_tpm_swport_pm_3.Octets127		+= tpm_swport_pm_3.Octets127;
+        g_mc_tpm_swport_pm_3.Octets255		+= tpm_swport_pm_3.Octets255;
+        g_mc_tpm_swport_pm_3.Octets511		+= tpm_swport_pm_3.Octets511;
+        g_mc_tpm_swport_pm_3.Octets1023		+= tpm_swport_pm_3.Octets1023;
+        g_mc_tpm_swport_pm_3.OctetsMax		+= tpm_swport_pm_3.OctetsMax;
+        g_mc_tpm_swport_pm_3.OutOctetsLo	+= tpm_swport_pm_3.OutOctetsLo;
+        g_mc_tpm_swport_pm_3.OutOctetsHi	+= tpm_swport_pm_3.OutOctetsHi;
+        g_mc_tpm_swport_pm_3.OutUnicasts	+= tpm_swport_pm_3.OutUnicasts;
+        g_mc_tpm_swport_pm_3.Excessive		+= tpm_swport_pm_3.Excessive;
+        g_mc_tpm_swport_pm_3.OutMulticasts	+= tpm_swport_pm_3.OutMulticasts;
+        g_mc_tpm_swport_pm_3.OutBroadcasts	+= tpm_swport_pm_3.OutBroadcasts;
+        g_mc_tpm_swport_pm_3.Single		+= tpm_swport_pm_3.Single;
+        g_mc_tpm_swport_pm_3.OutPause		+= tpm_swport_pm_3.OutPause;
+        g_mc_tpm_swport_pm_3.InPause		+= tpm_swport_pm_3.InPause;
+        g_mc_tpm_swport_pm_3.Multiple		+= tpm_swport_pm_3.Multiple;
+        g_mc_tpm_swport_pm_3.Undersize		+= tpm_swport_pm_3.Undersize;
+        g_mc_tpm_swport_pm_3.Fragments		+= tpm_swport_pm_3.Fragments;
+        g_mc_tpm_swport_pm_3.Oversize		+= tpm_swport_pm_3.Oversize;
+        g_mc_tpm_swport_pm_3.Jabber		+= tpm_swport_pm_3.Jabber;
+        g_mc_tpm_swport_pm_3.InMACRcvErr	+= tpm_swport_pm_3.InMACRcvErr;
+        g_mc_tpm_swport_pm_3.InFCSErr		+= tpm_swport_pm_3.InFCSErr;
+        g_mc_tpm_swport_pm_3.Collisions		+= tpm_swport_pm_3.Collisions;
+        g_mc_tpm_swport_pm_3.Late		+= tpm_swport_pm_3.Late;
+
+	memcpy(tpm_swport_pm_1, &g_mc_tpm_swport_pm_1, sizeof(g_mc_tpm_swport_pm_1));
     }
 
     if (trace_sw_dbg_flag)
@@ -7721,6 +7775,57 @@ tpm_error_code_t tpm_sw_pm_3_read
             printk(KERN_ERR "ERROR: (%s:%d) tpm_sw_pm_3_from_gmac failed\n", __FUNCTION__, __LINE__);
             return ERR_GENERAL;
         }
+
+	g_mc_tpm_swport_pm_1.fcsErrors                       += tpm_swport_pm_1.fcsErrors;
+        g_mc_tpm_swport_pm_1.excessiveCollisionCounter       += tpm_swport_pm_1.excessiveCollisionCounter;
+        g_mc_tpm_swport_pm_1.lateCollisionCounter            += tpm_swport_pm_1.lateCollisionCounter;
+        g_mc_tpm_swport_pm_1.frameTooLongs                   += tpm_swport_pm_1.frameTooLongs;
+        g_mc_tpm_swport_pm_1.bufferOverflowsOnReceive        += tpm_swport_pm_1.bufferOverflowsOnReceive;
+        g_mc_tpm_swport_pm_1.bufferOverflowsOnTransmit       += tpm_swport_pm_1.bufferOverflowsOnTransmit;
+        g_mc_tpm_swport_pm_1.singleCollisionFrameCounter     += tpm_swport_pm_1.singleCollisionFrameCounter;
+        g_mc_tpm_swport_pm_1.multipleCollisionsFrameCounter  += tpm_swport_pm_1.multipleCollisionsFrameCounter;
+        g_mc_tpm_swport_pm_1.sqeCounter                      += tpm_swport_pm_1.sqeCounter;
+        g_mc_tpm_swport_pm_1.deferredTransmissionCounter     += tpm_swport_pm_1.deferredTransmissionCounter;
+        g_mc_tpm_swport_pm_1.internalMacTransmitErrorCounter += tpm_swport_pm_1.internalMacTransmitErrorCounter;
+        g_mc_tpm_swport_pm_1.carrierSenseErrorCounter        += tpm_swport_pm_1.carrierSenseErrorCounter;
+        g_mc_tpm_swport_pm_1.alignmentErrorCounter           += tpm_swport_pm_1.alignmentErrorCounter;
+        g_mc_tpm_swport_pm_1.internalMacReceiveErrorCounter  += tpm_swport_pm_1.internalMacReceiveErrorCounter;
+
+	g_mc_tpm_swport_pm_3.dropEvents		+= tpm_swport_pm_3->dropEvents;
+        g_mc_tpm_swport_pm_3.InGoodOctetsLo	+= tpm_swport_pm_3->InGoodOctetsLo;
+        g_mc_tpm_swport_pm_3.InGoodOctetsHi	+= tpm_swport_pm_3->InGoodOctetsHi;
+        g_mc_tpm_swport_pm_3.InBadOctets	+= tpm_swport_pm_3->InBadOctets;
+        g_mc_tpm_swport_pm_3.OutFCSErr		+= tpm_swport_pm_3->OutFCSErr;
+        g_mc_tpm_swport_pm_3.InUnicasts		+= tpm_swport_pm_3->InUnicasts;
+        g_mc_tpm_swport_pm_3.Deferred		+= tpm_swport_pm_3->Deferred;
+        g_mc_tpm_swport_pm_3.InBroadcasts	+= tpm_swport_pm_3->InBroadcasts;
+        g_mc_tpm_swport_pm_3.InMulticasts	+= tpm_swport_pm_3->InMulticasts;
+        g_mc_tpm_swport_pm_3.Octets64		+= tpm_swport_pm_3->Octets64;
+        g_mc_tpm_swport_pm_3.Octets127		+= tpm_swport_pm_3->Octets127;
+        g_mc_tpm_swport_pm_3.Octets255		+= tpm_swport_pm_3->Octets255;
+        g_mc_tpm_swport_pm_3.Octets511		+= tpm_swport_pm_3->Octets511;
+        g_mc_tpm_swport_pm_3.Octets1023		+= tpm_swport_pm_3->Octets1023;
+        g_mc_tpm_swport_pm_3.OctetsMax		+= tpm_swport_pm_3->OctetsMax;
+        g_mc_tpm_swport_pm_3.OutOctetsLo	+= tpm_swport_pm_3->OutOctetsLo;
+        g_mc_tpm_swport_pm_3.OutOctetsHi	+= tpm_swport_pm_3->OutOctetsHi;
+        g_mc_tpm_swport_pm_3.OutUnicasts	+= tpm_swport_pm_3->OutUnicasts;
+        g_mc_tpm_swport_pm_3.Excessive		+= tpm_swport_pm_3->Excessive;
+        g_mc_tpm_swport_pm_3.OutMulticasts	+= tpm_swport_pm_3->OutMulticasts;
+        g_mc_tpm_swport_pm_3.OutBroadcasts	+= tpm_swport_pm_3->OutBroadcasts;
+        g_mc_tpm_swport_pm_3.Single		+= tpm_swport_pm_3->Single;
+        g_mc_tpm_swport_pm_3.OutPause		+= tpm_swport_pm_3->OutPause;
+        g_mc_tpm_swport_pm_3.InPause		+= tpm_swport_pm_3->InPause;
+        g_mc_tpm_swport_pm_3.Multiple		+= tpm_swport_pm_3->Multiple;
+        g_mc_tpm_swport_pm_3.Undersize		+= tpm_swport_pm_3->Undersize;
+        g_mc_tpm_swport_pm_3.Fragments		+= tpm_swport_pm_3->Fragments;
+        g_mc_tpm_swport_pm_3.Oversize		+= tpm_swport_pm_3->Oversize;
+        g_mc_tpm_swport_pm_3.Jabber		+= tpm_swport_pm_3->Jabber;
+        g_mc_tpm_swport_pm_3.InMACRcvErr	+= tpm_swport_pm_3->InMACRcvErr;
+        g_mc_tpm_swport_pm_3.InFCSErr		+= tpm_swport_pm_3->InFCSErr;
+        g_mc_tpm_swport_pm_3.Collisions		+= tpm_swport_pm_3->Collisions;
+        g_mc_tpm_swport_pm_3.Late		+= tpm_swport_pm_3->Late;
+
+	memcpy(tpm_swport_pm_3, &g_mc_tpm_swport_pm_3, sizeof(g_mc_tpm_swport_pm_3));
     }
 
     if (trace_sw_dbg_flag)

@@ -801,11 +801,13 @@ void __init setup_arch(char **cmdline_p)
 #endif
 	parse_cmdline(cmdline_p, boot_command_line);
 	paging_init(mdesc);
+#if 0
 #ifdef CONFIG_DEBUG_LL
 	{
 		extern int ll_debug;
 		ll_debug=1;
 	}
+#endif
 #endif
 	request_standard_resources(&meminfo, mdesc);
 

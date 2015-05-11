@@ -318,7 +318,10 @@ static int __init mark_bootmem(unsigned long start, unsigned long end,
 			return 0;
 		pos = bdata->node_low_pfn;
 	}
-	BUG();
+	if (reserve && (flags & BOOTMEM_EXCLUSIVE))
+		return -ENOENT;	 /* not a bug as long as you use EXCLUSIVE */
+	else
+		BUG();
 }
 
 /**

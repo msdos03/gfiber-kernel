@@ -92,6 +92,8 @@ extern unsigned int irq_int_type[];
 #include <mach/uncompress.h> 
 static char arr[256];
 
+extern void mv_kw2_cpu_idle_enter(void);
+
 #ifdef MV_INCLUDE_EARLY_PRINTK
 extern void putstr(const char *ptr);
 void mv_early_printk(char *fmt,...)
@@ -642,6 +644,8 @@ static void __init mv_init(void)
 	boardId = mvBoardIdGet();
 	if (boardId == DB_88F6535_BP_ID || boardId == RD_88F6560_GW_ID)
 		platform_device_register_simple("kw_cpuidle", 0, NULL, 0);
+
+	pm_power_off = mv_kw2_cpu_idle_enter;
 }
 
 MACHINE_START(FEROCEON_KW2 ,"Feroceon-KW2")

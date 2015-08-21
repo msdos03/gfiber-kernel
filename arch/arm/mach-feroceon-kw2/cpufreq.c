@@ -214,8 +214,10 @@ static int __init kw_cpufreq_init(void)
 	struct proc_dir_entry *cpu_freq_proc;
 #endif /* CONFIG_MV_PMU_PROC */
 
+	/*
 	if (MV_6601_DEV_ID == mvCtrlModelGet())
 		return 0;
+	*/
 
 	printk(KERN_INFO "cpufreq: Init kirkwood cpufreq driver\n");
 

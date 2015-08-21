@@ -264,8 +264,10 @@ struct platform_driver kw_cpuidle_driver = {
 
 static int __init kw_cpuidle_drv_init(void)
 {
+	/*
 	if (MV_6601_DEV_ID == mvCtrlModelGet())
 		return 0;
+	*/
 
 	device_registered = 0;
 	return platform_driver_register(&kw_cpuidle_driver);

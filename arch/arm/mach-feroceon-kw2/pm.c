@@ -60,6 +60,14 @@ void mv_kw2_cpu_idle_enter(void)
 	return;
 }
 
+void mv_kw2_cpu_idle_enter_wfi(void)
+{
+	/* Disable all interrupts . */
+	MV_REG_WRITE(MV_IRQ_MASK_LOW_REG, 0x0);
+	MV_REG_WRITE(MV_IRQ_MASK_HIGH_REG, 0x0);
+	MV_REG_WRITE(MV_IRQ_MASK_ERROR_REG, 0x0);
+	cpu_do_idle();
+}
 
 static void save_kw2_cpu_win_state(void)
 {
@@ -186,8 +194,10 @@ static int mv_pm_enter(suspend_state_t state)
 
 int __init mv_pm_init(void)
 {
+	/*
 	if (MV_6601_DEV_ID == mvCtrlModelGet())
 		return 0;
+	*/
 
 	printk(KERN_INFO "Marvell Kirkwood2 Power Management Initializing\n");
 

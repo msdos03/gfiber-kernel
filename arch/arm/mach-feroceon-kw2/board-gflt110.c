@@ -1,4 +1,5 @@
 #include <boardEnv/mvBoardEnvLib.h>
+#include <fiberjack.h>
 #include <gpp/mvGpp.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -10,13 +11,63 @@
 #include <linux/platform_device.h>
 #include <linux/sysfs.h>
 
-#define BOARD_NAME		"gflt110"
+#define GPIO_PON_PWR_EN		37
 
 struct gflt_led_data {
 	unsigned gpio;
 	unsigned active_low;
 	struct led_classdev cdev;
 };
+
+struct board_gpio {
+	unsigned	gpio;
+	const char	*label;
+};
+
+static struct board_gpio board_gpios[] = {
+	{
+		.gpio = GPIO_PON_PWR_EN,
+		.label = "power-enable",
+	},
+};
+
+static int board_gpio_export(struct board_gpio *gpio, struct device *dev)
+{
+	int rc;
+
+	rc = gpio_request(gpio->gpio, gpio->label);
+	if (rc) {
+		pr_err("%s: error %d requesting gpio %u (%s)\n",
+			get_model_name(), rc, gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	/* this is needed to set gpiolib's out flag for the gpio */
+	rc = gpio_direction_output(gpio->gpio, gpio_get_value(gpio->gpio));
+	if (rc) {
+		pr_err("%s: error %d setting gpio %u (%s) direction\n",
+			get_model_name(), rc, gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	rc = gpio_export(gpio->gpio, false);
+	if (rc) {
+		pr_err("%s: error %d exporting gpio %u (%s)\n",
+			get_model_name(), rc, gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	rc = gpio_export_link(dev, gpio->label, gpio->gpio);
+	if (rc) {
+		pr_err("%s: error %d linking gpio %u (%s)\n",
+			get_model_name(), rc, gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	rc = 0;
+exit:
+	return rc;
+}
 
 static ssize_t board_hw_ver_show(struct device *dev,
 				 struct device_attribute *attr,
@@ -110,33 +161,47 @@ err_reg:
 
 int __init board_init(void)
 {
+	int i;
 	int rc;
 	struct platform_device *pdev;
 
+	printk("Detected board type: %s\n", get_model_name());
+
 	/* /sys/devices/platform/<board_name> */
-	pdev = platform_device_register_simple(BOARD_NAME, -1, NULL, 0);
+	pdev = platform_device_register_simple(get_model_name(), -1, NULL, 0);
 	if (IS_ERR(pdev)) {
 		rc = PTR_ERR(pdev);
-		pr_err(BOARD_NAME ": error %d registering device\n", rc);
+		pr_err("%s: error %d registering device\n",
+			get_model_name(), rc);
 		return rc;
 	}
 
 	/* /sys/devices/platform/board -> /sys/devices/platform/<board_name> */
 	rc = sysfs_create_link(&pdev->dev.parent->kobj, &pdev->dev.kobj,
-			       "board");
-	if (rc)
-		pr_err(BOARD_NAME ": error %d creating link 'board'\n", rc);
+				"board");
+	if (rc) {
+		pr_err("%s: error %d creating link 'board'\n",
+			get_model_name(), rc);
+	}
 
 	/* /sys/devices/platform/board/hw_ver */
 	rc = device_create_file(&pdev->dev, &dev_attr_hw_ver);
-	if (rc)
-		pr_err(BOARD_NAME ": error %d creating attribute 'hw_ver'\n",
-			rc);
+	if (rc) {
+		pr_err("%s: error %d creating attribute 'hw_ver'\n",
+			get_model_name(), rc);
+	}
+
+	if (is_gflt300() == 1) {
+		/* /sys/devices/platform/board/<gpio_name> */
+		for (i = 0; i < ARRAY_SIZE(board_gpios); i++)
+			board_gpio_export(&board_gpios[i], &pdev->dev);
+	}
 
 	rc = register_gfltleds(pdev, board_gpio_leds, ARRAY_SIZE(board_gpio_leds));
-	if (rc)
-		pr_err(BOARD_NAME ": error %d registering GFLT LED device\n",
-			rc);
+	if (rc) {
+		pr_err("%s: error %d registering GFLT LED device\n",
+			get_model_name(), rc);
+	}
 
 	return 0;
 }

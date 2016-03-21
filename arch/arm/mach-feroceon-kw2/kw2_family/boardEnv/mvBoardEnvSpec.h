@@ -538,13 +538,20 @@ MPP#	NAME			IN/OUT
 #define GFLT200_EVT2_GPP_POL_MID	0x0
 
 /***************************************************************************
-** GFLT110
+** GFLT110 & GFLT300
 ****************************************************************************/
-#define GFLT110_MPP0_7		0x22222220
-#define GFLT110_MPP8_15		0x00000002
+#define GFLT110_MPP0_7			0x22222220
+#define GFLT110_MPP8_15			0x00000002
 #define GFLT110_MPP16_23		0x00400000
 #define GFLT110_MPP24_31		0x00200550
 #define GFLT110_MPP32_37		0x00000000
+
+/* GFLT300 */
+#define GFLT300_MPP0_7			0x22222220
+#define GFLT300_MPP8_15			0x00000002
+#define GFLT300_MPP16_23		0x00000000
+#define GFLT300_MPP24_31		0x40200504
+#define GFLT300_MPP32_37		0x00000004
 
 /* GPPs
  1 SPI0_MOSI (out)
@@ -566,16 +573,20 @@ MPP#	NAME			IN/OUT
 37 TX_PD
 */
 
-#define GFLT110_GPP_OUT_ENA_LOW	(BIT0 | BIT14 | BIT16 | BIT17 | BIT18 | BIT19 | BIT22 | BIT23 | BIT24 | BIT27| BIT30 | BIT31)
-#define GFLT110_GPP_OUT_ENA_MID	(BIT0 | BIT3 | BIT4)
+#define GFLT110_GPP_OUT_ENA_LOW		(BIT0 | BIT14 | BIT16 | BIT17 | BIT18 | BIT19 | BIT22 | BIT23 | BIT24 | BIT27| BIT30 | BIT31)
+
+#define GFLT110_GPP_OUT_ENA_MID		(BIT0 | BIT3 | BIT4)
 
 // BIT12 turns the LED blue.
 // BIT13 turns the LED red.
-#define GFLT110_GPP_OUT_VAL_LOW	BIT13
-#define GFLT110_GPP_OUT_VAL_MID	0x0
+#define GFLT110_GPP_OUT_VAL_LOW		BIT13
+#define GFLT110_GPP_OUT_VAL_MID		0x0
 
 #define GFLT110_GPP_POL_LOW		(BIT23)
 #define GFLT110_GPP_POL_MID		0x0
+
+/* GFLT300 */
+#define GFLT300_GPP_OUT_ENA_LOW	(BIT0 | BIT14 | BIT16 | BIT17 | BIT19 | BIT22 | BIT23 | BIT24 | BIT27| BIT30 | BIT31)
 
 /***************************************************************************
 ** RD-88F6601MC2L

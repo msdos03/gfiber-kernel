@@ -61,6 +61,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 *******************************************************************************/
+#include "fiberjack.h"
 #include "mvCommon.h"
 #include "mvBoardEnvLib.h"
 #include "mvBoardEnvSpec.h"
@@ -1501,6 +1502,18 @@ MV_BOARD_GPP_INFO gflt110InfoBoardGppInfo[] = {
 	{BOARD_GPP_PON_XVR_TX_IND, 24},
 };
 
+/* TODO(cgibson): For GFLT200, these are set to:
+     {BOARD_GPP_PON_XVR_TX, 21, 1},
+     {BOARD_GPP_PON_XVR_TX_POWER, 37, 0},
+   Which is correct?
+*/
+MV_BOARD_GPP_INFO gflt300InfoBoardGppInfo[] = {
+	/* {{MV_BOARD_GPP_CLASS devClass, MV_U8 gppPinNum}} */
+	{BOARD_GPP_PON_XVR_TX, 17},
+	{BOARD_GPP_PON_XVR_TX_POWER, 11},
+	{BOARD_GPP_PON_XVR_TX_IND, 24},
+};
+
 MV_DEV_CS_INFO gflt110InfoBoardDeCsInfo[] = {
 	/*{deviceCS, params, devType, devWidth} */
 #ifdef MV_SPI
@@ -1522,25 +1535,44 @@ MV_BOARD_MPP_INFO gflt110InfoBoardMppConfigValue[] = {
 	 }
 };
 
-/*
-MV_BOARD_SPEC_INIT gflt110BoardSpecInit[] = {
-	{
-		.reg = PMU_POWER_IF_POLARITY_REG,
-		.mask = (BIT1),
-		.val = 0
-	},
-	{
-		.reg = TBL_TERM,
-		.val = TBL_TERM
-	}
+MV_BOARD_MPP_INFO gflt300InfoBoardMppConfigValue[] = {
+	{{
+	  GFLT300_MPP0_7,
+	  GFLT300_MPP8_15,
+	  GFLT300_MPP16_23,
+	  GFLT300_MPP24_31,
+	  GFLT300_MPP32_37
+	  }
+	 }
 };
-*/
+
+static MV_VOID gfltBoardInit(MV_BOARD_INFO *pBoardInfo)
+{
+	if (is_gflt300() == 1) {
+		pBoardInfo->numBoardGppInfo = MV_ARRAY_SIZE(
+				gflt300InfoBoardGppInfo);
+		pBoardInfo->pBoardGppInfo = gflt300InfoBoardGppInfo;
+		pBoardInfo->numBoardMppConfigValue = MV_ARRAY_SIZE(
+				gflt300InfoBoardMppConfigValue);
+		pBoardInfo->pBoardMppConfigValue =
+				gflt300InfoBoardMppConfigValue;
+		pBoardInfo->gppOutEnValLow = GFLT300_GPP_OUT_ENA_LOW;
+	} else {
+		pBoardInfo->numBoardGppInfo = MV_ARRAY_SIZE(
+				gflt110InfoBoardGppInfo);
+		pBoardInfo->pBoardGppInfo = gflt110InfoBoardGppInfo;
+		pBoardInfo->numBoardMppConfigValue = MV_ARRAY_SIZE(
+				gflt110InfoBoardMppConfigValue);
+		pBoardInfo->pBoardMppConfigValue =
+				gflt110InfoBoardMppConfigValue;
+		pBoardInfo->gppOutEnValLow = GFLT110_GPP_OUT_ENA_LOW;
+	}
+}
+
 MV_BOARD_INFO gflt110Info = {
 	.boardName = "GFLT110",
-	.numBoardMppTypeValue = MV_ARRAY_SIZE(gflt110InfoBoardMppTypeInfo),
+	.pBoardInit = gfltBoardInit,
 	.pBoardMppTypeValue = gflt110InfoBoardMppTypeInfo,
-	.numBoardMppConfigValue = MV_ARRAY_SIZE(gflt110InfoBoardMppConfigValue),
-	.pBoardMppConfigValue = gflt110InfoBoardMppConfigValue,
 	.intsGppMaskLow = 0,
 	.intsGppMaskMid = 0,
 	.intsGppMaskHigh = 0,
@@ -1550,14 +1582,11 @@ MV_BOARD_INFO gflt110Info = {
 	.pBoardTwsiDev = gflt110InfoBoardTwsiDev,
 	.numBoardMacInfo = MV_ARRAY_SIZE(gflt110InfoBoardMacInfo),
 	.pBoardMacInfo = gflt110InfoBoardMacInfo,
-	.numBoardGppInfo = MV_ARRAY_SIZE(gflt110InfoBoardGppInfo),
-	.pBoardGppInfo = gflt110InfoBoardGppInfo,
 	.activeLedsNumber = 0,
 	.pLedGppPin = NULL,
 	.ledsPolarity = 0,
 
 	/* GPP values */
-	.gppOutEnValLow = GFLT110_GPP_OUT_ENA_LOW,
 	.gppOutEnValMid = GFLT110_GPP_OUT_ENA_MID,
 	.gppOutEnValHigh = 0,
 	.gppOutValLow = GFLT110_GPP_OUT_VAL_LOW,

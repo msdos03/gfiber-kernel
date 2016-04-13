@@ -153,9 +153,16 @@ static int __init parse_tag_mv_uboot(const struct tag *tag)
 	mvUbootVer = tag->u.mv_uboot.uboot_version;
 	mvIsUsbHost = tag->u.mv_uboot.isUsbHost;
 
-	printk("Using UBoot passing parameters structure\n");
+	printk("Using UBoot passing parameters structure: UbootVer:%x\n", mvUbootVer);
 
 	gBoardId =  (mvUbootVer & 0xff);
+#ifdef CONFIG_MACH_GFLT110
+	if ((gBoardId != GFLT110_ID) && (gBoardId != GFLT300_ID)) {
+		printk("unknown boardID from uboot:%x  defaulting to GFLT110\n", gBoardId);
+		gBoardId = GFLT110_ID;
+	}
+#endif
+	printk("BoardId:%x\n", mvBoardIdGet());
 #ifdef CONFIG_MV_INCLUDE_GIG_ETH
 	for (i = 0; i < CONFIG_MV_ETH_PORTS_NUM; i++) {
 #if defined (CONFIG_OVERRIDE_ETH_CMDLINE)

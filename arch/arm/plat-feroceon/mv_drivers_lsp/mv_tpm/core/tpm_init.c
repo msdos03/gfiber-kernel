@@ -687,7 +687,7 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 		if (DB_88F6601_BP_ID == mvBoardIdGet())
 			profile[0] = ESC_OPT_SGMII | ESC_OPT_GEPHY_MAC0 | ESC_OPT_LP_SERDES_FE_GE_PHY;
 		if ((RD_88F6601_MC_ID == mvBoardIdGet())
-			|| (GFLT200_ID == mvBoardIdGet()) || (GFLT110_ID == mvBoardIdGet()))
+			|| (GFLT300_ID == mvBoardIdGet()) || (GFLT200_ID == mvBoardIdGet()) || (GFLT110_ID == mvBoardIdGet()))
 			profile[0] = ESC_OPT_GEPHY_MAC0;
 		break;
 	case TPM_PON_WAN_G0_G1_DUAL_LAN:

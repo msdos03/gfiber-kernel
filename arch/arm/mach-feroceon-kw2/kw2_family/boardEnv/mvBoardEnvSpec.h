@@ -115,7 +115,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define GFLT200_ID			DB_CUSTOMER_ID
 #define GFLT110_ID			(BOARD_ID_BASE+0x8)
 #define RD_88F6601_MC2L_ID		(BOARD_ID_BASE+0x9)
-#define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 3)
+#define GFLT300_ID			(BOARD_ID_BASE+0xA)
+#define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 4)
 // These are Marvells defines, we should switch to match these in
 // uboot to make future merges easier.
 //#define DB_CUSTOMER_ID			(BOARD_ID_BASE+0x8)
@@ -538,7 +539,7 @@ MPP#	NAME			IN/OUT
 #define GFLT200_EVT2_GPP_POL_MID	0x0
 
 /***************************************************************************
-** GFLT110 & GFLT300
+** GFLT110
 ****************************************************************************/
 #define GFLT110_MPP0_7			0x22222220
 #define GFLT110_MPP8_15			0x00000002
@@ -546,12 +547,6 @@ MPP#	NAME			IN/OUT
 #define GFLT110_MPP24_31		0x00200550
 #define GFLT110_MPP32_37		0x00000000
 
-/* GFLT300 */
-#define GFLT300_MPP0_7			0x22222220
-#define GFLT300_MPP8_15			0x00000002
-#define GFLT300_MPP16_23		0x00000000
-#define GFLT300_MPP24_31		0x40200504
-#define GFLT300_MPP32_37		0x00000004
 
 /* GPPs
  1 SPI0_MOSI (out)
@@ -585,8 +580,31 @@ MPP#	NAME			IN/OUT
 #define GFLT110_GPP_POL_LOW		(BIT23)
 #define GFLT110_GPP_POL_MID		0x0
 
-/* GFLT300 */
-#define GFLT300_GPP_OUT_ENA_LOW	(BIT0 | BIT14 | BIT16 | BIT17 | BIT19 | BIT22 | BIT23 | BIT24 | BIT27| BIT30 | BIT31)
+/***************************************************************************
+** GFLT300
+****************************************************************************/
+/*spreadheet on GPIO settings:
+    https://goto.google.com/gflt300-gpio-config
+*/
+
+#define GFLT300_MPP0_7          0x22222220
+#define GFLT300_MPP8_15         0x05000002
+#define GFLT300_MPP16_23        0x00000000
+#define GFLT300_MPP24_31        0x40004544
+#define GFLT300_MPP32_37        0x00000004
+
+
+// default all ones-inputs, invert for outputs
+#define GFLT300_GPP_OUT_ENA_LOW	(~(BIT9 | BIT10 | BIT21))
+#define GFLT300_GPP_OUT_ENA_MID	(~(BIT4))
+
+// BIT09 turns the LED blue.
+// BIT10 turns the LED red.
+#define GFLT300_GPP_OUT_VAL_LOW	(BIT9)
+#define GFLT300_GPP_OUT_VAL_MID	(BIT4)
+
+#define GFLT300_GPP_POL_LOW	0x0
+#define GFLT300_GPP_POL_MID	0x0
 
 /***************************************************************************
 ** RD-88F6601MC2L

@@ -9,8 +9,8 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/sysfs.h>
+#include <linux/ctype.h>
 
-#define BOARD_NAME		"gflt110"
 
 struct gflt_led_data {
 	unsigned gpio;
@@ -29,7 +29,7 @@ static DEVICE_ATTR(hw_ver, S_IRUGO, board_hw_ver_show, NULL);
 static void gflt_led_brightness_set(struct led_classdev *led_cdev,
 				    enum led_brightness enum_brightness);
 
-static struct gflt_led_data board_gpio_leds[] = {
+static struct gflt_led_data gflt110_board_gpio_leds[] = {
 	{
 		.gpio = 12,
 		.cdev = {
@@ -40,6 +40,27 @@ static struct gflt_led_data board_gpio_leds[] = {
 	},
 	{
 		.gpio = 13,
+		.cdev = {
+			.name = "sys-red",
+			.brightness_set = gflt_led_brightness_set,
+			.max_brightness = 100,
+		},
+	},
+};
+
+static struct gflt_led_data gflt300_board_gpio_leds[] = {
+	{
+		.gpio = 9,
+		.active_low = 1,
+		.cdev = {
+			.name = "sys-blue",
+			.brightness_set = gflt_led_brightness_set,
+			.max_brightness = 100,
+		},
+	},
+	{
+		.gpio = 10,
+		.active_low = 1,
 		.cdev = {
 			.name = "sys-red",
 			.brightness_set = gflt_led_brightness_set,
@@ -101,23 +122,48 @@ static int register_gfltleds(struct platform_device *pdev,
 	return 0;
 
 err_reg:
-	for (i-- ; i >= 0; i--)
-	{
+	for (i-- ; i >= 0; i--) {
 		led_classdev_unregister(&gflt_leds[i].cdev);
 	}
 	return ret;
 }
 
+#define BOARDNAME_LEN 32
+
 int __init board_init(void)
 {
-	int rc;
 	struct platform_device *pdev;
+	MV_U32 boardID;
+	MV_BOARD_INFO *pBoardInfo;
+	char boardName[BOARDNAME_LEN];
+	int rc, i;
+	char c;
+	struct gflt_led_data *led_data;
+	int led_data_max;
 
+
+	boardID = mvBoardIdGet();
+
+	if ((boardID != GFLT300_ID) && (boardID != GFLT110_ID)) {
+		printk("Unsupported board id:%d\n", boardID);
+		return -1;
+	}
+
+	pBoardInfo = mvBoardInfoGet();
+	for(i = 0; i < (BOARDNAME_LEN -1); i++) {
+		c = pBoardInfo->boardName[i];
+		if (!c)
+			break;
+		boardName[i] = tolower(c);
+	}
+	boardName[i] = 0;
+
+	printk("Detected board id:%x name:%s\n", boardID, boardName);
 	/* /sys/devices/platform/<board_name> */
-	pdev = platform_device_register_simple(BOARD_NAME, -1, NULL, 0);
+	pdev = platform_device_register_simple(boardName, -1, NULL, 0);
 	if (IS_ERR(pdev)) {
 		rc = PTR_ERR(pdev);
-		pr_err(BOARD_NAME ": error %d registering device\n", rc);
+		pr_err("%s: error %d registering device\n", boardName, rc);
 		return rc;
 	}
 
@@ -125,18 +171,22 @@ int __init board_init(void)
 	rc = sysfs_create_link(&pdev->dev.parent->kobj, &pdev->dev.kobj,
 			       "board");
 	if (rc)
-		pr_err(BOARD_NAME ": error %d creating link 'board'\n", rc);
+		pr_err("%s: error %d creating link 'board'\n", boardName, rc);
 
 	/* /sys/devices/platform/board/hw_ver */
 	rc = device_create_file(&pdev->dev, &dev_attr_hw_ver);
 	if (rc)
-		pr_err(BOARD_NAME ": error %d creating attribute 'hw_ver'\n",
-			rc);
+		pr_err("%s: error %d creating attribute 'hw_ver'\n", boardName, rc);
 
-	rc = register_gfltleds(pdev, board_gpio_leds, ARRAY_SIZE(board_gpio_leds));
+	led_data = gflt110_board_gpio_leds;
+	led_data_max = ARRAY_SIZE(gflt110_board_gpio_leds);
+	if (boardID == GFLT300_ID) {
+		led_data = gflt300_board_gpio_leds;
+		led_data_max = ARRAY_SIZE(gflt300_board_gpio_leds);
+	}
+	rc = register_gfltleds(pdev, led_data, led_data_max);
 	if (rc)
-		pr_err(BOARD_NAME ": error %d registering GFLT LED device\n",
-			rc);
+		pr_err("%s: error %d registering GFLT LED device\n", boardName, rc);
 
 	return 0;
 }

@@ -594,12 +594,12 @@ MPP#	NAME			IN/OUT
 
 // default all ones-inputs, invert for outputs
 #define GFLT300_GPP_OUT_ENA_LOW	(~(BIT9 | BIT10 | BIT21))
-#define GFLT300_GPP_OUT_ENA_MID	(~(BIT4))
+#define GFLT300_GPP_OUT_ENA_MID	(~(BIT5))
 
 // BIT09 turns the LED blue.
 // BIT10 turns the LED red.
-#define GFLT300_GPP_OUT_VAL_LOW	(BIT9)
-#define GFLT300_GPP_OUT_VAL_MID	(BIT4)
+#define GFLT300_GPP_OUT_VAL_LOW	(BIT9 | BIT21)
+#define GFLT300_GPP_OUT_VAL_MID	(0)
 
 #define GFLT300_GPP_POL_LOW	0x0
 #define GFLT300_GPP_POL_MID	0x0

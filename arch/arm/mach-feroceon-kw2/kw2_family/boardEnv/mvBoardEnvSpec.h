@@ -541,6 +541,9 @@ MPP#	NAME			IN/OUT
 /***************************************************************************
 ** GFLT110
 ****************************************************************************/
+/*spreadheet on GPIO settings:
+    https://goto.google.com/gflt110-gpio-config
+*/
 #define GFLT110_MPP0_7		0x22222220
 #define GFLT110_MPP8_15		0x00000002
 #define GFLT110_MPP16_23		0x00400000
@@ -556,6 +559,7 @@ MPP#	NAME			IN/OUT
  6 I2C0_SCK (inout)
  7 UA0_TXD (out)
  8 UA0_RXD (in)
+15 BOARD_VER[1] on GFLT300 (in)
 20 LED_PON
 21 PON_BEN (out)
 24 XVR_Tx_IND
@@ -567,15 +571,17 @@ MPP#	NAME			IN/OUT
 37 TX_PD
 */
 
-#define GFLT110_GPP_OUT_ENA_LOW	(BIT0 | BIT14 | BIT16 | BIT17 | BIT18 | BIT19 | BIT22 | BIT23 | BIT24 | BIT27| BIT30 | BIT31)
-#define GFLT110_GPP_OUT_ENA_MID	(BIT0 | BIT3 | BIT4)
+// default all ones-inputs, invert for outputs
+#define GFLT110_GPP_OUT_ENA_LOW	(~(BIT12 | BIT13 | BIT20))
+#define GFLT110_GPP_OUT_ENA_MID	(~(BIT5))
+
 
 // BIT12 turns the LED blue.
 // BIT13 turns the LED red.
 #define GFLT110_GPP_OUT_VAL_LOW	BIT13
 #define GFLT110_GPP_OUT_VAL_MID	0x0
 
-#define GFLT110_GPP_POL_LOW		(BIT23)
+#define GFLT110_GPP_POL_LOW		0x0
 #define GFLT110_GPP_POL_MID		0x0
 
 /***************************************************************************

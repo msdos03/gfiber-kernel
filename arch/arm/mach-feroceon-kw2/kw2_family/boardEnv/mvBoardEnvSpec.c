@@ -1615,9 +1615,8 @@ MV_BOARD_MPP_TYPE_INFO gflt300InfoBoardMppTypeInfo[] = {
 
 MV_BOARD_GPP_INFO gflt300InfoBoardGppInfo[] = {
 	/* {{MV_BOARD_GPP_CLASS devClass, MV_U8 gppPinNum}} */
-
-	{BOARD_GPP_SYS_LED,  9 , 1},
-	{BOARD_GPP_SYS_LED, 10 , 1},
+	{BOARD_GPP_PON_XVR_TX, 21, 1},
+	{BOARD_GPP_PON_XVR_TX_POWER, 37, 0},
 };
 
 

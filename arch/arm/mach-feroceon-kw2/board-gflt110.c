@@ -11,12 +11,63 @@
 #include <linux/sysfs.h>
 #include <linux/ctype.h>
 
+#define GPIO_PON_PWR_EN		37
 
 struct gflt_led_data {
 	unsigned gpio;
 	unsigned active_low;
 	struct led_classdev cdev;
 };
+
+struct board_gpio {
+	unsigned	gpio;
+	const char	*label;
+};
+
+static struct board_gpio board_gpios[] = {
+	{
+		.gpio = GPIO_PON_PWR_EN,
+		.label = "power-enable",
+	},
+};
+
+static int board_gpio_export(struct board_gpio *gpio, struct device *dev, char *boardName)
+{
+	int rc;
+
+	rc = gpio_request(gpio->gpio, gpio->label);
+	if (rc) {
+		pr_err("%s: error %d requesting gpio %u (%s)\n", boardName, rc,
+			gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	/* this is needed to set gpiolib's out flag for the gpio */
+	rc = gpio_direction_output(gpio->gpio, gpio_get_value(gpio->gpio));
+	if (rc) {
+		pr_err("%s: error %d setting gpio %u (%s) direction\n",
+			boardName, rc, gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	rc = gpio_export(gpio->gpio, false);
+	if (rc) {
+		pr_err("%s: error %d exporting gpio %u (%s)\n", boardName, rc,
+			gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	rc = gpio_export_link(dev, gpio->label, gpio->gpio);
+	if (rc) {
+		pr_err("%s: error %d linking gpio %u (%s)\n", boardName, rc,
+			gpio->gpio, gpio->label);
+		goto exit;
+	}
+
+	rc = 0;
+exit:
+	return rc;
+}
 
 static ssize_t board_hw_ver_show(struct device *dev,
 				 struct device_attribute *attr,
@@ -187,6 +238,11 @@ int __init board_init(void)
 	rc = register_gfltleds(pdev, led_data, led_data_max);
 	if (rc)
 		pr_err("%s: error %d registering GFLT LED device\n", boardName, rc);
+
+	/* /sys/devices/platform/board/<gpio_name> */
+	for (i = 0; i < ARRAY_SIZE(board_gpios); i++)
+		board_gpio_export(&board_gpios[i], &pdev->dev, boardName);
+
 
 	return 0;
 }

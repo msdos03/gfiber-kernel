@@ -513,8 +513,13 @@ static struct platform_device mv_wdt_device = {
 /* init the watchdog device */
 static void __init mv_wdt_init(void)
 {
+       MV_U32 val;
+
        mv_wdt_data.tclk = mvTclk;
        platform_device_register(&mv_wdt_device);
+       val = mvCntmrRead(WATCHDOG);
+       printk("Orion wdt: %ds remaining\n", val/mvTclk);
+       mvCntmrWrite(WATCHDOG, 0xffffffff);
 }
 
 

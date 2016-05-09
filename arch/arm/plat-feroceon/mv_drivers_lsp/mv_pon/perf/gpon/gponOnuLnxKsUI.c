@@ -143,6 +143,10 @@ int onuGponUiInfoShow(char* buf)
   MV_U32  intDelay,eqdDb,eqdAsic,fDelay;
   MV_U32  snMsg[3], idleMsg[3];
   MV_U8   *mchText[] = {"NO MATCH","MATCH "};
+  MV_U16  ponIdTxOpticalLevel;
+  MV_U8   ponIdTypeAbit;
+  MV_U8   ponIdClassType;
+  MV_U8   ponIdBytes[ONU_GPON_PON_ID_BYTES_LEN];
   int     off = 0;
 
                     onuGponDbSerialNumGet(serialNumber);
@@ -173,6 +177,13 @@ int onuGponUiInfoShow(char* buf)
                     mvOnuGponMacTxDelimiterGet(&asicDelimiter,&dummy);
                     onuGponDbSnMsgGet(snMsg);
                     onuGponDbIdleMsgGet(idleMsg);
+
+  // PON-ID Manufacturer info
+  ponIdTypeAbit = onuGponDbPONIdTypeABitGet();
+  ponIdClassType = onuGponDbPONIdClassTypeGet();
+  onuGponDbPONIdBytesInfoGet(&(ponIdBytes[0]));
+  ponIdTxOpticalLevel = onuGponDbPONIdOpticalLevelGet();
+
 
   off += mvOsSPrintf(buf+off, "\n");
   off += mvOsSPrintf(buf+off, "ONT Full Information:\n");
@@ -209,6 +220,13 @@ int onuGponUiInfoShow(char* buf)
   off += mvOsSPrintf(buf+off, "Serial Number Mask Match Mode: %s\n", mchText [snMaskMatchMode]);
   off += mvOsSPrintf(buf+off, "Debug Mode:                    %s\n", boolText[onuGponPonMngDebugModeGet()]);
   off += mvOsSPrintf(buf+off, "Overhead Manual Mode:          %s\n", boolText[onuGponPonMngOverheadManualModeGet()]);
+
+  off += mvOsSPrintf(buf+off, "ponIdTypeAbit:                 %d\n", ponIdTypeAbit);
+  off += mvOsSPrintf(buf+off, "ponIdClassType:                %s (%d)\n", onuGponDbPONIdClassTypeStrGet(), ponIdClassType);
+  off += mvOsSPrintf(buf+off, "ponIdTxOpticalLevel:           0x%02X\n", ponIdTxOpticalLevel);
+  off += mvOsSPrintf(buf+off, "ponIdBytes:                    [0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x]\n",
+                                                              ponIdBytes[0], ponIdBytes[1], ponIdBytes[2], ponIdBytes[3],
+                                                              ponIdBytes[4], ponIdBytes[5], ponIdBytes[6]);
 
   return(off);
 }

@@ -440,7 +440,7 @@ MV_STATUS onuGponPmSwCountersUpdate(S_RxPloamPm *rxPloamPm, S_TxPloamPm *txPloam
   rxPloamPm->rxMsgTotalPloamCounter = g_OnuGponSwPm.rxMsgTotalPloamCounter;
 
   for (numOfMsgIdIndex = ONU_GPON_DS_MSG_OVERHEAD;
-       numOfMsgIdIndex <= ONU_GPON_DS_MSG_EXT_BURST_LEN;
+       numOfMsgIdIndex <= ONU_GPON_DS_MSG_LAST;
        numOfMsgIdIndex++)
   {
     rxPloamPm->rxMsgIdPloamCounter[numOfMsgIdIndex] = g_OnuGponSwPm.rxMsgIdPloamCounter[numOfMsgIdIndex];

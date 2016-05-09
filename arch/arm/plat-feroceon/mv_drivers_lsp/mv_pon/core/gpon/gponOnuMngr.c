@@ -108,7 +108,8 @@ MV_U8 *dsPloamText[MAC_LAST_DOWNSTREAM_PLOAM + 1] =
   "PST MESSAGE",        
   "BER INTERVAL",
   "KEY SWITCHING TIME", 
-  "EXTENDED BURST LENGTH"
+  "EXTENDED BURST LENGTH",
+  "PON-ID MAINTENANCE"
 };
 
 extern spinlock_t onuPonIrqLock;
@@ -376,7 +377,7 @@ void onuGponPonMngPloamProcess(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
   if ((onuId == ONU_GPON_BROADCAST_ONU_ID) || (onuId == appOnuId))
   {
     /* Handle valid messages */
-    if ((msgId >= ONU_GPON_DS_MSG_OVERHEAD) && (msgId <= ONU_GPON_DS_MSG_EXT_BURST_LEN))
+    if ((msgId >= ONU_GPON_DS_MSG_OVERHEAD) && (msgId <= ONU_GPON_DS_MSG_LAST))
     {
       /* Call the relevant event function */
       ptrFunc = (onuGponGenTbl_p->onuGponStateAndEventTbl[(msgId)][onuState]);

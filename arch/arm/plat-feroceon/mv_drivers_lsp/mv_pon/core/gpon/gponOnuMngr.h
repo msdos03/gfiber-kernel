@@ -169,6 +169,7 @@ void      onuGponPonMngChgPwrLvlMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData);
 void      onuGponPonMngPstMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData);
 void      onuGponPonMngKeySwitchTimeMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData);
 void      onuGponPonMngExtBurstMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData);
+void      onuGponPonMngPonIdMaintenanceMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData);
 
 void      onuGponPonMngTimerT01Hndl(unsigned long data);
 void      onuGponPonMngTimerT02Hndl(unsigned long data);

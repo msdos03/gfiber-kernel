@@ -88,11 +88,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /******************************************************************************/
 
 /* GPON Definitions */
-#define ONU_GPON_SN_LEN          (8)
-#define ONU_GPON_PASS_LEN        (10)
-#define ONU_GPON_PREAMBLE_LEN    (3)
-#define ONU_GPON_DELIMITER_LEN   (3)
-#define ONU_GPON_MSG_LEN         (3)
+#define ONU_GPON_SN_LEN                 (8)
+#define ONU_GPON_PASS_LEN               (10)
+#define ONU_GPON_PREAMBLE_LEN           (3)
+#define ONU_GPON_DELIMITER_LEN          (3)
+#define ONU_GPON_MSG_LEN                (3)
+#define ONU_GPON_MSG_LEN                (3)
+#define ONU_GPON_PON_ID_BYTES_LEN       (7)
+#define ONU_GPON_PON_ID_TYPE_CLASS_MAX  (4)
 
 /* Enums
 ------------------------------------------------------------------------------*/
@@ -200,6 +203,10 @@ typedef struct
   MV_BOOL onuGponGemPortSave[GPON_ONU_MAX_GEM_PORTS];
   MV_U8   onuGponPassword[ONU_GPON_PASS_LEN];       /* ONU password */
   MV_U16  onuGponReiSeqNum;                         /* ONU REI sequence number */
+  MV_U8   onuGponPONIdTypeABit;                     /* PON-ID Type A-bit */
+  MV_U8   onuGponPONIdClassType;                    /* PON-ID Class type */
+  MV_U8   onuGponPONIdBytesInfo[ONU_GPON_PON_ID_BYTES_LEN];               /* PON-ID Bytes info*/
+  MV_U16  onuGponPONIdTxOpticalLevel;               /* PON-ID Type TxOpticalLevel */
 }S_OnuGponOperParamsTbl;
 
 /**************************************/
@@ -372,6 +379,15 @@ MV_STATUS onuGponDbTcontResetSet(MV_U32 tcont_reset);
 MV_U32    onuGponDbTcontResetGet(void);
 MV_VOID   onuGponDbGemRestoreSet(MV_BOOL gem_restore);
 MV_BOOL   onuGponDbGemRestoreGet(MV_VOID);
+MV_U8     onuGponDbPONIdTypeABitGet(void);
+MV_STATUS onuGponDbPONIdTypeABitSet(MV_U8 ponIdTypeABit);
+MV_U8     onuGponDbPONIdClassTypeGet(void);
+MV_U8*    onuGponDbPONIdClassTypeStrGet(void);
+MV_STATUS onuGponDbPONIdClassTypeSet(MV_U8 ponIdClassType);
+void      onuGponDbPONIdBytesInfoGet(MV_U8 *ponIdBytesInfo);
+MV_STATUS onuGponDbPONIdBytesInfoSet(MV_U8 *ponIdBytesInfo);
+MV_U16    onuGponDbPONIdOpticalLevelGet(void);
+MV_STATUS onuGponDbPONIdOpticalLevelSet(MV_U16 ponIdTxOpticalLevel);
 
 /* ONU GPON BW Alloc param table API functions */
 MV_STATUS onuGponDbBwAllocSet(MV_U32 entry, MV_U32 allocId, MV_BOOL valid);

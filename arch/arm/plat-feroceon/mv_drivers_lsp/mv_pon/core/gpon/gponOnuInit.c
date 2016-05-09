@@ -1001,6 +1001,7 @@ void onuGponStateAndEventTblInit(void)
 
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_SN_MASK][state] = (GPONFUNCPTR)onuGponPonMngSerialNumberMaskMsg;
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_EXT_BURST_LEN][state] = (GPONFUNCPTR)onuGponPonMngExtBurstMsg;
+  onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_PON_ID][state] = (GPONFUNCPTR)onuGponPonMngPonIdMaintenanceMsg;
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_ASSIGN_ONU_ID][state] = (GPONFUNCPTR)onuGponPonMngOnuIdMsg;
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_DIS_SN][state]        = (GPONFUNCPTR)onuGponPonMngDisSnMsg;
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_PHYSICAL_EQUIP_ERR][state] = (GPONFUNCPTR)onuGponPonMngPhyEquErrMsg;
@@ -1014,6 +1015,7 @@ void onuGponStateAndEventTblInit(void)
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_DACT_ONU_ID][state]   = (GPONFUNCPTR)onuGponPonMngDactOnuIdMsg;
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_DIS_SN][state]        = (GPONFUNCPTR)onuGponPonMngDisSnMsg;
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_PHYSICAL_EQUIP_ERR][state] = (GPONFUNCPTR)onuGponPonMngPhyEquErrMsg;
+  onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_PON_ID][state] = (GPONFUNCPTR)onuGponPonMngPonIdMaintenanceMsg;
 
   /* ONU GPON OPERATION STATE 05 */
   /* --------------------------- */
@@ -1032,6 +1034,7 @@ void onuGponStateAndEventTblInit(void)
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_REQ_KEY][state]       = (GPONFUNCPTR)onuGponPonMngReqKeyMsg;
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_BER_INTERVAL][state]  = (GPONFUNCPTR)onuGponPonMngBerIntervalMsg;
   onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_KEY_SWITCH_TIME][state] = (GPONFUNCPTR)onuGponPonMngKeySwitchTimeMsg;
+  onuGponGenTbl_p->onuGponStateAndEventTbl[ONU_GPON_EVENT_MSG_PON_ID][state] = (GPONFUNCPTR)onuGponPonMngPonIdMaintenanceMsg;
 
   /* ONU GPON POPUP STATE 06 */
   /* ----------------------- */

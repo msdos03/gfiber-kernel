@@ -178,6 +178,7 @@ t_ponXvrFuncPtr funcGponXvrSDStatus(MV_U32 polarity);
 
 MV_STATUS onuP2PDbXvrBurstEnablePolaritySet(MV_U32 val);
 MV_U32    onuP2PDbXvrBurstEnablePolarityGet(void);
+void      onuPonShutDownCallbackFunc(MV_U32 state);
 
 #endif /* PON_FPGA */
 

@@ -2597,6 +2597,53 @@ void onuGponPonMngExtBurstMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 
 /*******************************************************************************
 **
+**  onuGponPonMngPonIdMaintenanceMsg
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function is called when PON-ID maintenance message is received
+**               (message 21)
+**
+**  PARAMETERS:  MV_U8 onuId
+**               MV_U8 msgId
+**               MV_U8 *msgData
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+void onuGponPonMngPonIdMaintenanceMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
+{
+  MV_U16	 ponIdTxOpticalLevel;
+  MV_U8		 ponIdTypeAbit;
+  MV_U8		 ponIdClassType;
+  MV_U8		 ponIdBytes[ONU_GPON_PON_ID_BYTES_LEN];
+
+  ponIdTypeAbit = (msgData[0] & 0x80)  >> 7;
+  onuGponDbPONIdTypeABitSet(ponIdTypeAbit);
+
+  ponIdClassType = (msgData[0] & 0x70) >> 4;
+  onuGponDbPONIdClassTypeSet(ponIdClassType);
+
+  memcpy(&(ponIdBytes[0]), &(msgData[1]), ONU_GPON_PON_ID_BYTES_LEN);
+  onuGponDbPONIdBytesInfoSet(&(ponIdBytes[0]));
+
+  ponIdTxOpticalLevel = (MV_U16)(msgData[8] << 8) + (MV_U16)(msgData[9]);
+  onuGponDbPONIdOpticalLevelSet(ponIdTxOpticalLevel);
+
+#ifdef MV_GPON_DEBUG_PRINT
+  mvPonPrint(PON_PRINT_DEBUG, PON_SM_MODULE,
+             "DEBUG: (%s:%d) PON-ID message rcv with ponIdTypeAbit: %d ponIdClassType: 0x%02x ponIdTxOpticalLevel: 0x%04x ponIdBytes[0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x]\n",
+			 __FILE_DESC__, __LINE__,
+			 ponIdTypeAbit, ponIdClassType, ponIdTxOpticalLevel,
+			 ponIdBytes[0], ponIdBytes[1], ponIdBytes[2], ponIdBytes[3],
+			 ponIdBytes[4], ponIdBytes[5], ponIdBytes[6]
+			 );
+#endif /* MV_GPON_DEBUG_PRINT */
+}
+
+/*******************************************************************************
+**
 **  onuGponPonMngTimerT01Hndl
 **  ____________________________________________________________________________
 **

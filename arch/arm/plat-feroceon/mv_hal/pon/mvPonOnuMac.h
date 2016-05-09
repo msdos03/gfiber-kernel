@@ -188,7 +188,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define GPON_BURST_THRESHOLD                (0x4E20)            /* 20000 bytes */
 
 #define MAC_LAST_UPSTREAM_PLOAM             (ONU_GPON_US_MSG_ACK)
-#define MAC_LAST_DOWNSTREAM_PLOAM           (ONU_GPON_DS_MSG_EXT_BURST_LEN)
+#define MAC_LAST_DOWNSTREAM_PLOAM           (ONU_GPON_DS_MSG_LAST)
 
 /* SW FIFO parameters */
 #define GPON_SW_FIFO_SIZE                   (1024)              /* Size of SW FIFO pool for PLOAM messages */

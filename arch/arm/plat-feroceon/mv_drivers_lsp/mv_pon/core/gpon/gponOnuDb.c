@@ -3403,3 +3403,217 @@ LINKSTATUSFUNC onuGponDbLinkStatusCallbackGet(void)
   return(onuGponDb_s.onuGponGenTbl_s.onuLinkStatusCallback);
 }
 
+/*******************************************************************************
+**
+**  onuGponDbPONIdTypeABitGet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function returns PON Id type A bit (from PON-ID maintenance)
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     ponIdTypeABit
+**
+*******************************************************************************/
+MV_U8 onuGponDbPONIdTypeABitGet(void)
+{
+  return(onuGponDb_s.onuGponOperParamsTbl_s.onuGponPONIdTypeABit);
+}
+
+/*******************************************************************************
+**
+**  onuGponDbPONIdTypeABitSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets PON Id type A bit (from PON-ID maintenance)
+**               in the database
+**
+**  PARAMETERS:  MV_U8 ponIdTypeABit
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK
+**
+*******************************************************************************/
+MV_STATUS onuGponDbPONIdTypeABitSet(MV_U8 ponIdTypeABit)
+{
+  onuGponDb_s.onuGponOperParamsTbl_s.onuGponPONIdTypeABit = ponIdTypeABit;
+
+  return(MV_OK);
+}
+
+/*******************************************************************************
+**
+**  onuGponDbPONIdClassTypeGet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function returns PONIdClassType (from PON-ID maintenance)
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     ponIdClassType
+**
+*******************************************************************************/
+MV_U8 onuGponDbPONIdClassTypeGet(void)
+{
+  return(onuGponDb_s.onuGponOperParamsTbl_s.onuGponPONIdClassType);
+}
+
+/*******************************************************************************
+**
+**  onuGponDbPONIdClassTypeGet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function returns PONIdClassType (from PON-ID maintenance)
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     ponIdClassType
+**
+*******************************************************************************/
+MV_U8* onuGponDbPONIdClassTypeStrGet(void)
+{
+  MV_U8   *ponIdClassTypeText[] = {"Class A", "Class B","Class B+","Class C","Class C+","reserved"};
+  MV_U8   *ret;
+
+  if (onuGponDb_s.onuGponOperParamsTbl_s.onuGponPONIdClassType > ONU_GPON_PON_ID_TYPE_CLASS_MAX)
+  {
+    ret = ponIdClassTypeText[ONU_GPON_PON_ID_TYPE_CLASS_MAX];
+  }
+  else
+  {
+    ret = ponIdClassTypeText[onuGponDb_s.onuGponOperParamsTbl_s.onuGponPONIdClassType];
+  }
+  return ret;
+}
+
+/*******************************************************************************
+**
+**  onuGponDbPONIdClassTypeSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets PONIdClassType (from PON-ID maintenance)
+**               in the database
+**
+**  PARAMETERS:  MV_U8 ponIdClassType
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK
+**
+*******************************************************************************/
+MV_STATUS onuGponDbPONIdClassTypeSet(MV_U8 ponIdClassType)
+{
+  MV_STATUS ret = MV_OK;
+
+  if (ponIdClassType > ONU_GPON_PON_ID_TYPE_CLASS_MAX)
+  {
+    ret = MV_BAD_PARAM;
+  }
+  else
+  {
+    onuGponDb_s.onuGponOperParamsTbl_s.onuGponPONIdClassType = ponIdClassType;
+  }
+
+  return(ret);
+}
+
+/*******************************************************************************
+**
+**  onuGponDbPONIdBytesInfoGet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function returns PONId bytes info array (from PON-ID maintenance)
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     ponIdBytesInfo
+**
+*******************************************************************************/
+void onuGponDbPONIdBytesInfoGet(MV_U8 *ponIdBytesInfo)
+{
+  memcpy(ponIdBytesInfo, &(onuGponDb_s.onuGponOperParamsTbl_s.onuGponPONIdBytesInfo[0]), ONU_GPON_PON_ID_BYTES_LEN);
+}
+
+/*******************************************************************************
+**
+**  onuGponDbPONIdBytesInfoSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets PONId bytes info array (from PON-ID maintenance)
+**               in the database
+**
+**  PARAMETERS:  MV_U8* ponIdBytesInfo
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK
+**
+*******************************************************************************/
+MV_STATUS onuGponDbPONIdBytesInfoSet(MV_U8 *ponIdBytesInfo)
+{
+  MV_STATUS ret = MV_OK;
+
+  if (ponIdBytesInfo == NULL)
+  {
+    ret = MV_BAD_PARAM;
+  }
+  else
+  {
+    memcpy(&(onuGponDb_s.onuGponOperParamsTbl_s.onuGponPONIdBytesInfo[0]), ponIdBytesInfo, ONU_GPON_PON_ID_BYTES_LEN);
+  }
+
+  return(ret);
+}
+
+/*******************************************************************************
+**
+**  onuGponDbPONIdOpticalLevelGet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function returns PONId Tx Optical Level (from PON-ID maintenance)
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     onuGponPONIdTxOpticalLevel
+**
+*******************************************************************************/
+MV_U16 onuGponDbPONIdOpticalLevelGet(void)
+{
+  return(onuGponDb_s.onuGponOperParamsTbl_s.onuGponPONIdTxOpticalLevel);
+}
+
+/*******************************************************************************
+**
+**  onuGponDbPONIdOpticalLevelSet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function sets PONId Tx Optical Level (from PON-ID maintenance)
+**               in the database
+**
+**  PARAMETERS:  MV_U16 ponIdTxOpticalLevel
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     MV_OK
+**
+*******************************************************************************/
+MV_STATUS onuGponDbPONIdOpticalLevelSet(MV_U16 ponIdTxOpticalLevel)
+{
+  MV_STATUS ret = MV_OK;
+
+  onuGponDb_s.onuGponOperParamsTbl_s.onuGponPONIdTxOpticalLevel = ponIdTxOpticalLevel;
+
+  return(ret);
+}
+

@@ -981,13 +981,13 @@ MV_STATUS onuPonTxPowerControlInit(void)
 }
 
 /*******************************************************************************
-**  **  906
+**
 **  onuPonTxLaserOn
 **  ____________________________________________________________________________
 **
 **  DESCRIPTION: The function turns ON/OFF TX laser using MPP
 **
-**  PARAMETERS:  MV_BOOL on - MV_TRUE - turn TX laser ON, othervise OFF
+**  PARAMETERS:  MV_BOOL on - MV_TRUE - turn TX laser ON, otherwise OFF
 **
 **  OUTPUTS:     None
 **

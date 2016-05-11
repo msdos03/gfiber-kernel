@@ -203,6 +203,7 @@ typedef struct
   MV_BOOL onuGponGemPortSave[GPON_ONU_MAX_GEM_PORTS];
   MV_U8   onuGponPassword[ONU_GPON_PASS_LEN];       /* ONU password */
   MV_U16  onuGponReiSeqNum;                         /* ONU REI sequence number */
+  MV_U32  onuGponPonIdCount;                        /* PON-ID msg count */
   MV_U8   onuGponPONIdTypeABit;                     /* PON-ID Type A-bit */
   MV_U8   onuGponPONIdClassType;                    /* PON-ID Class type */
   MV_U8   onuGponPONIdBytesInfo[ONU_GPON_PON_ID_BYTES_LEN];               /* PON-ID Bytes info*/
@@ -379,6 +380,8 @@ MV_STATUS onuGponDbTcontResetSet(MV_U32 tcont_reset);
 MV_U32    onuGponDbTcontResetGet(void);
 MV_VOID   onuGponDbGemRestoreSet(MV_BOOL gem_restore);
 MV_BOOL   onuGponDbGemRestoreGet(MV_VOID);
+void      onuGponDbPONIdCountInc(void);
+MV_U32    onuGponDbPONIdGetCount(void);
 MV_U8     onuGponDbPONIdTypeABitGet(void);
 MV_STATUS onuGponDbPONIdTypeABitSet(MV_U8 ponIdTypeABit);
 MV_U8     onuGponDbPONIdClassTypeGet(void);

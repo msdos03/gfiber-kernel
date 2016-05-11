@@ -77,7 +77,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* Include Files
 ------------------------------------------------------------------------------*/
 #include "gponOnuHeader.h"
-
+#include "gponOnuGoogle.h"
 #ifndef PON_FPGA
 #include "mvSysPonConfig.h"
 #endif /* PON_FPGA */
@@ -3297,6 +3297,25 @@ void onuGponUiSyncLogPrint(void)
 
 /*******************************************************************************
 **
+**  onuGponLaserChannelShow
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function shows the laser channel from the PON ID message
+**
+**  PARAMETERS:  char* buf
+**
+**  OUTPUTS:     char* buf
+**
+**  RETURNS:     message length
+**
+*******************************************************************************/
+int onuGponLaserChannelShow(char *buf)
+{
+	return onuGponLaserChannelPrint(buf);
+}
+
+/*******************************************************************************
+**
 **  onuGponUiMiscHelpShow
 **  ____________________________________________________________________________
 **
@@ -3409,15 +3428,16 @@ static ssize_t misc_show(struct device *dev,
 
 	if (!strcmp(name, "printMask"))
 		return ponOnuPrintStatus(buf);
-  else if (!strcmp(name, "prbsUserPattern"))
-  	return onuGponUiCfgPrbsUserPattern(buf);
+	else if (!strcmp(name, "prbsUserPattern"))
+		return onuGponUiCfgPrbsUserPattern(buf);
 	else if (!strcmp(name, "helpMisc"))
 		return onuGponUiMiscHelpShow(buf);
 	else if (!strcmp(name, "syncLogEnable"))	/* sync log enable or disable */
 		onuGponUiSyncLogEnableShow();
-    else if (!strcmp(name, "syncLog"))	/* sync log stop */
+	else if (!strcmp(name, "syncLog"))	/* sync log stop */
 		onuGponUiSyncLogPrint();
-
+	else if (!strcmp(name, "laserChannel"))
+		return onuGponLaserChannelShow(buf);
 	return 0;
 }
 
@@ -3515,6 +3535,7 @@ static DEVICE_ATTR(t01IntervalCfg,        S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(t02IntervalCfg,        S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(syncLogEnable,         S_IRUSR | S_IWUSR, misc_show, misc_store);
 static DEVICE_ATTR(syncLog,               S_IRUSR, misc_show, misc_store);
+static DEVICE_ATTR(laserChannel,          S_IRUSR, misc_show, misc_store);
 
 static struct attribute *misc_attrs[] = {
 	&dev_attr_serialNumCfg.attr,
@@ -3541,6 +3562,7 @@ static struct attribute *misc_attrs[] = {
 	&dev_attr_t02IntervalCfg.attr,
 	&dev_attr_syncLogEnable.attr,
 	&dev_attr_syncLog.attr,
+	&dev_attr_laserChannel.attr,
 	NULL
 };
 

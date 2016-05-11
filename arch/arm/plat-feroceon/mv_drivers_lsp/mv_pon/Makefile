@@ -28,6 +28,7 @@ GPON_OBJS += core/gpon/gponOnuAlloc.o \
 	core/gpon/gponOnuMngrStateMachine.o \
         core/gpon/gponOnuPm.o \
 	core/gpon/gponOnuSrvc.o \
+	core/gpon/gponOnuGoogle.o \
 	perf/gpon/gponOnuLnxKsUI.o \
 	perf/gpon/gponOnuLnxKsMI.o \
 	plat/gpon/gponOnuBoard.o \

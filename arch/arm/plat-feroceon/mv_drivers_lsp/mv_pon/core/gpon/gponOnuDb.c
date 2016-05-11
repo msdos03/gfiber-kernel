@@ -3405,6 +3405,44 @@ LINKSTATUSFUNC onuGponDbLinkStatusCallbackGet(void)
 
 /*******************************************************************************
 **
+**  onuGponDbPONIdCountInc
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function increments a PLOAM pon ID msg counter
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+void onuGponDbPONIdCountInc(void)
+{
+  onuGponDb_s.onuGponOperParamsTbl_s.onuGponPonIdCount += 1;
+}
+
+/*******************************************************************************
+**
+**  onuGponDbPONIdGetCount
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function returns PLOAM pon ID msg counter
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:     None
+**
+**  RETURNS:     None
+**
+*******************************************************************************/
+MV_U32 onuGponDbPONIdGetCount(void)
+{
+  return onuGponDb_s.onuGponOperParamsTbl_s.onuGponPonIdCount;
+}
+
+/*******************************************************************************
+**
 **  onuGponDbPONIdTypeABitGet
 **  ____________________________________________________________________________
 **

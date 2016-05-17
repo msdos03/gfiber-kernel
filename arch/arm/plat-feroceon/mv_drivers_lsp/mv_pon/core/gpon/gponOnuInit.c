@@ -1287,6 +1287,12 @@ MV_STATUS onuGponStart(S_GponIoctlInfo *onuInit)
 	return(rcode);
   }
 
+  if (mvBoardIdGet() == GFLT300_ID)
+  {
+    printk("onuGponStart: - power on xvr\n");
+    mvGppValueSet(1, BIT5, BIT5);
+  }
+
   return(MV_OK);
 }
 

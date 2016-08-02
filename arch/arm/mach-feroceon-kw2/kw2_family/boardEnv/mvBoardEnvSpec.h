@@ -541,14 +541,13 @@ MPP#	NAME			IN/OUT
 /***************************************************************************
 ** GFLT110
 ****************************************************************************/
-/*spreadheet on GPIO settings:
-    https://goto.google.com/gflt110-gpio-config
+/* GFLT110 GPIO config: http://go/gflt110-gpio-config
 */
 #define GFLT110_MPP0_7		0x22222220
 #define GFLT110_MPP8_15		0x00000002
-#define GFLT110_MPP16_23		0x00400000
-#define GFLT110_MPP24_31		0x00200550
-#define GFLT110_MPP32_37		0x00000000
+#define GFLT110_MPP16_23	0x00400000
+#define GFLT110_MPP24_31	0x00200550
+#define GFLT110_MPP32_37	0x00000000
 
 /* GPPs
  1 SPI0_MOSI (out)
@@ -575,7 +574,6 @@ MPP#	NAME			IN/OUT
 #define GFLT110_GPP_OUT_ENA_LOW	(~(BIT12 | BIT13 | BIT20))
 #define GFLT110_GPP_OUT_ENA_MID	(~(BIT5))
 
-
 // BIT12 turns the LED blue.
 // BIT13 turns the LED red.
 #define GFLT110_GPP_OUT_VAL_LOW	BIT13
@@ -587,28 +585,63 @@ MPP#	NAME			IN/OUT
 /***************************************************************************
 ** GFLT300
 ****************************************************************************/
-/*spreadheet on GPIO settings:
-    https://goto.google.com/gflt300-gpio-config
+/* GFLT300 GPIO config: http://go/gflt300-gpio-config
 */
 
-#define GFLT300_MPP0_7          0x22222220
-#define GFLT300_MPP8_15         0x05000002
-#define GFLT300_MPP16_23        0x00400000
-#define GFLT300_MPP24_31        0x40204544
-#define GFLT300_MPP32_37        0x00000004
+/* GPPs
+ 1  SPI_MOSI
+ 2  SPI_CLK
+ 3  SPI_CS_L
+ 4  SPI_MISO
+ 5  I2C_SDA
+ 6  I2C_SCLK
+ 7  UART0_TX
+ 8  UART0_RX
+ 9  PON_LED_BLUE_L
+ 10 PON_LED_RED_L
+ 13 BOARD_VER[0]
+ 14 GE_LINK_RED
+ 15 BOARD_VER[1]
+ 16 TX_FAULT
+ 17 SW_RESET
+ 18 BOARD_VER[2]
+ 20 DYING_GASP_INT_R2
+ 21 PON_TX_DIS
+ 24 PTP_TRIG_GEN
+ 25 PTP_EVENT_REQ
+ 26 GE_DATA_LED
+ 27 PTP_CLK_IN
+ 28 SPI_WP_L
+ 29 PON_RX_LOS
+ 30 TX_SD
+ 31 UART1_TX
+ 32 UART1_RX
+ 33 DYING_GASP_INT_R
+ 34 MPP34_88F6601
+ 35 PON_MPP35
+ 36 PON_RX_PMON
+ 37 PON_PWR_EN
+*/
 
+#define GFLT300_MPP0_7		0x22222220
+#define GFLT300_MPP8_15		0x05000002
+#define GFLT300_MPP16_23	0x00420000
+#define GFLT300_MPP24_31	0x44204544
+#define GFLT300_MPP32_37	0x00000024
 
-// default all ones-inputs, invert for outputs
-#define GFLT300_GPP_OUT_ENA_LOW	(~(BIT9 | BIT10 | BIT20))
+/* default all ones-inputs, invert for outputs */
+#define GFLT300_GPP_OUT_ENA_LOW	(~(BIT9 | BIT10))
 #define GFLT300_GPP_OUT_ENA_MID	(~(BIT5))
 
-// BIT09 turns the LED blue.
-// BIT10 turns the LED red.
+/* BIT09 turns the LED blue.
+ * BIT10 turns the LED red. */
 #define GFLT300_GPP_OUT_VAL_LOW	(BIT9)
 #define GFLT300_GPP_OUT_VAL_MID	(0)
 
-#define GFLT300_GPP_POL_LOW	0x0
+/* GFLT300 has the reset button signal inverted */
+#define GFLT300_GPP_POL_LOW	(BIT17)
 #define GFLT300_GPP_POL_MID	0x0
+
 
 /***************************************************************************
 ** RD-88F6601MC2L

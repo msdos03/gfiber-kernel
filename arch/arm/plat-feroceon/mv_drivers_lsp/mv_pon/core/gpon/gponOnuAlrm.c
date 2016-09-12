@@ -127,8 +127,10 @@ void onuGponAlarmTblInit (void)
          ONU_GPON_ALARM_OFF,
          sizeof (S_OnuGponAlarmTbl));
 
-  /* set alarms on as default only for LOS, LOF, and LCDG */
-  onuGponApmTbl_s.onuGponAlarmTbl_s.onuGponAlarmTbl[ONU_GPON_ALARM_LOS]  = ONU_GPON_ALARM_ON;
+  /* Work around a bug where the Marvell code does not clear the LOS alarm
+   * correctly after the board boots. The code will correctly set LOS after boot
+   * if there is a legitimate LOS alarm. */
+  onuGponApmTbl_s.onuGponAlarmTbl_s.onuGponAlarmTbl[ONU_GPON_ALARM_LOS]  = ONU_GPON_ALARM_OFF;
   onuGponApmTbl_s.onuGponAlarmTbl_s.onuGponAlarmTbl[ONU_GPON_ALARM_LOF]  = ONU_GPON_ALARM_ON;
 }
 

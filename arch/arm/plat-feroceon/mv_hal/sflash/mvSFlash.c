@@ -69,6 +69,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "mvSFlashSpec.h"
 #include "mvSysSFlash.h"
 
+#include "cntmr/mvCntmr.h"
+#include <plat/orion_wdt.h>
+#include <boardEnv/mvBoardEnvLib.h>
 
 /*#define MV_DEBUG*/
 #ifdef MV_DEBUG
@@ -604,6 +607,16 @@ MV_STATUS mvSFlashInit(MV_SFLASH_INFO *pFlinfo)
     MV_U32 indx;
     MV_U8 cmd;
     MV_BOOL detectFlag = MV_FALSE;
+    MV_U32 mvTclk;
+    MV_U32 wdt_time_remaining;
+
+    /* Pet the watchdog. */
+    mvTclk = mvBoardTclkGet();
+    wdt_time_remaining = mvCntmrRead(WATCHDOG);
+    printk("Orion wdt: %d seconds remaining\n", wdt_time_remaining/mvTclk);
+    mvCntmrWrite(WATCHDOG, 0xffffffff);
+    wdt_time_remaining = mvCntmrRead(WATCHDOG);
+    printk("Orion wdt: reset to %d seconds\n", wdt_time_remaining/mvTclk);
 
     /* check for NULL pointer */
     if (pFlinfo == NULL) {

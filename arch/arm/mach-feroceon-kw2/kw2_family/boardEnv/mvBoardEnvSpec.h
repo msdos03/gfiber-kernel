@@ -564,19 +564,19 @@ MPP#	NAME			IN/OUT
 24 XVR_Tx_IND
 25 LED_G
 26 LED_Y
-28 NF&SPI_WP
+28 NF&SPI_WP (in)
 29 XVR_SD (in)
 33 TX_Fault/TX_indication
 37 TX_PD
 */
 
 // default all ones-inputs, invert for outputs
-#define GFLT110_GPP_OUT_ENA_LOW	(~(BIT12 | BIT13 | BIT20))
+#define GFLT110_GPP_OUT_ENA_LOW	(~(BIT12 | BIT13 | BIT20 | BIT28))
 #define GFLT110_GPP_OUT_ENA_MID	(~(BIT5))
 
 // BIT12 turns the LED blue.
 // BIT13 turns the LED red.
-#define GFLT110_GPP_OUT_VAL_LOW	BIT13
+#define GFLT110_GPP_OUT_VAL_LOW	(BIT13 | BIT28)
 #define GFLT110_GPP_OUT_VAL_MID	0x0
 
 #define GFLT110_GPP_POL_LOW		0x0

@@ -1444,7 +1444,8 @@ OUT GT_BOOL   *state
 
     if(state == NULL)
     {
-	DBG_INFO(("Input point state equals NULL which is illegal,  return\n"));
+		DBG_INFO(("Input point state equals NULL which is illegal,  return\n"));
+		return GT_BAD_PARAM;
     }
     
     /* translate LPORT to hardware port */
@@ -1657,6 +1658,7 @@ OUT GT_BOOL*   dMode
     if(dMode == NULL)
     {
 		DBG_INFO(("Input point state equals NULL which is illegal,  return\n"));
+		return GT_BAD_PARAM;
     }
     
     /* translate LPORT to hardware port */

@@ -5277,6 +5277,8 @@ tpm_error_code_t tpm_proc_add_l2_prim_acl_rule(uint32_t owner_id,
 		memcpy(&(api_data.l2_prim_key.rule_action), rule_action, sizeof(tpm_rule_action_t));
 		if (l2_key)
 			memcpy(&(api_data.l2_prim_key.l2_key), l2_key, sizeof(tpm_l2_acl_key_t));
+		else
+			return ERR_GENERAL;
 
 		if (pkt_frwd != NULL)
 			memcpy(&(api_data.l2_prim_key.pkt_frwd), pkt_frwd, sizeof(tpm_pkt_frwd_t));
@@ -15718,6 +15720,10 @@ int32_t tpm_proc_cnm_ipv6_tcam_build(tpm_src_port_type_t src_port,
 	if (ipv6_key) {
 		memcpy(&(tcam_data->pkt_key.ipv6_key), ipv6_key, sizeof(tpm_ipv6_acl_key_t));
 	}
+	else
+	{
+		return ERR_GENERAL;
+	}
 
 	/* Get PNC Range information */
 	ret_code = tpm_proc_common_pncl_info_get(TPM_PNC_CNM_MAIN, &lu_id, &start_offset);
@@ -17888,5 +17894,301 @@ tpm_error_code_t tpm_proc_hwf_admin_set(tpm_gmacs_enum_t port, uint8_t txp, uint
 	}
 
 	return TPM_OK;
+}
+
+/*******************************************************************************
+* tpm_proc_add_drop_precedence_rule()
+*
+* DESCRIPTION:	  Function to add L2 drop precedence rule based on P-bit or DEI.
+*
+* INPUTS:
+* All inputs/outputs are same as API call
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_add_drop_precedence_rule(uint32_t owner_id,
+					       uint32_t rule_num,
+					       tpm_vlan_key_t *vlan_key,
+					       uint32_t color)
+{
+
+	tpm_error_code_t ret_code;
+	uint32_t free_entries, l2_lu, pnc_entry;
+	tpm_db_pnc_range_t range_data;
+	tpm_pncl_pnc_full_t pnc_data;
+
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " owner(%d) rule_num(%d)\n", owner_id, rule_num);
+
+	memset(&pnc_data, 0, sizeof(pnc_data));
+	memset(&range_data, 0, sizeof(range_data));
+
+	/* Get Range_Id */
+	ret_code = tpm_db_pnc_rng_get(TPM_PNC_DROP_PRECEDENCE, &range_data);
+	IF_ERROR(ret_code);
+	l2_lu = range_data.pnc_range_conf.base_lu_id;
+	free_entries = range_data.pnc_range_oper.free_entries;
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "free_ent(%d)\n", free_entries);
+
+	if (free_entries <= 0) {
+		TPM_OS_ERROR(TPM_TPM_LOG_MOD, "not enough drop precedence rules! (%d/%d)\n",
+			free_entries, TPM_MAX_NUM_DROP_PRECEDENCE);
+		IF_ERROR(ERR_GENERAL);
+	} else if (TPM_MAX_NUM_DROP_PRECEDENCE < free_entries)
+		TPM_OS_WARN(TPM_TPM_LOG_MOD, "too much drop precedence rules, waste. (%d/%d)\n",
+		free_entries, TPM_MAX_NUM_DROP_PRECEDENCE);
+
+	pnc_entry = range_data.pnc_range_conf.range_start + range_data.pnc_range_conf.api_start;
+
+	/* Basic TCAM/SRAM Config, valid for all following entries */
+	/* L2 LUID */
+	pnc_data.pncl_tcam.lu_id = l2_lu;
+
+	/* Bi-direction */
+	pnc_data.pncl_tcam.port_ids = tpm_proc_all_gmac_bm();
+
+	/* Current Offset */
+	pnc_data.pncl_tcam.start_offset.offset_base = TPM_PNCL_ZERO_OFFSET;
+	pnc_data.pncl_tcam.start_offset.offset_sub.l2_subf = TPM_L2_PARSE_MH;
+
+	/* Set parse type for key */
+	pnc_data.pncl_tcam.l3_parse_bm = 0;
+	pnc_data.pncl_tcam.ipv4_parse_bm = 0;
+	pnc_data.pncl_tcam.ipv6_parse_bm = 0;
+	pnc_data.pncl_tcam.tcp_parse_bm = 0;
+
+	/* Set DO_NOT_REPEAT_TAG AI filter */
+	if (color) {
+		pnc_data.pncl_tcam.add_info_data = 1 << TPM_AI_TAG1_BIT_OFF;
+		pnc_data.pncl_tcam.add_info_mask = TPM_AI_TAG1_MASK;
+	}
+
+	/* Copy L2  key */
+	memcpy(&pnc_data.pncl_tcam.pkt_key.l2_key.vlan1, vlan_key, sizeof(tpm_vlan_key_t));
+	
+	/* Set L2 key value */
+	pnc_data.pncl_tcam.l2_parse_bm = TPM_L2_PARSE_ONE_VLAN_TAG;
+
+	/* Next LUID is still L2 */
+	ret_code = tpm_db_pnc_rng_get(TPM_PNC_L2_MAIN, &range_data);
+	IF_ERROR(ret_code);
+
+	pnc_data.pncl_sram.next_lu_id = range_data.pnc_range_conf.base_lu_id;
+	/* Using off_reg 1 */
+	pnc_data.pncl_sram.next_lu_off_reg = 1;
+	
+	/* No update off_reg 0  */
+	pnc_data.pncl_sram.shift_updt_reg = TPM_PNC_NOSHIFT_UPDATE_REG;
+
+	/* No queue update */
+	pnc_data.pncl_sram.pnc_queue = TPM_PNCL_NO_QUEUE_UPDATE;
+
+	/* ResultInfo&FlowId update */
+	if (color)
+		pnc_data.pncl_sram.sram_updt_bm = TPM_PNCL_SET_COL;
+
+	/* Create Entry in PnC */
+	pnc_entry += rule_num;
+	ret_code = tpm_proc_pnc_create(TPM_PNC_DROP_PRECEDENCE, pnc_entry, &pnc_data);
+	IF_ERROR(ret_code);
+
+	/* Save to DB */
+	ret_code = tpm_db_drop_precedence_rule_set(rule_num);
+	IF_ERROR(ret_code);
+
+	return(TPM_RC_OK);
+}
+
+/*******************************************************************************
+* tpm_proc_clear_drop_precedence_rule()
+*
+* DESCRIPTION:	  Function to clear all L2 drop precedence rule based on P-bit or DEI.
+*
+* INPUTS:
+* None
+*
+* OUTPUTS:
+* None
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_clear_drop_precedence_rule(uint32_t owner_id)
+{
+	int32_t ret_code;
+	uint32_t rule_num;
+	uint32_t pnc_index;
+	tpm_db_pnc_range_conf_t rang_conf;
+	uint32_t index;
+	tpm_db_drop_precedence_rule_entry_t rule_entry;
+
+	memset(&rang_conf, 0, sizeof(rang_conf));
+	
+	TPM_OS_DEBUG(TPM_TPM_LOG_MOD, " Clear TPM drop precedence rules owner_id(%d)\n", owner_id);
+	
+	/* Get Range Conf */
+	ret_code = tpm_db_pnc_rng_conf_get(TPM_PNC_DROP_PRECEDENCE, &rang_conf);
+	IF_ERROR(ret_code);
+	
+	/* Get the rule_num */
+	for (index = 0; index < TPM_MAX_NUM_DROP_PRECEDENCE; index++) {
+
+		ret_code = tpm_db_drop_precedence_rule_get(index, &rule_entry);
+		IF_ERROR(ret_code);
+
+		if (rule_entry.valid == TPM_FALSE)
+			continue;
+
+		rule_num = rule_entry.rule_index;
+		TPM_OS_DEBUG(TPM_TPM_LOG_MOD, "with rule_num(%d)\n", rule_num);
+		
+		/* Delete PNC Entry */
+		pnc_index = rang_conf.range_start + rule_num;
+		ret_code = tpm_pncl_entry_reset(pnc_index);
+		IF_ERROR(ret_code);
+
+		/* Increase number of free entries in pnc_range */
+		ret_code = tpm_db_pnc_rng_free_ent_inc(TPM_PNC_DROP_PRECEDENCE);
+		IF_ERROR(ret_code);
+
+		/* Save to DB */
+		ret_code = tpm_db_drop_precedence_rule_delete(rule_num);
+		IF_ERROR(ret_code);
+	}
+
+	return(TPM_RC_OK);
+}
+
+/*******************************************************************************
+* tpm_proc_set_drop_precedence_mode()
+*
+* DESCRIPTION:	  Function used to set drop precedence mode.
+*
+* INPUTS:
+* tcont_num
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_set_drop_precedence_mode(uint32_t owner_id,
+				tpm_drop_precedence_t mode)
+{
+	tpm_error_code_t ret_code;
+	tpm_drop_precedence_t current_mode;
+	uint32_t rule_num = 0;
+	tpm_vlan_key_t vlan_key;
+	tpm_vlan_key_t match_all_vlan_key;
+
+	/* Do nothing if the modes are the same */
+	ret_code = tpm_db_drop_precedence_mode_get(&current_mode);
+	if (current_mode == mode) {
+		TPM_OS_INFO(TPM_TPM_LOG_MOD, " New drop precedence mode(%d) is the same as old one\n", mode);
+		return TPM_RC_OK;
+	}
+
+	/* Clear old rules */
+	ret_code = tpm_proc_clear_drop_precedence_rule(owner_id);
+	IF_ERROR(ret_code);
+
+	/* Set drop precedence mode */
+	memset(&vlan_key, 0, sizeof(vlan_key));
+	switch (mode) {
+	case TPM_DROP_PRECEDENCE_NONE:
+	case TPM_DROP_PRECEDENCE_8P0D:
+		/* Do nothing */
+		break;
+	case TPM_DROP_PRECEDENCE_7P1D:
+		vlan_key.pbit = 4;
+		vlan_key.pbit_mask = 0xff;
+		ret_code = tpm_proc_add_drop_precedence_rule(owner_id, rule_num++, &vlan_key, 1);
+		IF_ERROR(ret_code);
+		break;
+	case TPM_DROP_PRECEDENCE_6P2D:
+		vlan_key.pbit = 4;
+		vlan_key.pbit_mask = 0xff;
+		ret_code = tpm_proc_add_drop_precedence_rule(owner_id, rule_num++, &vlan_key, 1);
+		IF_ERROR(ret_code);
+		vlan_key.pbit = 2;
+		vlan_key.pbit_mask = 0xff;
+		ret_code = tpm_proc_add_drop_precedence_rule(owner_id, rule_num++, &vlan_key, 1);
+		IF_ERROR(ret_code);
+		break;
+	case TPM_DROP_PRECEDENCE_5P3D:
+		vlan_key.pbit = 4;
+		vlan_key.pbit_mask = 0xff;
+		ret_code = tpm_proc_add_drop_precedence_rule(owner_id, rule_num++, &vlan_key, 1);
+		IF_ERROR(ret_code);
+		vlan_key.pbit = 2;
+		vlan_key.pbit_mask = 0xff;
+		ret_code = tpm_proc_add_drop_precedence_rule(owner_id, rule_num++, &vlan_key, 1);
+		IF_ERROR(ret_code);
+		vlan_key.pbit = 0;
+		vlan_key.pbit_mask = 0xff;
+		ret_code = tpm_proc_add_drop_precedence_rule(owner_id, rule_num++, &vlan_key, 1);
+		IF_ERROR(ret_code);
+		break;
+	case TPM_DROP_PRECEDENCE_DEI:
+		vlan_key.cfi = 1;
+		vlan_key.cfi_mask = 0xff;
+		ret_code = tpm_proc_add_drop_precedence_rule(owner_id, rule_num++, &vlan_key, 1);
+		IF_ERROR(ret_code);
+		break;
+	default:
+		break;
+	}
+
+	/* Add rule to forward normal packets */
+	memset(&match_all_vlan_key, 0, sizeof(match_all_vlan_key));
+	ret_code = tpm_proc_add_drop_precedence_rule(owner_id, rule_num++, &match_all_vlan_key, 0);
+	IF_ERROR(ret_code);
+
+	/* Save drop precedence mode */
+	ret_code = tpm_db_drop_precedence_mode_set(mode);
+	IF_ERROR(ret_code);
+
+	return ret_code;
+}
+
+/*******************************************************************************
+* tpm_proc_get_drop_precedence_mode()
+*
+* DESCRIPTION:	  Function used to get drop precedence mode.
+*
+* INPUTS:
+* tcont_num
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_proc_get_drop_precedence_mode(uint32_t owner_id,
+				tpm_drop_precedence_t *mode)
+{
+	int32_t int_ret_code;
+
+	/* Get drop precedence mode */
+	int_ret_code = tpm_db_drop_precedence_mode_get(mode);
+
+	return (tpm_error_code_t)int_ret_code;
 }
 

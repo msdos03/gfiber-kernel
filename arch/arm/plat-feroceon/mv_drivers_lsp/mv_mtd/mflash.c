@@ -288,7 +288,7 @@ static int mflash_lock (struct mtd_info *mtd, loff_t ofs, size_t len)
 		return -1;
 	}
 	
-	DB(printk("\nNotice: Marvell flash (%s) lock per sector is not supported!\n        Locking the whole device.", mtd->name));
+	printk("\nNotice: Marvell flash (%s) lock per sector is not supported!\n        Locking the whole device.", mtd->name);
 		
 	return 0;
 }
@@ -306,7 +306,7 @@ static int mflash_unlock (struct mtd_info *mtd, loff_t ofs, size_t len)
 		return -1;
 	}
 		
-	DB(printk("\nNotice: Marvell flash (%s) unlock per sector is not supported!\n        Unlocking the whole device.", mtd->name));
+	printk("\nNotice: Marvell flash (%s) unlock per sector is not supported!\n        Unlocking the whole device.", mtd->name);
 	return 0;
 }
 

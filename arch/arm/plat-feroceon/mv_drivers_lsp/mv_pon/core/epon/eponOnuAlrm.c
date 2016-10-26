@@ -220,6 +220,17 @@ void onuEponAlarmProcess(void)
 
     onuEponPreviousAlarm = onuEponCurrentAlarmState;  
   }
+#ifdef  PON_ALARM_LED
+  // PM: Generate PON alarm signal for Intelbras
+  if((onuEponCurrentAlarmState) == 0)
+  {
+	  onuPonLedHandler(ONU_PON_ALARM_LED, ACTIVE_LED_OFF);
+  }
+  else
+  {
+	  onuPonLedHandler(ONU_PON_ALARM_LED, ACTIVE_LED_ON);
+  }
+#endif
 }
 
 /*******************************************************************************

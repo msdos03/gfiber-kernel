@@ -129,7 +129,7 @@ static store_sysfs_name_func_t store_sysfs_name_func_ara[] =
     {"no_rule_add_l2",                     sfs_tpm_cfg_set_no_rule_add_l2},
     {"no_rule_add_l3",                     sfs_tpm_cfg_set_no_rule_add_l3},
     {"no_rule_add_ipv4",                   sfs_tpm_cfg_set_no_rule_add_ipv4},
-	{"no_mc_stream_add_ipv6",			   sfs_tpm_cfg_set_no_mc_stream_add_ipv6},
+    {"no_mc_stream_add_ipv6",			   sfs_tpm_cfg_set_no_mc_stream_add_ipv6},
     {"no_mc_stream_add_ipv4",              sfs_tpm_cfg_set_no_mc_stream_add_ipv4},
     {"oam_channel",                        sfs_tpm_cfg_set_oam_channel},
     {"omci_channel",                       sfs_tpm_cfg_set_omci_channel},
@@ -213,7 +213,10 @@ static store_sysfs_name_func_t store_sysfs_name_func_ara[] =
 #ifdef TPM_FC_DEBUG
     {"fc_oneshot_set",                     sfs_tpm_cfg_set_fc_oneshot},
 #endif
-    {"fc_enable",                  	    sfs_tpm_cfg_fc_enable}
+    {"fc_enable",                  	   sfs_tpm_cfg_fc_enable},
+
+    {"drop_pre_set",			   sfs_tpm_drop_pre_set},
+    {"drop_pre_show",		           sfs_tpm_drop_pre_show},
 };
 static int num_store_name_funcs = sizeof(store_sysfs_name_func_ara)/sizeof(store_sysfs_name_func_ara[0]);
 
@@ -261,7 +264,7 @@ typedef struct
 {
     char *sysfs_name;
     int (*sysfs_func)( char *buf);
-} show_sysfs_name_func_t;
+    } show_sysfs_name_func_t;
 
 static show_sysfs_name_func_t show_sysfs_name_func_ara[] =
 {
@@ -318,14 +321,9 @@ static show_sysfs_name_func_t show_sysfs_name_func_ara[] =
     {"help_flush_vtu",               sfs_help_flush_vtu},
     {"help_mac_learn_rule_add",      sfs_help_mac_learn_rule_add},
     {"help_mac_learn_def_act_set",   sfs_help_mac_learn_def_act_set},
-
-    {"show_frwd_rule",               sfs_show_frwd_rule},
-    {"show_l2_key_ethertype",        sfs_show_l2_key_ethertype},
-    {"show_l2_key_mac_addr",         sfs_show_l2_key_mac_addr},
-    {"show_l2_key_vlan",             sfs_show_l2_key_vlan},
-    {"show_l2_rule",                 sfs_show_l2_rule},
-    {"show_vlan_rule",               sfs_show_vlan_rule},
+    {"help_drop_pre",                sfs_help_drop_pre},
 };
+
 static int num_show_name_funcs = sizeof(show_sysfs_name_func_ara)/sizeof(show_sysfs_name_func_ara[0]);
 
 
@@ -424,18 +422,12 @@ static DEVICE_ATTR(help_send_genquery_to_uni,                       S_IRUSR, tpm
 static DEVICE_ATTR(help_tpm_self_check,                             S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(help_flush_atu,                                  S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(help_flush_vtu,                                  S_IRUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(help_drop_pre,                                   S_IRUSR, tpm_cfg_show, tpm_cfg_store);
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
-
-/* sysfs for dumping forwarding table in yaml. */
-static DEVICE_ATTR(show_frwd_rule,                                  S_IRUSR, tpm_cfg_show, NULL);
-static DEVICE_ATTR(show_l2_key_ethertype,                           S_IRUSR, tpm_cfg_show, NULL);
-static DEVICE_ATTR(show_l2_key_mac_addr,                            S_IRUSR, tpm_cfg_show, NULL);
-static DEVICE_ATTR(show_l2_key_vlan,                                S_IRUSR, tpm_cfg_show, NULL);
-static DEVICE_ATTR(show_l2_rule,                                    S_IRUSR, tpm_cfg_show, NULL);
-static DEVICE_ATTR(show_vlan_rule,                                  S_IRUSR, tpm_cfg_show, NULL);
 
 // rule set
 static DEVICE_ATTR(frwd_rule_set,                                   S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+
 static DEVICE_ATTR(vlan_rule_set,                                   S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(mod_mh_rule_set,                                 S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(mod_vlan_rule_set,                               S_IWUSR, tpm_cfg_show, tpm_cfg_store);
@@ -570,6 +562,10 @@ static DEVICE_ATTR(del_ds_load_balance,                             S_IWUSR, tpm
 static DEVICE_ATTR(fc_config_set,                                   S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(fc_us_period_set,                                S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 static DEVICE_ATTR(fc_enable,                                       S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+
+static DEVICE_ATTR(drop_pre_set,                                    S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+static DEVICE_ATTR(drop_pre_show,                                   S_IWUSR, tpm_cfg_show, tpm_cfg_store);
+
 #ifdef TPM_FC_DEBUG
 static DEVICE_ATTR(fc_oneshot_set,                                  S_IWUSR, tpm_cfg_show, tpm_cfg_store);
 #endif
@@ -643,6 +639,29 @@ static struct attribute_group tpm_cfg_mod_sw_group =
 
 /******************************************************************************/
 /* ========================================================================== */
+/*             TPM drop_precedence SYSFS                                                                                                              */
+/* ========================================================================== */
+
+static struct attribute *tpm_cfg_drop_pre_sw_attrs[] =
+{
+#ifdef CONFIG_MV_TPM_SYSFS_HELP
+    &dev_attr_help_drop_pre.attr,
+#endif /* CONFIG_MV_TPM_SYSFS_HELP */
+
+    &dev_attr_drop_pre_set.attr,
+    &dev_attr_drop_pre_show.attr,
+
+    NULL
+};
+
+static struct attribute_group tpm_drop_pre_sw_group =
+{
+    .name = "drop_pre",
+    .attrs = tpm_cfg_drop_pre_sw_attrs
+};
+
+/******************************************************************************/
+/* ========================================================================== */
 /*             TPM cfg_l2 SYS FS STORE ROUTINE SWITCHER                       */
 /* ========================================================================== */
 
@@ -657,10 +676,6 @@ static struct attribute *tpm_cfg_l2_sw_attrs[] =
     &dev_attr_help_mac_learn_rule_add.attr,
     &dev_attr_help_mac_learn_def_act_set.attr,
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
-    &dev_attr_show_l2_key_ethertype.attr,
-    &dev_attr_show_l2_key_mac_addr.attr,
-    &dev_attr_show_l2_key_vlan.attr,
-    &dev_attr_show_l2_rule.attr,
 
     &dev_attr_l2_key_ethertype_rule_set.attr,
     &dev_attr_l2_key_gemport_rule_set.attr,
@@ -848,7 +863,6 @@ static struct attribute *tpm_cfg_frwd_sw_attrs[] =
     &dev_attr_help_rule_table_display.attr,
     &dev_attr_help_delete_entry_rule_table.attr,
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
-    &dev_attr_show_frwd_rule.attr,
 
     &dev_attr_frwd_rule_set.attr,
 
@@ -877,7 +891,6 @@ static struct attribute *tpm_cfg_vlan_sw_attrs[] =
     &dev_attr_help_rule_table_display.attr,
     &dev_attr_help_delete_entry_rule_table.attr,
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
-    &dev_attr_show_vlan_rule.attr,
 
     &dev_attr_vlan_rule_set.attr,
 
@@ -1162,6 +1175,7 @@ static struct attribute *tpm_cfg_flat_sw_attrs[] =
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
 
     &dev_attr_frwd_rule_set.attr,
+
     &dev_attr_vlan_rule_set.attr,
     &dev_attr_mod_vlan_rule_set.attr,
     &dev_attr_mod_ipv4_addr_rule_set.attr,
@@ -1278,6 +1292,7 @@ static attr_group_pair_t attr_group_pair_ara[] =
     {"cfg_mod",                &tpm_cfg_mod_sw_group},
     {"cfg_frwd",               &tpm_cfg_frwd_sw_group},
     {"cfg_vlan",               &tpm_cfg_vlan_sw_group},
+    {"drop_pre",               &tpm_drop_pre_sw_group},
     {"cfg_l2",                 &tpm_cfg_l2_sw_group},
     {"cfg_l3",                 &tpm_cfg_l3_sw_group},
     {"cfg_ipv4",               &tpm_cfg_ipv4_sw_group},

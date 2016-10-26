@@ -868,7 +868,7 @@ int sfs_help_no_rule_add(char* buf)
 {
     int off = 0;
 
-    off += sprintf(buf+off, "echo [owner_id] [rule_num]            > no_rule_add_l2                - delete L2 rule from hardware\n");
+    off += sprintf(buf+off, "echo [owner_id] [rule_idx]            > no_rule_add_l2                - delete L2 rule from hardware\n");
     off += sprintf(buf+off, "echo [owner_id] [rule_idx]            > no_rule_add_l3                - delete L3 rule from hardware\n");
     off += sprintf(buf+off, "echo [owner_id] [rule_idx]            > no_rule_add_ipv4              - delete IPv4 rule from hardware\n");
     off += sprintf(buf+off, "echo [owner_id] [rule_idx]            > no_rule_add_ipv6_dip_acl      - delete a IPv6 DIP ACL\n");
@@ -1763,9 +1763,32 @@ int sfs_help_mac_learn_def_act_set(char* buf)
 	off += sprintf(buf+off, "\t\tTPM_UNK_MAC_CONTINUE, (frwd packet to GMAC1)   %#.2X\n", TPM_UNK_MAC_CONTINUE);
 
 	return(off);
-
 }
 
+/*******************************************************************************
+**
+**  sfs_help_drop_pre
+**
+*******************************************************************************/
+int sfs_help_drop_pre(char* buf)
+{
+	int off = 0;
+
+	off += sprintf(buf+off, "echo [mode] > drop_pre_set\n");
+	off += sprintf(buf+off, "Set the drop precedence mode\n");
+	off += sprintf(buf+off, "\tmode	           (hex)drop precedence mode: \n");
+	off += sprintf(buf+off, "\t\TPM_DROP_PRECEDENCE_NONE: %d\n", TPM_DROP_PRECEDENCE_NONE);
+	off += sprintf(buf+off, "\t\TPM_DROP_PRECEDENCE_8P0D: %d\n", TPM_DROP_PRECEDENCE_8P0D);
+	off += sprintf(buf+off, "\t\TPM_DROP_PRECEDENCE_7P1D: %d\n", TPM_DROP_PRECEDENCE_7P1D);
+	off += sprintf(buf+off, "\t\TPM_DROP_PRECEDENCE_6P2D: %d\n", TPM_DROP_PRECEDENCE_6P2D);
+	off += sprintf(buf+off, "\t\TPM_DROP_PRECEDENCE_5P3D: %d\n", TPM_DROP_PRECEDENCE_5P3D);
+	off += sprintf(buf+off, "\t\TPM_DROP_PRECEDENCE_DEI:  %d\n\n", TPM_DROP_PRECEDENCE_DEI);
+	off += sprintf(buf+off, "echo [dump] > drop_pre_show\n");
+	off += sprintf(buf+off, "Show the drop precedence mode\n");
+	off += sprintf(buf+off, "\tdump	   (dec)Any dump value\n");	
+
+	return(off);
+}
 
 #endif /* CONFIG_MV_TPM_SYSFS_HELP */
 

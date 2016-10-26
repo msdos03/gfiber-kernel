@@ -109,5 +109,6 @@ int32_t tpm_init_mh(tpm_init_mh_src_t ds_mh_set_conf,
 			tpm_init_gmac_conn_conf_t *gmac_port_conf);
 int32_t tpm_init_ipg(int32_t mod_value);
 int32_t tpm_init_gmac_loopback(tpm_gmacs_enum_t port, uint8_t enable);
+int32_t tpm_init_qos(void);
 
 #endif /* _TPM_INIT_H_ */

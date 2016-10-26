@@ -690,6 +690,7 @@ MV_STATUS asicOntMiscRegRead(E_asicGlobalRegs reg, MV_U32 *pvalue, MV_U32 entry)
 /* Macros
 ------------------------------------------------------------------------------*/
 #define PON_GPIO_NOT_USED (0xFFFF)
+
 #define PON_GPIO_GET(gppClass, gpioGroup, gpioMask)\
 {\
   MV_32 gpioNum;\

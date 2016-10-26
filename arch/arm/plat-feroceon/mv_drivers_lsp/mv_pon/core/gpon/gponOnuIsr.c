@@ -547,7 +547,7 @@ MV_STATUS onuGponIsrXvrResetStateSet(MV_BOOL mode)
 
   if (mode == MV_TRUE)
   {
-    onuPonTimerEnable(&(onuPonResourceTbl_s.onuPonIsrXvrRstTimerId));  
+    onuPonTimerEnable(&(onuPonResourceTbl_s.onuPonIsrXvrRstTimerId));
   }
   else
   {

@@ -199,7 +199,10 @@ static ssize_t tcam_store(struct device *dev,
 		/* Remove last byte (new line) from the buffer */
 		int  len = strlen(buf);
 		char *temp = mvOsMalloc(len + 1);
-
+		if(temp == NULL)
+		{
+			return -ENOMEM;
+		}
 		strncpy(temp, buf, len-1);
 		temp[len-1] = 0;
 		tcam_sw_text(&te, temp);

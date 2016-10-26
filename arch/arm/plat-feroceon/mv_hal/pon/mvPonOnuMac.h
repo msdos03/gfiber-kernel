@@ -120,7 +120,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* TX Delay Register - const */
 #define GPON_TX_DELAY_TD_622                (0x0AA1)            /* Const Delay */
-#define GPON_TX_DELAY_TD_1244               (0x1984)            /* Const Delay */
+#define GPON_TX_DELAY_TD_1244               (0x15DD)            /* Const Delay */
 
 /* TX Delay Register - equilization */
 #define GPON_TX_EQUAL_DELAY_TD              (0x0000)            /* Equilization Delay */
@@ -506,6 +506,19 @@ void      mvOnuGponMacFifoSupportSet(MV_32 value);
 #define EPON_MAC_RXP_DATA_FIFO_THRESHOLD_DEF      (0x780)
 #define EPON_MAC_PCS_FRAME_SIZE_LIMIT_SIZE_DEF    (0x640)
 #define EPON_MAC_PCS_FRAME_SIZE_LIMIT_LATENCY_DEF (0xED8)
+
+/* Default value for timestamp configuration registers*/
+#define EPON_MAC_TXM_TIMESTAMP_OFFSET		(0x77B)
+#define EPON_MAC_TXM_USE_TIMESTAMP_IMG		(0x0)
+#define EPON_MAC_TXM_ADD_SYNC_TIME_TO_TM	(0x1)
+#define EPON_MAC_GPM_TIMESTAMP_OFFSET		(0x760)
+#define EPON_MAC_GPM_ADD_SYNC_TIME_TO_TM	(0x0)
+
+#define EPON_MAC_RXM_TIMESTAMP_OFFSET		(0x250)
+#define EPON_MAC_RXM_TIMESTAMP_SIGN			(0x0)
+#define EPON_MAC_RXM_TIMESTAMP_SELECT		(0x1)
+
+
 
 
 /* Global functions

@@ -1470,121 +1470,133 @@ void onuGponPonMngDactOnuIdMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 *******************************************************************************/
 void onuGponPonMngDisSnMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 {
-	MV_STATUS rcode;
-	MV_U32    onuState = onuGponDbOnuStateGet();
-	MV_U32    disableStatus;
-	MV_U8     msgSerialNumber[8];
-	MV_U8     onuSerialNumber[8];
-	MV_BOOL   isSnMatch;
+  MV_STATUS rcode;
+  MV_U32    onuState = onuGponDbOnuStateGet();
+  MV_U32    disableStatus;
+  MV_U8     msgSerialNumber[8];
+  MV_U8     onuSerialNumber[8];
+  MV_BOOL   isSnMatch;
 
 #ifdef MV_GPON_DEBUG_PRINT
-	mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
-			   "DEBUG: (%s:%d) DISABLE, onuId(%d), msgId(%d), state(%d) msg[0x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x]\n",
-			   __FILE_DESC__, __LINE__, onuId, msgId, onuState,
-			   msgData[0], msgData[1], msgData[2], msgData[3], msgData[4],
-			   msgData[5], msgData[6], msgData[7], msgData[8], msgData[9]);
+  mvPonPrint(PON_PRINT_DEBUG, PON_SM_STATE_MODULE,
+      "DEBUG: (%s:%d) DISABLE, onuId(%d), msgId(%d), state(%d) msg[0x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x]\n",
+      __FILE_DESC__, __LINE__, onuId, msgId, onuState,
+      msgData[0], msgData[1], msgData[2], msgData[3], msgData[4],
+      msgData[5], msgData[6], msgData[7], msgData[8], msgData[9]);
 #endif /* MV_GPON_DEBUG_PRINT */
 
-	disableStatus = msgData[0];
-	memcpy(msgSerialNumber, &(msgData[1]), 8);
-	onuGponDbSerialNumGet(onuSerialNumber);
-	if (memcmp(msgSerialNumber,onuSerialNumber,8) == 0)
-		isSnMatch = MV_TRUE;
-	else
-		isSnMatch = MV_FALSE;
+  disableStatus = msgData[0];
+  memcpy(msgSerialNumber, &(msgData[1]), 8);
+  onuGponDbSerialNumGet(onuSerialNumber);
+  if (memcmp(msgSerialNumber,onuSerialNumber,8) == 0)
+    isSnMatch = MV_TRUE;
+  else
+    isSnMatch = MV_FALSE;
 
-	/* Disable */
-	if ((disableStatus == GPON_ONU_DISABLE) && (isSnMatch == MV_TRUE) &&
-		(onuState != ONU_GPON_07_EMERGANCY_STOP)) {
+  /* Disable */
+  if ((disableStatus == GPON_ONU_DISABLE) && (isSnMatch == MV_TRUE) &&
+      (onuState != ONU_GPON_07_EMERGANCY_STOP))
+  {
 
-        onuPonTxPowerOn(MV_FALSE);
+    onuPonTxPowerOn(MV_FALSE);
 
-		/* clear onu information */
-		/* ===================== */
-		rcode = onuGponPonMngClearOnuInfo(CLEAR_BUFFER_EN);
-		if (rcode != MV_OK) {
-			mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-					   "ERROR: (%s:%d) DISABLE: onuGponPonMngClearOnuInfo\n", __FILE_DESC__, __LINE__);
-			return;
-		}
+    /* clear onu information */
+    /* ===================== */
+    rcode = onuGponPonMngClearOnuInfo(CLEAR_BUFFER_EN);
+    if (rcode != MV_OK)
+    {
+      mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+          "ERROR: (%s:%d) DISABLE: onuGponPonMngClearOnuInfo\n", __FILE_DESC__, __LINE__);
+      return;
+    }
 
-		/* clear GEM ports */
-		/* =============== */
-		rcode = onuGponApiGemClearAll(onuGponDbGemRestoreGet());
-		if (rcode != MV_OK) {
-			mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-					   "ERROR: (%s:%d) DISABLE: onuGponApiGemClearAll\n", __FILE_DESC__, __LINE__);
-			return;
-		}
+    /* clear GEM ports */
+    /* =============== */
+    rcode = onuGponApiGemClearAll(onuGponDbGemRestoreGet());
+    if (rcode != MV_OK)
+    {
+      mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+          "ERROR: (%s:%d) DISABLE: onuGponApiGemClearAll\n", __FILE_DESC__, __LINE__);
+      return;
+    }
 
-		/* alarm handling */
-		/* ============== */
-		onuGponAlarmSet(ONU_GPON_ALARM_DIS, ONU_GPON_ALARM_ON);
+    /* alarm handling */
+    /* ============== */
+    onuGponAlarmSet(ONU_GPON_ALARM_DIS, ONU_GPON_ALARM_ON);
 
-		/* state handling */
-		/* ============== */
-		rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_07_EMERGANCY_STOP);
-		if (rcode != MV_OK) {
-			mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-					   "ERROR: (%s:%d) DISABLE: onuGponPonMngrUpdateState(7)\n", __FILE_DESC__, __LINE__);
-			return;
-		}
+    /* state handling */
+    /* ============== */
+    rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_07_EMERGANCY_STOP);
+    if (rcode != MV_OK)
+    {
+      mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+          "ERROR: (%s:%d) DISABLE: onuGponPonMngrUpdateState(7)\n", __FILE_DESC__, __LINE__);
+      return;
+    }
 
-		mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "==================\n");
-		mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "== ONT DISABLED ==\n");
-		mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "==================\n");
+    /* Disable timers */
+    onuPonTimerDisable(&(onuPonResourceTbl_s.onuGponT01_TimerId));
+    onuPonTimerDisable(&(onuPonResourceTbl_s.onuGponT02_TimerId));
 
-		if (g_onuGponDisableFunc != NULL)
-			g_onuGponDisableFunc(MV_TRUE);
+    mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "==================\n");
+    mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "== ONT DISABLED ==\n");
+    mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "==================\n");
 
-		/* Send Disable Notification to upper layer */
-		onuGponSrvcDisableMsgNotify( MV_TRUE );
+    if (g_onuGponDisableFunc != NULL)
+      g_onuGponDisableFunc(MV_TRUE);
 
-		/* If was ranged then now ont is not ranged - send status notification */
-		if (onuState == ONU_GPON_05_OPERATION)
-			onuGponSrvcStatusNotify(GPON_ONU_STATUS_NOT_RANGED);
+    /* Send Disable Notification to upper layer */
+    onuGponSrvcDisableMsgNotify( MV_TRUE );
 
-	/* Enable */
-	} else if (((disableStatus == GPON_ONU_ENABLE_ALL) ||
-			  ((disableStatus == GPON_ONU_ENABLE_ONU) && (isSnMatch == MV_TRUE))) &&
-			 (onuState == ONU_GPON_07_EMERGANCY_STOP)) {
+    /* If was ranged then now ont is not ranged - send status notification */
+    if (onuState == ONU_GPON_05_OPERATION)
+      onuGponSrvcStatusNotify(GPON_ONU_STATUS_NOT_RANGED);
 
-        onuPonTxPowerOn(MV_TRUE);
+  }
+  /* Enable */
+  else if (((disableStatus == GPON_ONU_ENABLE_ALL) ||
+      ((disableStatus == GPON_ONU_ENABLE_ONU) && (isSnMatch == MV_TRUE))) &&
+      (onuState == ONU_GPON_07_EMERGANCY_STOP))
+  {
 
-		/* alarm handling */
-		/* ============== */
-		onuGponAlarmSet(ONU_GPON_ALARM_DIS, ONU_GPON_ALARM_OFF);
+    onuPonTxPowerOn(MV_TRUE);
 
-		/* state handling */
-		/* ============== */
-		rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_02_STANDBY);
-		if (rcode != MV_OK) {
-			mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-					   "ERROR: (%s:%d) DISABLE: onuGponPonMngrUpdateState(2)\n", __FILE_DESC__, __LINE__);
-			return;
-		}
+    /* alarm handling */
+    /* ============== */
+    onuGponAlarmSet(ONU_GPON_ALARM_DIS, ONU_GPON_ALARM_OFF);
 
-		mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "=================\n");
-		mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "== ONT ENABLED ==\n");
-		mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "=================\n");
+    /* state handling */
+    /* ============== */
+    rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_02_STANDBY);
+    if (rcode != MV_OK)
+    {
+      mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+          "ERROR: (%s:%d) DISABLE: onuGponPonMngrUpdateState(2)\n", __FILE_DESC__, __LINE__);
+      return;
+    }
 
-		if (g_onuGponDisableFunc != NULL)
-			g_onuGponDisableFunc(MV_FALSE);
+    mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "=================\n");
+    mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "== ONT ENABLED ==\n");
+    mvPonPrint(PON_PRINT_INFO, PON_SM_MODULE, "=================\n");
 
-		/* Send Disable Notification to upper layer */
-		onuGponSrvcDisableMsgNotify( MV_FALSE );
+    if (g_onuGponDisableFunc != NULL)
+      g_onuGponDisableFunc(MV_FALSE);
 
-		/* Restore saved GEM ports */
-		if (onuGponDbGemRestoreGet() == MV_TRUE) {
-			rcode = onuGponApiGemRestoreAll();
-			if (rcode != MV_OK) {
-				mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-						   "ERROR: (%s:%d) DISABLE: onuGponApiGemRestoreAll\n", __FILE_DESC__, __LINE__);
-				return;
-			}
-		}
+    /* Send Disable Notification to upper layer */
+    onuGponSrvcDisableMsgNotify( MV_FALSE );
 
-	}
+    /* Restore saved GEM ports */
+    if (onuGponDbGemRestoreGet() == MV_TRUE)
+    {
+      rcode = onuGponApiGemRestoreAll();
+      if (rcode != MV_OK) {
+        mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+            "ERROR: (%s:%d) DISABLE: onuGponApiGemRestoreAll\n", __FILE_DESC__, __LINE__);
+        return;
+      }
+    }
+
+  }
 }
 
 /*******************************************************************************
@@ -2635,11 +2647,11 @@ void onuGponPonMngPonIdMaintenanceMsg(MV_U8 onuId, MV_U8 msgId, MV_U8 *msgData)
 #ifdef MV_GPON_DEBUG_PRINT
   mvPonPrint(PON_PRINT_DEBUG, PON_SM_MODULE,
              "DEBUG: (%s:%d) PON-ID message rcv with ponIdTypeAbit: %d ponIdClassType: 0x%02x ponIdTxOpticalLevel: 0x%04x ponIdBytes[0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x]\n",
-             __FILE_DESC__, __LINE__,
-             ponIdTypeAbit, ponIdClassType, ponIdTxOpticalLevel,
-             ponIdBytes[0], ponIdBytes[1], ponIdBytes[2], ponIdBytes[3],
-             ponIdBytes[4], ponIdBytes[5], ponIdBytes[6]
-             );
+			 __FILE_DESC__, __LINE__,
+			 ponIdTypeAbit, ponIdClassType, ponIdTxOpticalLevel,
+			 ponIdBytes[0], ponIdBytes[1], ponIdBytes[2], ponIdBytes[3],
+			 ponIdBytes[4], ponIdBytes[5], ponIdBytes[6]
+			 );
 #endif /* MV_GPON_DEBUG_PRINT */
 }
 
@@ -2700,29 +2712,38 @@ void onuGponPonMngTimerT01ExpireHndl(void)
              "DEBUG: (%s:%d) TIMER TO1 Expired, state(%d)\n", __FILE_DESC__, __LINE__, onuGponDbOnuStateGet());
 #endif /* MV_GPON_DEBUG_PRINT */
 
-  /* clear onu information */
-  /* ===================== */
-  rcode = onuGponPonMngClearOnuInfo(CLEAR_BUFFER_EN);
-  if (rcode != MV_OK)
+  if ((onuGponDbOnuStateGet() == ONU_GPON_03_SERIAL_NUM) ||
+      (onuGponDbOnuStateGet() == ONU_GPON_04_RANGING))
+  {
+    /* clear onu information */
+    /* ===================== */
+    rcode = onuGponPonMngClearOnuInfo(CLEAR_BUFFER_EN);
+    if (rcode != MV_OK)
+    {
+      mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+          "ERROR: (%s:%d) onuGponPonMngClearOnuInfo\n", __FILE_DESC__, __LINE__);
+      return;
+    }
+
+    /* state handling */
+    /* ============== */
+    rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_02_STANDBY);
+    if (rcode != MV_OK)
+    {
+      mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
+          "ERROR: (%s:%d) onuGponPonMngrUpdateState(2)\n", __FILE_DESC__, __LINE__);
+      return;
+    }
+
+    /* alarm handling */
+    /* ============== */
+    onuGponAlarmSet(ONU_GPON_ALARM_SUF, ONU_GPON_ALARM_ON);
+  }
+  else
   {
     mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-               "ERROR: (%s:%d) onuGponPonMngClearOnuInfo\n", __FILE_DESC__, __LINE__);
-    return;
+        "ERROR: (%s:%d) TIMER TO1 Expired, in wrong state(%d)\n", __FILE_DESC__, __LINE__, onuGponDbOnuStateGet());
   }
-
-  /* state handling */
-  /* ============== */
-  rcode = onuGponPonMngrUpdateState((MV_U32)ONU_GPON_02_STANDBY);
-  if (rcode != MV_OK)
-  {
-    mvPonPrint(PON_PRINT_ERROR, PON_SM_MODULE,
-               "ERROR: (%s:%d) onuGponPonMngrUpdateState(2)\n", __FILE_DESC__, __LINE__);
-    return;
-  }
-
-  /* alarm handling */
-  /* ============== */
-  onuGponAlarmSet(ONU_GPON_ALARM_SUF, ONU_GPON_ALARM_ON);
 }
 
 /*******************************************************************************
@@ -2809,6 +2830,7 @@ void onuGponPonMngTimerT02ExpireHndl(void)
 
     onuGponDbOnuDsSyncOnSet(0);
 
+  onuGponAlarmSet(ONU_GPON_ALARM_LOS, ONU_GPON_ALARM_ON);
   onuGponAlarmSet(ONU_GPON_ALARM_LOF, ONU_GPON_ALARM_ON);
 
 #ifdef MV_GPON_DEBUG_PRINT

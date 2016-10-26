@@ -142,6 +142,15 @@ MV_STATUS onuPonLedInit(void)
 			return(status);
 	}
 
+#ifdef PON_ALARM_LED
+	PON_GPIO_GET(BOARD_GPP_PON_ALARM, gpioGroup, gpioMask);
+	if (gpioMask != PON_GPIO_NOT_USED) {
+		status = mvGppTypeSet(gpioGroup, gpioMask, 0/*output*/);
+		if (status != MV_OK)
+			return(status);
+	}
+#endif
+
 	status  = asicOntMiscRegWrite(mvAsicReg_PON_LED_BLINK_FREQ_A_ON, 0x30000000, 0);
 	if (status != MV_OK)
 		return(status);
@@ -179,22 +188,36 @@ MV_STATUS onuPonLedHandler(MV_U32 led, MV_U32 action)
 	MV_U32    gpioGroup = 0;
 	MV_U32    gpioMask = 0;
 
-	if (led == ONU_PON_SYS_LED) {
-
+	if (led == ONU_PON_SYS_LED)
+	{
 		PON_GPIO_GET(BOARD_GPP_SYS_LED, gpioGroup, gpioMask);
-		if (gpioMask != PON_GPIO_NOT_USED) {
-			status = mvGppValueSet(gpioGroup, gpioMask, gpioMask);
-			if (status != MV_OK)
-				return(status);
+		if (gpioMask != PON_GPIO_NOT_USED)
+		{
+			switch (action)
+			{
+				case ACTIVE_LED_ON:
+					status  = mvGppValueSet(gpioGroup, gpioMask, gpioMask);
+					if (status != MV_OK)
+						return(status);
+					break;
+				case ACTIVE_LED_OFF:
+					status  = mvGppValueSet(gpioGroup, gpioMask, ~gpioMask);
+					if (status != MV_OK)
+						return(status);
+					break;
+			}
 		}
-
-	} else if (led == ONU_PON_SYNC_LED) {
+	}
+	else if (led == ONU_PON_SYNC_LED) {
 
 		PON_GPIO_GET(BOARD_GPP_PON_LED, gpioGroup, gpioMask);
 		if (gpioMask != PON_GPIO_NOT_USED) {
 			switch (action) {
 			case ACTIVE_LED_OFF:
 				status  = mvGppValueSet(gpioGroup, gpioMask, ~gpioMask);
+				if (status != MV_OK)
+					return(status);
+				status  = mvGppBlinkEn(gpioGroup, gpioMask, ~gpioMask);
 				if (status != MV_OK)
 					return(status);
 				break;
@@ -234,6 +257,28 @@ MV_STATUS onuPonLedHandler(MV_U32 led, MV_U32 action)
 			}
 		}
 	}
+#ifdef PON_ALARM_LED
+	else if (led == ONU_PON_ALARM_LED) {
+		// Intelbras board
+		PON_GPIO_GET(BOARD_GPP_PON_ALARM, gpioGroup, gpioMask);
+		if (gpioMask != PON_GPIO_NOT_USED)
+		{
+			switch (action)
+			{
+				case ACTIVE_LED_ON:
+					status  = mvGppValueSet(gpioGroup, gpioMask, gpioMask);
+					if (status != MV_OK)
+						return(status);
+					break;
+				case ACTIVE_LED_OFF:
+					status  = mvGppValueSet(gpioGroup, gpioMask, ~gpioMask);
+					if (status != MV_OK)
+						return(status);
+					break;
+			}
+		}
+	}
+#endif
 
 	return(MV_OK);
 }

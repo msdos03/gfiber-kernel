@@ -124,6 +124,7 @@ typedef enum {
 #define SW_GMAC_0			(0)
 #define SW_GMAC_1			(1)
 
+#define TPM_MAX_NUM_DROP_PRECEDENCE	(4)
 
 /* MH configuration - fixed values - will be supported via xml params */
 #define TPM_GMAC0_AMBER_PORT_NUM	4

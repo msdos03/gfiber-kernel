@@ -2255,7 +2255,7 @@ int32_t tpm_pncl_res_info_map(tpm_pncl_sram_data_t *sram_in, tpm_sram_all_t *sra
 		tpm_pncl_set_l4(sram_in->l4_type, sram_out);
 
 	if (sram_in->sram_updt_bm & TPM_PNCL_SET_COL)
-		;/* TODO : Fill in code */
+		tpm_pncl_set_ri_bit(sram_out, TPM_PNC_RI_COLOR_BIT, 1);
 
 	if (sram_in->sram_updt_bm & TPM_PNCL_SET_BC)
 		tpm_pncl_set_ri_bit(sram_out, TPM_PNC_RI_BC_BIT, 1);

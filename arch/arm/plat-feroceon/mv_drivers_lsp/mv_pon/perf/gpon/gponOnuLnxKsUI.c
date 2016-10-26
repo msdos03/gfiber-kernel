@@ -3428,13 +3428,13 @@ static ssize_t misc_show(struct device *dev,
 
 	if (!strcmp(name, "printMask"))
 		return ponOnuPrintStatus(buf);
-	else if (!strcmp(name, "prbsUserPattern"))
-		return onuGponUiCfgPrbsUserPattern(buf);
+  else if (!strcmp(name, "prbsUserPattern"))
+  	return onuGponUiCfgPrbsUserPattern(buf);
 	else if (!strcmp(name, "helpMisc"))
 		return onuGponUiMiscHelpShow(buf);
 	else if (!strcmp(name, "syncLogEnable"))	/* sync log enable or disable */
 		onuGponUiSyncLogEnableShow();
-	else if (!strcmp(name, "syncLog"))	/* sync log stop */
+    else if (!strcmp(name, "syncLog"))	/* sync log stop */
 		onuGponUiSyncLogPrint();
 	else if (!strcmp(name, "laserChannel"))
 		return onuGponLaserChannelShow(buf);

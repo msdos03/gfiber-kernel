@@ -411,7 +411,6 @@ source arch/arm/plat-feroceon/mv_drivers_lsp/mv_tpm/Kconfig
 
 source arch/arm/plat-feroceon/mv_drivers_lsp/mv_mac_learn/Kconfig
 
-
 config  SCSI_MVSATA
 	tristate "Support for Marvell Sata Adapters"
 	depends on ( MV_INCLUDE_INTEG_SATA && SCSI ) || ( PCI && SCSI )

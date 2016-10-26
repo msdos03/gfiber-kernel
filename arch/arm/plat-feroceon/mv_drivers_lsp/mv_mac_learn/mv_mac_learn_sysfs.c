@@ -460,16 +460,16 @@ int sfs_help_mac_learn_show_all(char *buf)
 int sfs_mac_learn_enable_get(char *buf)
 {
 	int off = 0;
-	char result[8];
+	char result[9];
 	bool mac_learn_enable;
 
 	if (mv_mac_learn_enable_get(&mac_learn_enable)) {
-		memcpy(result, "failed", 8);
+		memcpy(result, "failed", strlen("failed")+1);
 	} else {
 		if (true == mac_learn_enable)
-			memcpy(result, "enable", 8);
+			memcpy(result, "enable", strlen("enable")+1);
 		else
-			memcpy(result, "disable", 8);
+			memcpy(result, "disable", strlen("disable")+1);
 	}
 	off += sprintf(buf+off, "\nmac learn enable get: %s\n", result);
 
@@ -489,12 +489,12 @@ int sfs_mac_learn_overwrite_enable_get(char *buf)
 	bool mac_learn_enable;
 
 	if (mv_mac_learn_overwrite_enable_get(&mac_learn_enable)) {
-		memcpy(result, "failed", 8);
+		memcpy(result, "failed", strlen("failed")+1);
 	} else {
 		if (true == mac_learn_enable)
-			memcpy(result, "enable", 8);
+			memcpy(result, "enable", strlen("enable")+1);
 		else
-			memcpy(result, "disable", 8);
+			memcpy(result, "disable", strlen("disable")+1);
 	}
 	off += sprintf(buf+off, "\nmac learn overwrite enable get: %s\n", result);
 
@@ -514,7 +514,7 @@ int sfs_mac_learn_max_count_get(char *buf)
 	uint32_t max_count;
 
 	if (mv_mac_learn_max_count_get(&max_count)) {
-		memcpy(result, "failed", 8);
+		memcpy(result, "failed", strlen("failed")+1);
 		off += sprintf(buf+off, "\nmac learn max count get: %s\n", result);
 	} else {
 		off += sprintf(buf+off, "\nmac learn max count get: %d\n", max_count);
@@ -536,7 +536,7 @@ int sfs_mac_learn_expired_time_get(char *buf)
 	uint32_t expire_time;
 
 	if (mv_mac_learn_expire_time_get(&expire_time)) {
-		memcpy(result, "failed", 8);
+		memcpy(result, "failed", strlen("failed")+1);
 		off += sprintf(buf+off, "\nmac learn expire time get: %s\n", result);
 	} else {
 		off += sprintf(buf+off, "\nmac learn expire time get: %d(s)\n", expire_time);

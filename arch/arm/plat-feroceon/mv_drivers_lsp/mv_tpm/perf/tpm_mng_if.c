@@ -343,6 +343,16 @@ int mv_tpm_cdev_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
                   ret = 0;
                   break;
 
+		/* ====== MV_TPM_IOCTL_GET_SECTION_SIZE ========= */
+		case MV_TPM_IOCTL_SET_DROP_PRECEDENCE_MODE:
+	  
+			rcode = tpm_set_drop_precedence_mode(tpm_admin->owner_id,
+					tpm_admin->drop_pre_mode);
+			if(rcode != TPM_OK)
+				goto ioctlErr;
+
+			ret = 0;
+			break;
               default:
                 ret = -EINVAL;
           }

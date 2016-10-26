@@ -115,6 +115,7 @@ extern "C" {
 #define GPP_INT_CAUSE_REG(grp)			(MV_GPP_REGS_BASE(grp) + 0x14)
 #define GPP_INT_MASK_REG(grp)			(MV_GPP_REGS_BASE(grp) + 0x18)
 #define GPP_INT_LVL_REG(grp)			(MV_GPP_REGS_BASE(grp) + 0x1C)
+#define GPP_BLINK_SEL_REG(grp)			(MV_GPP_REGS_BASE(grp) + 0x20)
 
 #define GPP_BLINK_CNTR_ON(idx)			(MV_GPP_REGS_BASE(0) + 0xC0 + (idx) * 8)
 #define GPP_BLINK_CNTR_OFF(idx)			(MV_GPP_REGS_BASE(0) + 0xC4 + (idx) * 8)

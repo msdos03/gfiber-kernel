@@ -111,12 +111,16 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define ONU_ASIC_REV_Z2                   (0x1)
 #define ONU_ASIC_REV_A0                   (0x2)
 
+// Used in Intelbras Board
+#define PON_ALARM_LED
+
 /* Enums
 ------------------------------------------------------------------------------*/
 typedef enum
 {
   ONU_PON_SYS_LED       = 0,
-  ONU_PON_SYNC_LED      = 1
+  ONU_PON_SYNC_LED      = 1,
+  ONU_PON_ALARM_LED      = 2
 }E_OnuPonLedTypes;
 
 typedef enum
@@ -186,3 +190,6 @@ void      onuPonShutDownCallbackFunc(MV_U32 state);
 ------------------------------------------------------------------------------*/
 
 #endif /* _ONU_PON_BOARD_H */
+
+
+

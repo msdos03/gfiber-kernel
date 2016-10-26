@@ -3554,6 +3554,7 @@ tpm_error_code_t tpm_xlate_uni_2_switch_port (uint32_t		  owner_id,
 	return (ret_code);
 }
 EXPORT_SYMBOL(tpm_xlate_uni_2_switch_port);
+
 /*******************************************************************************
 * tpm_active_tcont()
 *
@@ -3581,6 +3582,7 @@ tpm_error_code_t tpm_active_tcont(uint32_t tcont_num)
 	return ret_code;
 }
 EXPORT_SYMBOL(tpm_active_tcont);
+
 /*******************************************************************************
 * tpm_deactive_tcont()
 *
@@ -3608,3 +3610,86 @@ tpm_error_code_t tpm_deactive_tcont(uint32_t tcont_num)
 }
 EXPORT_SYMBOL(tpm_deactive_tcont);
 
+#ifdef CONFIG_MV_INCLUDE_PON
+/*******************************************************************************
+* tpm_register_pon_callback()
+*
+* DESCRIPTION: Function used to register PON callback functions.
+*
+* INPUTS:
+* pon_func: PON callback function
+*
+* OUTPUTS:
+* None
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*******************************************************************************/
+int tpm_register_pon_callback(PON_SHUTDOWN_FUNC pon_func)
+{
+	tpm_error_code_t ret_code;
+
+	ret_code = tpm_db_register_pon_callback(pon_func);
+
+	return ret_code;
+}
+EXPORT_SYMBOL(tpm_register_pon_callback);
+#endif
+
+/*******************************************************************************
+* tpm_set_drop_precedence_mode()
+*
+* DESCRIPTION:	  Function used to set drop precedence mode.
+*
+* INPUTS:
+* tcont_num
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_set_drop_precedence_mode(uint32_t owner_id,
+				tpm_drop_precedence_t mode)
+{
+	tpm_error_code_t ret_code;
+	/* set drop precedence mode */
+	ret_code = tpm_proc_set_drop_precedence_mode(owner_id, mode);
+
+	return ret_code;
+}
+EXPORT_SYMBOL(tpm_set_drop_precedence_mode);
+
+/*******************************************************************************
+* tpm_get_drop_precedence_mode()
+*
+* DESCRIPTION:	  Function used to get drop precedence mode.
+*
+* INPUTS:
+* tcont_num
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_get_drop_precedence_mode(uint32_t owner_id,
+				tpm_drop_precedence_t *mode)
+{
+	tpm_error_code_t ret_code;
+
+	/* set drop precedence mode */
+	ret_code = tpm_proc_get_drop_precedence_mode(owner_id, mode);
+
+	return ret_code;
+}
+EXPORT_SYMBOL(tpm_get_drop_precedence_mode);

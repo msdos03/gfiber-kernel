@@ -732,6 +732,16 @@ typedef struct {
 }tpm_db_hot_swap_bak_db_t;
 
 typedef struct {
+	uint32_t valid;
+	uint32_t rule_index;
+} tpm_db_drop_precedence_rule_entry_t;
+
+typedef struct {
+	tpm_drop_precedence_t mode;
+	tpm_db_drop_precedence_rule_entry_t drop_rule[TPM_MAX_NUM_DROP_PRECEDENCE];
+} tpm_db_drop_precedence_t;
+
+typedef struct {
 	tpm_db_ctc_cm_enable_t enable;
 	tpm_db_ctc_cm_ipv6_parse_win_t ipv6_parse_win;
 	/* init value from XML */
@@ -793,6 +803,8 @@ typedef struct {
 #if 0
 	tpm_db_api_group_t api_groups[TPM_MAX_API_TYPES];
 #endif
+
+	tpm_db_drop_precedence_t drop_precedence;
 
 	/* API Ranges and Entries */
 	tpm_db_api_section_t api_section[TPM_MAX_NUM_API_SECTIONS];
@@ -1069,6 +1081,14 @@ int32_t tpm_db_api_section_ent_tbl_get(tpm_api_sections_t api_sec,
 
 int32_t tpm_db_api_section_entry_add(tpm_api_sections_t api_section, int32_t new_last_valid);
 int32_t tpm_db_api_entries_area_reset(void);
+
+int32_t tpm_db_drop_precedence_mode_set(tpm_drop_precedence_t mode);
+int32_t tpm_db_drop_precedence_mode_get(tpm_drop_precedence_t *mode);
+int32_t tpm_db_drop_precedence_rule_set(uint32_t rule_index);
+int32_t tpm_db_drop_precedence_rule_delete(uint32_t rule_index);
+int32_t tpm_db_drop_precedence_rule_get(uint32_t index,
+	tpm_db_drop_precedence_rule_entry_t *rule_entry);
+int32_t tpm_db_drop_precedence_db_reset(void);
 
 /* API Entry */
 int32_t tpm_db_api_entry_set(tpm_api_sections_t api_section,
@@ -1447,6 +1467,11 @@ int32_t tpm_db_gmac_uni_egr_rate_limit_set(tpm_src_port_type_t port, uint32_t ra
 int32_t tpm_db_gmac_uni_egr_rate_limit_get(tpm_src_port_type_t port, uint32_t *rate_limit);
 int32_t tpm_db_gmac_lpk_uni_ingr_rate_limit_set(tpm_src_port_type_t port, tpm_db_gmac_lpk_uni_ingr_rate_limit_t rate_limit);
 int32_t tpm_db_gmac_lpk_uni_ingr_rate_limit_get(tpm_src_port_type_t port, tpm_db_gmac_lpk_uni_ingr_rate_limit_t *rate_limit);
+
+#ifdef CONFIG_MV_INCLUDE_PON
+int32_t tpm_db_register_pon_callback(PON_SHUTDOWN_FUNC pon_func);
+int32_t tpm_db_get_pon_callback(PON_SHUTDOWN_FUNC *pon_func);
+#endif
 
 #ifdef __cplusplus
 }

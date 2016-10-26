@@ -104,6 +104,10 @@ typedef enum tpm_api_ownership_error {
 /* Maximum number of parallel running API calls to a certain API */
 #define TPM_MAX_PARALLEL_API_CALLS	(4)
 
+#ifdef CONFIG_MV_INCLUDE_PON
+typedef void (*PON_SHUTDOWN_FUNC)(unsigned int state); /* prototype for PON shut down function */
+#endif
+
 /******************************************************************************/
 /********************************** Packet Processing *************************/
 /******************************************************************************/
@@ -345,6 +349,16 @@ typedef uint32_t tpm_pkt_mod_bm_t;	/*ex: TPM_MAC_DA_SET | TPM_MAC_SA_SET .... */
 #define     TPM_INT_MC_MOD        (0x0010)
 
 typedef uint32_t tpm_pkt_mod_int_bm_t;  /*ex: TPM_INT_L4_TCP | TPM_INT_L4_UDP ....*/
+
+
+typedef enum {
+	TPM_DROP_PRECEDENCE_NONE,
+	TPM_DROP_PRECEDENCE_8P0D,
+	TPM_DROP_PRECEDENCE_7P1D,
+	TPM_DROP_PRECEDENCE_6P2D,
+	TPM_DROP_PRECEDENCE_5P3D,
+	TPM_DROP_PRECEDENCE_DEI
+} tpm_drop_precedence_t;
 
 /****************************************************************/
 /*          L2/L3 ACL rule related structures                   */
@@ -1166,6 +1180,7 @@ typedef enum {
 	TPM_PNC_MULTI_LPBK,
 	TPM_PNC_VIRT_UNI,
 	TPM_PNC_LOOP_DET_US,
+	TPM_PNC_DROP_PRECEDENCE,
 	TPM_PNC_L2_MAIN,
 	TPM_PNC_ETH_TYPE,
 	TPM_PNC_IGMP,

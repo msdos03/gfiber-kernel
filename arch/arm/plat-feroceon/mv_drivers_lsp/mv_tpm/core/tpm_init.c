@@ -89,7 +89,7 @@ extern spinlock_t tpmModLock;
 extern spinlock_t tpmTcamAgingLock;
 
 /* Local definitions */
-#define TPM_L2_BASE_LUID   0
+#define TPM_L2_BASE_LUID   1
 #define TPM_L3_BASE_LUID   (TPM_L2_BASE_LUID + 1)
 #define TPM_IPV4_BASE_LUID (TPM_L3_BASE_LUID + 1)
 #define TPM_IPV6_BASE_LUID (TPM_IPV4_BASE_LUID + 3)
@@ -153,31 +153,32 @@ static tpm_pnc_range_lookup_map_t pnc_range_lookup_tbl[TPM_MAX_NUM_RANGES] = {
 	{TPM_PNC_MULTI_LPBK, 0, 0, 1},
 	{TPM_PNC_VIRT_UNI, 0, 0, 1},
 	{TPM_PNC_LOOP_DET_US, 0, 0, 1},
-	{TPM_PNC_L2_MAIN, 0, 1, 1},
-	{TPM_PNC_ETH_TYPE, 1, 1, 1},
-	{TPM_PNC_IGMP, 2, 0, 1},
-	{TPM_PNC_IPV4_MC_DS, 2, 0, 1},
-	{TPM_PNC_IPV4_MAIN, 2, 1, 1},
-	{TPM_PNC_IPV4_TCP_FLAG, 3, 1, 1},
-	{TPM_PNC_TTL, 4, 1, 1},
-	{TPM_PNC_IPV4_PROTO, 5, 0, 1},
-	{TPM_PNC_IPV4_FRAG, 5, 0, 1},
-	{TPM_PNC_IPV4_LEN, 5, 1, 1},
-	{TPM_PNC_IPV6_NH, 6, 1, 1},
-	{TPM_PNC_IPV6_L4_MC_DS, 7, 1, 1},
-	{TPM_PNC_IPV6_TCP_FLAG, 7, 1, 1},
-	{TPM_PNC_IPV6_L4, 7, 1, 1},
-	{TPM_PNC_IPV6_HOPL, 8, 1, 1},
-	{TPM_PNC_IPV6_MC_SIP, 8, 1, 1},
-	{TPM_PNC_IPV6_GEN, 8, 1, 1},
-	{TPM_PNC_IPV6_MC_DS, 9, 1, 1},
-	{TPM_PNC_IPV6_DIP, 9, 1, 1},
-	{TPM_PNC_CNM_IPV4_PRE, 10, 1, 1},
+	{TPM_PNC_DROP_PRECEDENCE, 0, 0, 1},
+	{TPM_PNC_L2_MAIN, 1, 1, 1},
+	{TPM_PNC_ETH_TYPE, 2, 1, 1},
+	{TPM_PNC_IGMP, 3, 0, 1},
+	{TPM_PNC_IPV4_MC_DS, 3, 0, 1},
+	{TPM_PNC_IPV4_MAIN, 3, 1, 1},
+	{TPM_PNC_IPV4_TCP_FLAG, 4, 1, 1},
+	{TPM_PNC_TTL, 5, 1, 1},
+	{TPM_PNC_IPV4_PROTO, 6, 0, 1},
+	{TPM_PNC_IPV4_FRAG, 6, 0, 1},
+	{TPM_PNC_IPV4_LEN, 6, 1, 1},
+	{TPM_PNC_IPV6_NH, 7, 1, 1},
+	{TPM_PNC_IPV6_L4_MC_DS, 8, 1, 1},
+	{TPM_PNC_IPV6_TCP_FLAG, 8, 1, 1},
+	{TPM_PNC_IPV6_L4, 8, 1, 1},
+	{TPM_PNC_IPV6_HOPL, 9, 1, 1},
+	{TPM_PNC_IPV6_MC_SIP, 9, 1, 1},
+	{TPM_PNC_IPV6_GEN, 9, 1, 1},
+	{TPM_PNC_IPV6_MC_DS, 10, 1, 1},
+	{TPM_PNC_IPV6_DIP, 10, 1, 1},
+	{TPM_PNC_CNM_IPV4_PRE, 11, 1, 1},
 	/* The range 'TPM_PNC_CNM_MAIN' spans over two lookup ids.
 		LU_ID_CNM_BASE := 11
 		LU_ID_L2_CNM   := LU_ID_CNM_BASE+0[/11]
 		LU_ID_IPV4_CNM := LU_ID_CNM_BASE+1[/12] */
-	{TPM_PNC_CNM_MAIN, 11, 1, 1},
+	{TPM_PNC_CNM_MAIN, 12, 1, 1},
 	{TPM_PNC_CATCH_ALL, 0, 0, 1},
 
 };
@@ -686,8 +687,7 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 			profile[0] = ESC_OPT_RGMIIA_MAC0 | ESC_OPT_GEPHY_MAC1;
 		if (DB_88F6601_BP_ID == mvBoardIdGet())
 			profile[0] = ESC_OPT_SGMII | ESC_OPT_GEPHY_MAC0 | ESC_OPT_LP_SERDES_FE_GE_PHY;
-		if ((RD_88F6601_MC_ID == mvBoardIdGet())
-			|| (GFLT300_ID == mvBoardIdGet()) || (GFLT200_ID == mvBoardIdGet()) || (GFLT110_ID == mvBoardIdGet()))
+		if (RD_88F6601_MC_ID == mvBoardIdGet())
 			profile[0] = ESC_OPT_GEPHY_MAC0;
 		break;
 	case TPM_PON_WAN_G0_G1_DUAL_LAN:
@@ -698,7 +698,7 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 	off += sprintf(buff+off, "\nProfile supported options:\n");
 	for (i = 0; profile[i]; i++) {
 		off += sprintf(buff+off, "\t");
-		for (j = 0; j<32; j++) {
+		for (j = 0; j < (sizeof(opt_str_tlb)/sizeof(opt_str_tlb[0])); j++) {
 			if (profile[i] & (1<<j)) {
 				off += sprintf(buff+off, "%s ", opt_str_tlb[j]);
 			}
@@ -4128,6 +4128,9 @@ int32_t tpm_init_system_mib_reset(tpm_reset_level_enum_t reset_type)
 	ret_code = tpm_fc_engine_init();
 	IF_ERROR(ret_code);
 
+	ret_code = tpm_init_qos();
+	IF_ERROR(ret_code);
+
 	return (TPM_OK);
 }
 
@@ -4156,6 +4159,30 @@ int32_t tpm_init_vlan_etype_set(void)
 		}
 
 	}
+
+	return (ret_code);
+}
+
+/*******************************************************************************
+* tpm_init_qos()
+*
+* DESCRIPTION:	    Set drop precedence for QoS
+*
+* INPUTS:
+
+* OUTPUTS:
+*
+* RETURNS:
+*
+*******************************************************************************/
+int32_t tpm_init_qos(void)
+{
+	int32_t ret_code = TPM_OK;
+
+	ret_code = tpm_proc_set_drop_precedence_mode(0, TPM_DROP_PRECEDENCE_8P0D);
+	IF_ERROR(ret_code);
+	ret_code = tpm_proc_set_drop_precedence_mode(0, TPM_DROP_PRECEDENCE_NONE);
+	IF_ERROR(ret_code);
 
 	return (ret_code);
 }

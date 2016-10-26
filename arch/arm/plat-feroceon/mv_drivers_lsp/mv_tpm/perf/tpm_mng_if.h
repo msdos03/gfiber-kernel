@@ -130,6 +130,7 @@ typedef enum tpm_ioctl_cmd_type
     MV_TPM_IOCTL_GET_API_G_OWNER,
     MV_TPM_IOCTL_DEL_SECTION,
     MV_TPM_IOCTL_GET_SECTION_SIZE,
+    MV_TPM_IOCTL_SET_DROP_PRECEDENCE_MODE,
     MV_TPM_IOCTL_ADD_L2_ACL_RULE,
     MV_TPM_IOCTL_ADD_L3_ACL_RULE,
     MV_TPM_IOCTL_ADD_IPv4_ACL_RULE,
@@ -397,6 +398,7 @@ typedef struct
     uint32_t                  owner_id;
     tpm_api_type_t            api_type;
     tpm_api_ownership_error_t api_ownership_error;
+    tpm_drop_precedence_t     drop_pre_mode;
     int32_t                   section_size;
     uint8_t                   section_dir;
     uint8_t                   dummy1;

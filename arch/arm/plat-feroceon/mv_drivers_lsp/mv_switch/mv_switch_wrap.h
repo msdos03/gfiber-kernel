@@ -31,7 +31,7 @@ disclaimer.
 
 #define SW_QOS_NUM_OF_QUEUES   (4)
 
-#define SW_MAX_VLAN_NUM        (4096)
+#define SW_MAX_VLAN_NUM        (4095)
 #define SW_MAX_PORTS_NUM       (7)
 
 #define SW_PORT_NOT_BELONG     (0)

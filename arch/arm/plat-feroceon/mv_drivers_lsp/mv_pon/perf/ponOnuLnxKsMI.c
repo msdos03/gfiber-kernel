@@ -253,6 +253,7 @@ int mvPonCdevIoctl(struct inode *inode, struct file *filp, unsigned int cmd, uns
 				goto ioctlErr;
 			}
 			ponDev.drvMode = drvMode;
+
 		} else {
 			ret = get_user(drvMode, (E_PonDriverMode __user *)arg);
 			if (ret != 0) {

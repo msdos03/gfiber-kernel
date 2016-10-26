@@ -224,6 +224,7 @@ typedef uint32_t tpm_pncl_parse_bm_t;
 #define                 TPM_PNC_RI_L3_OFF_BIT           (3)
 #define                 TPM_PNC_RI_L3_FF_BIT            (5)
 #define                 TPM_PNC_RI_MAC_LEARN_BIT        (9)/*Just for media convert MAC learning*/
+#define 		TPM_PNC_RI_COLOR_BIT	        (9)
 #define                 TPM_PNC_RI_MC_BIT               (10)
 #define                 TPM_PNC_RI_BC_BIT               (11)
 #define                 TPM_PNC_RI_UC_BIT               (12)

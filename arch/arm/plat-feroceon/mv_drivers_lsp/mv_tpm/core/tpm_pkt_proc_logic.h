@@ -930,6 +930,9 @@ tpm_error_code_t tpm_acl_rcvr_func_ipv6_nh(uint32_t owner_id, tpm_db_api_entry_t
 tpm_error_code_t tpm_acl_rcvr_func_ipv6_l4(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
 tpm_error_code_t tpm_acl_rcvr_func_cnm(uint32_t owner_id, tpm_db_api_entry_t *api_data, uint32_t rule_idx_updt_en);
 
+tpm_error_code_t tpm_proc_set_drop_precedence_mode(uint32_t owner_id, tpm_drop_precedence_t mode);
+tpm_error_code_t tpm_proc_get_drop_precedence_mode(uint32_t owner_id, tpm_drop_precedence_t *mode);
+
 #ifdef __cplusplus
 }
 #endif

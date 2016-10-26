@@ -335,7 +335,6 @@ MV_STATUS mvGppValueSet(MV_U32 group, MV_U32 mask, MV_U32 value)
 			return MV_ERROR;
 		}
 	}
-
 	gppRegSet(group, GPP_DATA_OUT_REG(group), mask, value);
 
 	return MV_OK;

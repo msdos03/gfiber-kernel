@@ -236,7 +236,6 @@ void sfs_tpm_cfg_set_l2_rule_add  (const char *buf, size_t len)
         }
         else
         {
-            tpmcfg_l2_prim_key_entry_t *pentry;
             rule_action.next_phase = nextphase;
             rule_action.pkt_act    = action;
 
@@ -260,33 +259,7 @@ void sfs_tpm_cfg_set_l2_rule_add  (const char *buf, size_t len)
                                        &pkt_mod,
                                        pkt_mod_bm,
                                        &rule_action)) == TPM_RC_OK)
-            {
-                if ((pentry = find_tpm_l2_prim_key_entry_by_owner_id_and_rule_num(ownerid, rulenum)) == 0)
-                    pentry = find_free_tpm_l2_prim_key_entry();
-
-                if (pentry == 0)
-                {
-                    printk(KERN_INFO "L2 rule DB full\n");
-                }
-                else
-                {
-                    pentry->action = action;
-                    strcpy(pentry->frwd_name, frwdname);
-                    strcpy(pentry->key_name, l2keyname);
-                    strcpy(pentry->mod_name, modname);
-                    strcpy(pentry->next_phase, nextphase_str);
-                    pentry->owner_id = ownerid;
-                    pentry->parse_rule_bm = parserulebm;
-                    pentry->parse_flags_bm = parseflagbm;
-                    pentry->pkt_mod_bm = pkt_mod_bm;
-                    pentry->rule_num = rulenum;
-                    pentry->rule_idx = rule_idx;
-                    strcpy(pentry->src_port, srcport_str);
-                    pentry->used = 1;
-                }
-
                 PR_RULE_IDX(rule_idx)
-            }
             else
             {
                 printk(KERN_INFO "%s: tpm_add_l2_rule failed, rc[%d] - %s\n", __FUNCTION__, rc, get_tpm_err_str(rc));
@@ -1443,7 +1416,7 @@ void sfs_tpm_cfg_set_no_rule_add_l2  (const char *buf, size_t len)
     } noruleaddl2_parm_indx_t;
     // shell line parsing
     uint32_t                 ownerid;
-    uint32_t                 rule_num;
+    uint32_t                 rule_idx;
     int                      parsedargs;
     int                      numparms;
     //Used in API call
@@ -1457,7 +1430,7 @@ void sfs_tpm_cfg_set_no_rule_add_l2  (const char *buf, size_t len)
     else
     {
         // Get parameters
-        parsedargs = sscanf(buf, "%d %d", &ownerid, &rule_num);
+        parsedargs = sscanf(buf, "%d %d", &ownerid, &rule_idx);
         //printk(KERN_INFO "len=%d, parsedargs=%d. ownerid[%d], rule_idx[%d]\n",
         //       len, parsedargs, ownerid, rule_idx);
 
@@ -1468,24 +1441,14 @@ void sfs_tpm_cfg_set_no_rule_add_l2  (const char *buf, size_t len)
         }
         else
         {
-            tpmcfg_l2_prim_key_entry_t *pentry;
-            pentry = find_tpm_l2_prim_key_entry_by_owner_id_and_rule_num(ownerid, rule_num);
-            if (pentry != 0) {
-                if ((rc = _tpm_del_l2_rule(ownerid, pentry->rule_idx)) == TPM_RC_OK)
-                {
-                    printk(KERN_INFO "OK\n");
-                }
-                else
-                {
-                    printk(KERN_INFO "%s: tpm_del_l2_prim_rule failed, rc[%d] - %s\n",
-                           __FUNCTION__, rc, get_tpm_err_str(rc));
-                }
-                pentry->used = 0;
+            if ((rc = _tpm_del_l2_rule(ownerid,
+                                       rule_idx)) == TPM_RC_OK)
+            {
+                printk(KERN_INFO "OK\n");
             }
             else
             {
-                printk("%s: Table l2_rule does not have entry owner_id[%d], rule_num[%d]\n",
-                       __FUNCTION__, ownerid, rule_num);
+                printk(KERN_INFO "%s: tpm_del_l2_prim_rule failed, rc[%d] - %s\n", __FUNCTION__, rc, get_tpm_err_str(rc));
             }
         }
     }
@@ -6929,6 +6892,90 @@ void sfs_tpm_cfg_fc_enable(const char *buf, size_t len)
 		}
 	}
 }
+
+/*******************************************************************************
+* sfs_tpm_drop_pre_set
+*
+* DESCRIPTION:
+*		This function configures drop precedence mode
+* INPUTS:
+*	buf	- Shell parameters as char buffer
+*	len	- Number of characters in buffer
+*
+*******************************************************************************/
+void sfs_tpm_drop_pre_set(const char *buf, size_t len)
+{
+	typedef enum {
+		mode = 0,
+		mode_max
+	} drop_pre_parm_indx_t;
+	/* shell line parsing */
+	uint32_t drop_pre;
+	int parsedargs;
+	int numparms;
+	MV_STATUS ret_code;
+
+	numparms = count_parameters(buf);
+	if (numparms != mode_max)
+		parm_error_completion(numparms, mode_max, buf, sfs_help_drop_pre);
+	else {
+		/* Get parameters */
+		parsedargs = sscanf(buf, "%d", &drop_pre);
+
+		if (parsedargs != numparms)
+			printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);
+		else {
+			ret_code = tpm_set_drop_precedence_mode(0, drop_pre);
+			if (ret_code != MV_OK)
+				printk(KERN_INFO "%s: failed!\n", __func__);
+			else
+				printk(KERN_INFO "OK\n");
+		}
+	}
+}
+
+/*******************************************************************************
+* sfs_tpm_drop_pre_show
+*
+* DESCRIPTION:
+*		This function show drop precedence mode
+* INPUTS:
+*	buf	- Shell parameters as char buffer
+*	len	- Number of characters in buffer
+*
+*******************************************************************************/
+void sfs_tpm_drop_pre_show(const char *buf, size_t len)
+{
+	typedef enum {
+		mode = 0,
+		mode_max
+	} drop_pre_parm_indx_t;
+	/* shell line parsing */
+	uint32_t drop_pre;
+	int parsedargs;
+	int numparms;
+	MV_STATUS ret_code;
+	tpm_drop_precedence_t drop_pre_mode;
+
+	numparms = count_parameters(buf);
+	if (numparms != mode_max)
+		parm_error_completion(numparms, mode_max, buf, sfs_help_drop_pre);
+	else {
+		/* Get parameters */
+		parsedargs = sscanf(buf, "%d", &drop_pre);
+
+		if (parsedargs != numparms)
+			printk(KERN_INFO "Parse failure - %d/%d parameters were parsed\n", parsedargs, numparms);
+		else {
+			ret_code = tpm_get_drop_precedence_mode(0, &drop_pre_mode);
+			if (ret_code != MV_OK)
+				printk(KERN_INFO "%s: failed!\n", __func__);
+			else
+				printk(KERN_INFO "OK Drop precedence mode %d\n", drop_pre_mode);
+		}
+	}
+}
+
 
 
 #ifdef CONFIG_MV_TPM_SFS_2_IOCTL

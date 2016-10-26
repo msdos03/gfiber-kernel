@@ -180,6 +180,9 @@ extern void sfs_tpm_cfg_set_fc_period(const char *buf, size_t len);
 extern void sfs_tpm_cfg_set_fc_oneshot(const char *buf, size_t len);
 extern void sfs_tpm_cfg_fc_enable(const char *buf, size_t len);
 
+extern void sfs_tpm_drop_pre_set(const char *buf, size_t len);
+extern void sfs_tpm_drop_pre_show(const char *buf, size_t len);
+
 extern char *ipv6_gen_key_empty_name;
 extern char *ipv6_dip_key_empty_name;
 extern char *ipv6_l4_key_empty_name;

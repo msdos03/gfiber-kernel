@@ -145,6 +145,7 @@ extern int sfs_help_flush_vtu               (char *buf);
 extern int sfs_help_flush_atu               (char *buf);
 extern int sfs_help_mac_learn_rule_add      (char *buf);
 extern int sfs_help_mac_learn_def_act_set   (char* buf);
+extern int sfs_help_drop_pre(char* buf);
 #else
 
 #define  sfs_tpm_cfg_index                NULL
@@ -200,6 +201,7 @@ extern int sfs_help_mac_learn_def_act_set   (char* buf);
 #define sfs_help_flush_atu           NULL
 #define sfs_help_mac_learn_rule_add       NULL
 #define sfs_help_mac_learn_def_act_set    NULL
+#define sfs_help_drop_pre                 NULL
 #define sfs_help_ds_load_balance_rule     NULL
 
 

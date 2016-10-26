@@ -341,7 +341,7 @@ static int sflash_lock (struct mtd_info *mtd, loff_t ofs, sflash_size_t len)
 	}
 	sflash_enable_irqs(flags, sflash_in_irq);
 	
-	DB(printk("\nNotice: Serial SPI flash (%s) lock per sector is not supported!\n        Locking the whole device.", mtd->name));
+	printk("\nNotice: Serial SPI flash (%s) lock per sector is not supported!\n        Locking the whole device.", mtd->name);
 		
 	return 0;
 }
@@ -364,7 +364,7 @@ static int sflash_unlock (struct mtd_info *mtd, loff_t ofs, sflash_size_t len)
 	}
 	sflash_enable_irqs(flags, sflash_in_irq);
 		
-	DB(printk("\nNotice: Serial SPI flash (%s) unlock per sector is not supported!\n        Unlocking the whole device.", mtd->name));
+	printk("\nNotice: Serial SPI flash (%s) unlock per sector is not supported!\n        Unlocking the whole device.", mtd->name);
 	return 0;
 }
 

@@ -439,7 +439,9 @@ int32_t tpm_db_mac_func_set(void)
 			   gmac1 = 0;
 	int32_t ret_code;
 	tpm_db_ds_mac_based_trunk_enable_t ds_mac_based_trunk_enable;
-
+#ifdef CONFIG_MV_INCLUDE_PON
+	PON_SHUTDOWN_FUNC pon_callback_func = NULL;
+#endif
 	switch(tpm_db.eth_cmplx_profile)
 	{
 	case TPM_PON_WAN_DUAL_MAC_INT_SWITCH:
@@ -562,6 +564,18 @@ int32_t tpm_db_mac_func_set(void)
 	IF_ERROR(ret_code);
 	ret_code = tpm_db_gmac_func_set(TPM_ENUM_GMAC_1, gmac1);
 	IF_ERROR(ret_code);
+
+#ifdef CONFIG_MV_INCLUDE_PON
+	/* shut down or enable PON */
+	ret_code = tpm_db_get_pon_callback(&pon_callback_func);
+	IF_ERROR(ret_code);
+	if (pon_callback_func) {
+		if (pon == TPM_GMAC_FUNC_WAN)
+			pon_callback_func(1);
+		else
+			pon_callback_func(0);
+	}
+#endif
 
 	return (TPM_OK);
 }
@@ -8449,7 +8463,7 @@ void tpm_db_mod2_show_chain_info_entries(tpm_gmacs_enum_t gmac_port, tpm_chain_t
 	if (gmac_port >= TPM_MAX_NUM_GMACS)
 		return;
 
-	if (chain_type > TPM_CHAIN_TYPE_MAX || chain_type == TPM_CHAIN_TYPE_NONE)
+	if (chain_type >= TPM_CHAIN_TYPE_MAX || chain_type == TPM_CHAIN_TYPE_NONE)
 		return;
 
 	if (tpm_db_mod2_chain_cfg[chain_type].total_num == 0)
@@ -9980,6 +9994,92 @@ int32_t tpm_db_init_ipv6_5t_flow_reset(void)
 
 	return TPM_DB_OK;
 }
+
+int32_t tpm_db_drop_precedence_mode_set(tpm_drop_precedence_t mode)
+{
+	tpm_db.drop_precedence.mode = mode; 
+	return TPM_DB_OK;
+}
+
+int32_t tpm_db_drop_precedence_mode_get(tpm_drop_precedence_t *mode)
+{
+	*mode = tpm_db.drop_precedence.mode; 
+	return TPM_DB_OK;
+}
+
+int32_t tpm_db_drop_precedence_rule_set(uint32_t rule_index)
+{
+	uint32_t index;
+	tpm_db_drop_precedence_rule_entry_t *rule_entry;
+
+	for (index = 0; index < TPM_MAX_NUM_DROP_PRECEDENCE; index++) {
+		rule_entry = &tpm_db.drop_precedence.drop_rule[index];
+		if (rule_entry->valid == TPM_FALSE)
+			break;
+	}
+
+	if(index >= TPM_MAX_NUM_DROP_PRECEDENCE) {
+		TPM_OS_ERROR(TPM_DB_MOD, "PnC partition for drop precedence is full %d\n", rule_index);
+		return TPM_DB_ERR_DB_TBL_FULL;
+	}
+
+	rule_entry->rule_index	= rule_index;
+	rule_entry->valid	= TPM_TRUE;
+
+	return TPM_DB_OK;
+}
+
+int32_t tpm_db_drop_precedence_rule_delete(uint32_t rule_index)
+{
+	uint32_t index;
+	tpm_db_drop_precedence_rule_entry_t *rule_entry;
+	
+	for (index = 0; index < TPM_MAX_NUM_DROP_PRECEDENCE; index++) {
+		rule_entry = &tpm_db.drop_precedence.drop_rule[index];
+		if ((rule_entry->valid == TPM_TRUE) &&
+		    (rule_entry->rule_index == rule_index))
+			break;
+	}
+
+	if(index >= TPM_MAX_NUM_DROP_PRECEDENCE) {
+		TPM_OS_ERROR(TPM_DB_MOD, "Did not find drop precedence PnC rule for index %d\n", rule_index);
+		return TPM_DB_ERR_REC_NOT_EXIST;
+	}
+
+	memset(rule_entry, 0, sizeof(tpm_db_drop_precedence_rule_entry_t));
+	rule_entry->valid = TPM_FALSE;
+	rule_entry->rule_index = 0;
+
+	return TPM_DB_OK;
+}
+
+int32_t tpm_db_drop_precedence_rule_get(uint32_t index,
+	tpm_db_drop_precedence_rule_entry_t *rule_entry)
+{
+	if(index >= TPM_MAX_NUM_DROP_PRECEDENCE) {
+		TPM_OS_ERROR(TPM_DB_MOD, "The index(%d) >= Maximium number(%d)\n",
+			index, index);
+		return TPM_DB_ERR_REC_NOT_EXIST;
+	}
+
+	rule_entry->valid = tpm_db.drop_precedence.drop_rule[index].valid;
+	rule_entry->rule_index = tpm_db.drop_precedence.drop_rule[index].rule_index;
+
+	return TPM_DB_OK;
+}
+
+int32_t tpm_db_drop_precedence_db_reset(void)
+{
+	uint32_t index;
+
+	memset(&tpm_db.drop_precedence, 0, sizeof(tpm_db.drop_precedence));
+	for (index = 0; index < TPM_MAX_NUM_DROP_PRECEDENCE; index++) {
+		tpm_db.drop_precedence.drop_rule[index].valid = TPM_FALSE;
+	}
+
+	return TPM_DB_OK;
+}
+
 int32_t tpm_db_ctc_cm_rule_set(tpm_src_port_type_t src_port,
 			       uint32_t precedence,
 			       tpm_parse_fields_t l2_parse_rule_bm,
@@ -10556,17 +10656,19 @@ int32_t tpm_db_find_ipv4_pre_filter_key(tpm_src_port_type_t src_port,
 					tpm_ipv4_acl_key_t *ipv4_key,
 					uint32_t *key_idx)
 {
-	tpm_db_cnm_ipv4_pre_filter_key_t *key = &tpm_db.ctc_cm_data.ipv4_pre_filter[src_port].key[0];
+	tpm_db_cnm_ipv4_pre_filter_key_t *key;
 	uint32_t i;
-
-	/*check param*/
-	if (key_idx == NULL || ipv4_key == NULL)
-		return (TPM_DB_ERR_INV_INPUT);
 
 	if(src_port >= TPM_MAX_NUM_UNI_PORTS) {
 		TPM_OS_ERROR(TPM_DB_MOD, "invalid input Src Port(%d)\n", src_port);
 		return TPM_DB_ERR_INV_INPUT;
 	}
+
+	key = &tpm_db.ctc_cm_data.ipv4_pre_filter[src_port].key[0];
+
+	/*check param*/
+	if (key_idx == NULL || ipv4_key == NULL)
+		return (TPM_DB_ERR_INV_INPUT);
 
 	for (i = 0; i < TPM_DB_CNM_MAX_IPV4_PRE_FILTER_KEY_NUM; i++) {
 		if (key[i].valid == TPM_FALSE)
@@ -11022,6 +11124,58 @@ int32_t tpm_db_gmac_lpk_uni_ingr_rate_limit_get(tpm_src_port_type_t port, tpm_db
 
 	return (TPM_DB_OK);
 }
+
+#ifdef CONFIG_MV_INCLUDE_PON
+static PON_SHUTDOWN_FUNC gb_pon_callback_func = NULL;
+
+/*******************************************************************************
+* tpm_db_register_pon_callback()
+*
+* DESCRIPTION: Function used to register PON callback functions.
+*
+* INPUTS:
+* pon_func: PON callback function
+*
+* OUTPUTS:
+* None
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*******************************************************************************/
+int32_t tpm_db_register_pon_callback(PON_SHUTDOWN_FUNC pon_func)
+{
+	tpm_error_code_t ret_code = TPM_OK;
+
+	gb_pon_callback_func = pon_func;
+
+	return ret_code;
+}
+
+/*******************************************************************************
+* tpm_db_get_pon_callback()
+*
+* DESCRIPTION: Function used to get PON callback functions.
+*
+* INPUTS:
+* None
+*
+* OUTPUTS:
+* pon_func: PON callback function
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*******************************************************************************/
+int32_t tpm_db_get_pon_callback(PON_SHUTDOWN_FUNC *pon_func)
+{
+	tpm_error_code_t ret_code = TPM_OK;
+
+	*pon_func = gb_pon_callback_func;
+
+	return ret_code;
+}
+#endif
 
 /*******************************************************************************
 * tpm_db_init()

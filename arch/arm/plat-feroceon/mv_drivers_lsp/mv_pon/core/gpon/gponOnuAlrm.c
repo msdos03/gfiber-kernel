@@ -127,10 +127,8 @@ void onuGponAlarmTblInit (void)
          ONU_GPON_ALARM_OFF,
          sizeof (S_OnuGponAlarmTbl));
 
-  /* Work around a bug where the Marvell code does not clear the LOS alarm
-   * correctly after the board boots. The code will correctly set LOS after boot
-   * if there is a legitimate LOS alarm. */
-  onuGponApmTbl_s.onuGponAlarmTbl_s.onuGponAlarmTbl[ONU_GPON_ALARM_LOS]  = ONU_GPON_ALARM_OFF;
+  /* set alarms on as default only for LOS, LOF, and LCDG */
+  onuGponApmTbl_s.onuGponAlarmTbl_s.onuGponAlarmTbl[ONU_GPON_ALARM_LOS]  = ONU_GPON_ALARM_ON;
   onuGponApmTbl_s.onuGponAlarmTbl_s.onuGponAlarmTbl[ONU_GPON_ALARM_LOF]  = ONU_GPON_ALARM_ON;
 }
 
@@ -486,6 +484,17 @@ void onuGponAlarmProcess(void)
 
     l_onuGponPreviousAlarmState = l_onuGponCurrentAlarmState;
   }
+#ifdef  PON_ALARM_LED
+  // PM: Generate PON alarm signal for Intelbras
+  if((l_onuGponCurrentAlarmState & ONU_GPON_ALARM_LOS_LOC) == 0)
+  {
+	  onuPonLedHandler(ONU_PON_ALARM_LED, ACTIVE_LED_OFF);
+  }
+  else
+  {
+	  onuPonLedHandler(ONU_PON_ALARM_LED, ACTIVE_LED_ON);
+  }
+#endif
 }
 
 /*******************************************************************************

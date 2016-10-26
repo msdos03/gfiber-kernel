@@ -4211,6 +4211,70 @@ tpm_error_code_t tpm_sw_set_static_multicast_mac
     uint8_t             static_mac[6]
 );
 
+#ifdef CONFIG_MV_INCLUDE_PON
+/*******************************************************************************
+* tpm_register_pon_callback()
+*
+* DESCRIPTION: Function used to register PON callback functions.
+*
+* INPUTS:
+* pon_func: PON callback function
+*
+* OUTPUTS:
+* None
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_db_err_t.
+*******************************************************************************/
+int tpm_register_pon_callback(PON_SHUTDOWN_FUNC pon_func);
+#endif
+
+/*******************************************************************************
+* tpm_set_drop_precedence_mode()
+*
+* DESCRIPTION:	  Function used to set drop precedence mode.
+*
+* INPUTS:
+* tcont_num
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_set_drop_precedence_mode
+(
+	uint32_t owner_id,
+	tpm_drop_precedence_t mode
+);
+
+/*******************************************************************************
+* tpm_get_drop_precedence_mode()
+*
+* DESCRIPTION:	  Function used to get drop precedence mode.
+*
+* INPUTS:
+* tcont_num
+*
+* OUTPUTS:
+*
+* RETURNS:
+* On success, the function returns TPM_OK. On error different types are returned
+* according to the case - see tpm_error_code_t.
+*
+* COMMENTS:
+*
+*******************************************************************************/
+tpm_error_code_t tpm_get_drop_precedence_mode
+(
+	uint32_t owner_id,
+	tpm_drop_precedence_t *mode
+);
 
 /* OLD API functions */
 #define tpm_add_l2_prim_acl_rule                            tpm_add_l2_rule

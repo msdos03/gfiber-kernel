@@ -210,6 +210,7 @@ void onuEponIsrRoutine(MV_U32 event, MV_U32 status)
 			mvPonPrint(PON_PRINT_DEBUG, PON_ISR_RAND_MODULE,
 				   "DEBUG: (%s:%d) ResetRandomStateMachine %s\n", __FILE_DESC__, __LINE__);
 			onuEponIsrResetRandomStateMachine();
+
 			/* Call link status callback function */
 			if (onuEponDbModeGet() == E_EPON_IOCTL_P2P_MODE)
 			{
@@ -235,7 +236,6 @@ void onuEponIsrRoutine(MV_U32 event, MV_U32 status)
 				onuEponDbModeSet(E_EPON_IOCTL_STD_MODE);
 			}
             
-
 			/* config PCS synchronization configuration  - FEC disabled */
 			mvOnuEponMacPcsDelaySet(0x1C58);
 			/* clear Rx Ctrl message FIFO */

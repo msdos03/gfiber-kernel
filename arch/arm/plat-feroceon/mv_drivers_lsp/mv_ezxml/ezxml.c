@@ -343,10 +343,14 @@ void ezxml_proc_inst(ezxml_root_t root, char *s, size_t len)
     while (root->pi[i] && strcmp(target, root->pi[i][0])) i++; // find target
     if (! root->pi[i]) { // new target
         root->pi = realloc(root->pi, sizeof(char **) * (i + 2));
-        root->pi[i] = malloc(sizeof(char *) * 3);
-        root->pi[i][0] = target;
-        root->pi[i][1] = (char *)(root->pi[i + 1] = NULL); // terminate pi list
-        root->pi[i][2] = strdup(""); // empty document position list
+        if( root->pi == NULL)
+        {
+        	return;
+        }
+		root->pi[i] = malloc(sizeof(char *) * 3);
+		root->pi[i][0] = target;
+		root->pi[i][1] = (char *)(root->pi[i + 1] = NULL); // terminate pi list
+		root->pi[i][2] = strdup(""); // empty document position list
     }
 
     while (root->pi[i][j]) j++; // find end of instruction list for this target
@@ -430,9 +434,13 @@ short ezxml_internal_dtd(ezxml_root_t root, char *s, size_t len)
                     root->attr = (! i) ? malloc(2 * sizeof(char **))
                                        : realloc(root->attr,
                                                  (i + 2) * sizeof(char **));
-                    root->attr[i] = malloc(2 * sizeof(char *));
-                    root->attr[i][0] = t; // set tag name
-                    root->attr[i][1] = (char *)(root->attr[i + 1] = NULL);
+                    if( root->attr == NULL)
+                    {
+                    	return NULL;
+                    }
+					root->attr[i] = malloc(2 * sizeof(char *));
+					root->attr[i][0] = t; // set tag name
+					root->attr[i][1] = (char *)(root->attr[i + 1] = NULL);
                 }
 
                 for (j = 1; root->attr[i][j]; j += 3); // find end of list
@@ -481,6 +489,10 @@ char *ezxml_str2utf8(char **s, size_t *len)
         }
 
         while (l + 6 > max) u = realloc(u, max += EZXML_BUFSIZE);
+        if( u == NULL)
+        {
+        	return NULL;
+        }
         if (c < 0x80) u[l++] = c; // US-ASCII subset
         else { // multi-byte UTF-8 sequence
             for (b = 0, d = c; d; d /= 2) b++; // bits in c
@@ -543,6 +555,10 @@ ezxml_t ezxml_parse_str(char *s, size_t len)
             for (l = 0; *s && *s != '/' && *s != '>'; l += 2) { // new attrib
                 attr = (l) ? realloc(attr, (l + 4) * sizeof(char *))
                            : malloc(4 * sizeof(char *)); // allocate space
+                if (attr == NULL)
+                {
+                	return NULL;
+                }
                 attr[l + 3] = (l) ? realloc(attr[l + 1], (l / 2) + 2)
                                   : malloc(2); // mem for list of maloced vals
                 strcpy(attr[l + 3] + (l / 2), " "); // value is not malloced
@@ -979,6 +995,7 @@ ezxml_t ezxml_set_attr(ezxml_t xml, const char *name, const char *value)
         if (! value) return xml; // nothing to do
         if (xml->attr == EZXML_NIL) { // first attribute
             xml->attr = malloc(4 * sizeof(char *));
+            if (xml->attr == NULL) return NULL;
             xml->attr[1] = strdup(""); // empty list of malloced names/vals
         }
         else xml->attr = realloc(xml->attr, (l + 4) * sizeof(char *));

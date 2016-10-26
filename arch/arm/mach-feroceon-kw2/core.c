@@ -158,11 +158,11 @@ static int __init parse_tag_mv_uboot(const struct tag *tag)
 	gBoardId =  (mvUbootVer & 0xff);
 #ifdef CONFIG_MACH_GFLT110
 	if ((gBoardId != GFLT110_ID) && (gBoardId != GFLT300_ID)) {
-		printk("unknown boardID from uboot:%x  defaulting to GFLT110\n", gBoardId);
+		printk("Unknown boardId from uboot: %x: Defaulting to GFLT110.\n", gBoardId);
 		gBoardId = GFLT110_ID;
 	}
 #endif
-	printk("BoardId:%x\n", mvBoardIdGet());
+	printk("Google BoardId: %x\n", mvBoardIdGet());
 #ifdef CONFIG_MV_INCLUDE_GIG_ETH
 	for (i = 0; i < CONFIG_MV_ETH_PORTS_NUM; i++) {
 #if defined (CONFIG_OVERRIDE_ETH_CMDLINE)
@@ -356,6 +356,7 @@ static struct resource mv_uart0_resources[] = {
 	},
 };
 
+#if 0
 static struct resource mv_uart1_resources[] = {
 	{
 		.start		= PORT1_BASE,
@@ -368,6 +369,7 @@ static struct resource mv_uart1_resources[] = {
 		.flags          = IORESOURCE_IRQ,
 	},
 };
+#endif
 
 static struct plat_serial8250_port mv_uart0_data[] = {
 	{
@@ -401,7 +403,7 @@ static struct plat_serial8250_port mv_uart1_data[] = {
 	{ },
 };
 
-static struct platform_device mv_uart0 = {
+static struct platform_device mv_uart = {
 	.name			= "serial8250",
 	.id			= PLAT8250_DEV_PLATFORM,
 	.dev			= {
@@ -411,21 +413,11 @@ static struct platform_device mv_uart0 = {
 	.resource		= mv_uart0_resources,
 };
 
-static struct platform_device mv_uart1 = {
-	.name			= "serial8250",
-	.id			= PLAT8250_DEV_PLATFORM1,
-	.dev			= {
-		.platform_data	= mv_uart1_data,
-	},
-	.num_resources		= 2, /*ARRAY_SIZE(mv_uart_resources),*/
-	.resource		= mv_uart1_resources,
-};
 
 static void serial_initialize(void)
 {
 	mv_uart0_data[0].uartclk = mv_uart1_data[0].uartclk = mvTclk;
-	platform_device_register(&mv_uart0);
-	platform_device_register(&mv_uart1);
+	platform_device_register(&mv_uart);
 }
 
 #if defined(CONFIG_MV_INCLUDE_SDIO)

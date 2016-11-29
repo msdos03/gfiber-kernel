@@ -15,6 +15,7 @@
  */
 
 
+#include "gflt.h"
 #include "mvSysHwConfig.h"
 #include "ctrlEnv/sys/mvCpuIf.h"
 #include "boardEnv/mvBoardEnvLib.h"
@@ -215,6 +216,9 @@ void __init mv_build_map_table(void)
 
 MV_CPU_DEC_WIN* mv_sys_map(void)
 {
+	if (gfiber_is_any_jack()) {
+		return SYSMAP_88F6601;
+	}
 	switch(mvBoardIdGet()) {
 		case DB_88F6535_BP_ID:
 		case RD_88F6510_SFU_ID:
@@ -224,9 +228,6 @@ MV_CPU_DEC_WIN* mv_sys_map(void)
 		case DB_88F6601_BP_ID:
 		case RD_88F6601_MC_ID:
 		case RD_88F6601_MC2L_ID:
-		case GFLT300_ID:
-		case GFLT200_ID:
-		case GFLT110_ID:
 			return SYSMAP_88F6601;
 		default:
 			printk("ERROR: can't find system address map\n");

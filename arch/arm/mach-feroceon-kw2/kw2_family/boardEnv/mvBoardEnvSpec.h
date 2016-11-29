@@ -116,7 +116,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define GFLT110_ID			(BOARD_ID_BASE+0x8)
 #define RD_88F6601_MC2L_ID		(BOARD_ID_BASE+0x9)
 #define GFLT300_ID			(BOARD_ID_BASE+0xA)
-#define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 4)
+#define GFLT400_ID			(BOARD_ID_BASE+0xB)
+#define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 5)
 // These are Marvells defines, we should switch to match these in
 // uboot to make future merges easier.
 //#define DB_CUSTOMER_ID			(BOARD_ID_BASE+0x8)
@@ -642,6 +643,50 @@ MPP#	NAME			IN/OUT
 #define GFLT300_GPP_POL_LOW	(BIT17)
 #define GFLT300_GPP_POL_MID	0x0
 
+/***************************************************************************
+** GFLT400 - Copied from Uboot
+****************************************************************************/
+/* GPIO settings for GFLT400: http://go/gflt400-gpio-config */
+
+/* GPPs
+ 0  GHN_RESET_N_L
+ 1  SPI_MOSI
+ 2  SPI_CLK
+ 3  SPI_CS_L
+ 4  SPI_MISO
+ 7  UART0_TX
+ 8  UART0_RX
+ 9  LED_BLUE_L
+ 10 LED_RED_L
+ 13 BOARD_VER[0]
+ 14 GE_LINK_RED
+ 15 BOARD_VER[1]
+ 17 SW_RESET
+ 18 BOARD_VER[2]
+ 20 DYING_GASP_INT_R2
+ 26 GE_DATA_LED
+ 28 SPI_WP_L(out)
+ 33 DYING_GASP_INT_R
+*/
+
+#define GFLT400_MPP0_7		0x20022220
+#define GFLT400_MPP8_15		0x05000002
+#define GFLT400_MPP16_23	0x00000000
+#define GFLT400_MPP24_31	0x00000500
+#define GFLT400_MPP32_37	0x00000000
+
+/* Default all ones-inputs, invert for outputs */
+#define GFLT400_GPP_OUT_ENA_LOW	 (~(BIT9 | BIT10))
+#define GFLT400_GPP_OUT_ENA_MID	 0x0
+
+/* BIT09 turns the LED blue.
+ * BIT10 turns the LED red. */
+#define GFLT400_GPP_OUT_VAL_LOW	(BIT9)
+#define GFLT400_GPP_OUT_VAL_MID	(0)
+
+/* GFLT400 has the reset button signal inverted */
+#define GFLT400_GPP_POL_LOW	(BIT17)
+#define GFLT400_GPP_POL_MID	0x0
 
 /***************************************************************************
 ** RD-88F6601MC2L

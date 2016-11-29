@@ -242,6 +242,7 @@ feroceon-$(CONFIG_MV_PHONE_USE_FIQ_PROCESSING) += $(LSP_DIR)/fiq.o
 feroceon-$(CONFIG_THERMAL_SENSOR_KW2)	+= hwmon.o
 
 # Board
+obj-y += gflt.o
 obj-$(CONFIG_MACH_GFLT200)		+= board-gflt200.o
 obj-$(CONFIG_MACH_GFLT110)		+= board-gflt110.o
 

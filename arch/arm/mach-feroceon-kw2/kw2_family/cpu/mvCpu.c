@@ -62,6 +62,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 *******************************************************************************/
 
+#include "gflt.h"
 #include "cpu/mvCpu.h"
 #include "ctrlEnv/mvCtrlEnvLib.h"
 #include "ctrlEnv/mvCtrlEnvRegs.h"
@@ -113,7 +114,7 @@ static MV_U32 mvCpuClockEntryGet(MV_VOID)
 	i = 0;
 	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
 	    boardId == DB_88F6601_BP_ID ||
-	    GFLT300_ID == boardId || GFLT200_ID == boardId || GFLT110_ID == boardId) {
+	    gfiber_is_any_jack()) {
 		while (cpuDdrTbl6601[i].satrValue != -1) {
 			if (cpuDdrTbl6601[i].satrValue == clockSatr) {
 				res = i;
@@ -161,9 +162,10 @@ MV_U32 mvCpuPclkGet(MV_VOID)
 	if (idx == 0xFFFFFFFF)
 		return 0;
 	else {
-		if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
+		if (boardId == RD_88F6601_MC_ID ||
+		    boardId == RD_88F6601_MC2L_ID ||
 		    boardId == DB_88F6601_BP_ID ||
-		    (GFLT300_ID == boardId) || (GFLT200_ID == boardId) || (GFLT110_ID == boardId))
+		    gfiber_is_any_jack())
 			return cpuDdrTbl6601[idx].cpuClk;
 		else
 			return cpuDdrL2Tbl[idx].cpuClk;
@@ -196,9 +198,10 @@ MV_U32 mvCpuL2ClkGet(MV_VOID)
 	if (idx == 0xFFFFFFFF)
 		return 0;
 	else {
-		if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
+		if (boardId == RD_88F6601_MC_ID ||
+		    boardId == RD_88F6601_MC2L_ID ||
 		    boardId == RD_88F6601_MC_ID ||
-			(GFLT300_ID == boardId) || (GFLT200_ID == boardId) || (GFLT110_ID == boardId))
+		    gfiber_is_any_jack())
 			return cpuDdrTbl6601[idx].l2Clk;
 		else
 			return cpuDdrL2Tbl[idx].l2Clk;
@@ -226,7 +229,7 @@ MV_BOOL mvCpuL2Exists(MV_VOID)
 
 	if (id == RD_88F6510_SFU_ID || id == DB_88F6601_BP_ID ||
 	    id == RD_88F6601_MC_ID || id == RD_88F6601_MC2L_ID ||
-	    GFLT300_ID == id || GFLT200_ID == id || id == GFLT110_ID)
+	    gfiber_is_any_jack())
 		return MV_FALSE;
 
 	/* Read S@R register value */

@@ -543,6 +543,46 @@ MV_U32 onuGponDbOnuDsSyncOnGet(void)
 
 /*******************************************************************************
 **
+**  onuGponDbXvrSdPolaritySet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function set onu XVR SD polarity
+**
+**  PARAMETERS:  MV_U32 state
+**
+**  OUTPUTS:	None
+**
+**  RETURNS:	MV_OK or error
+**
+*******************************************************************************/
+MV_STATUS onuGponDbXvrSdPolaritySet(MV_U32 polarity)
+{
+  onuGponDb_s.onuGponGenTbl_s.onuGponXvrSdPolarity = polarity;
+
+  return(MV_OK);
+}
+
+/*******************************************************************************
+**
+**  onuGponDbXvrSdPolarityGet
+**  ____________________________________________________________________________
+**
+**  DESCRIPTION: The function return XVR SD polarity
+**
+**  PARAMETERS:  None
+**
+**  OUTPUTS:	None
+**
+**  RETURNS:	XVR SD polarity 
+**
+*******************************************************************************/
+MV_U32 onuGponDbXvrSdPolarityGet(void)
+{
+  return(onuGponDb_s.onuGponGenTbl_s.onuGponXvrSdPolarity);
+}
+
+/*******************************************************************************
+**
 **  onuGponDbOnuIdOverrideValueGet
 **  ____________________________________________________________________________
 **

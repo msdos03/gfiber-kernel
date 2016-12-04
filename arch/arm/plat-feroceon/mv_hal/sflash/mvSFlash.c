@@ -281,6 +281,31 @@ static MV_SFLASH_DEVICE_PARAMS sflash[] = {
      MV_MX25L6405_MAX_FAST_SPI_FREQ,
      MV_MX25L6405_FAST_READ_DUMMY_BYTES
     },
+    /* Macronix MXIC MX25L12805E SPI flash, 16MB, 256 sectors of 64K each */
+    {
+     MV_MX25L_WREN_CMND_OPCD,
+     MV_MX25L_WRDI_CMND_OPCD,
+     MV_MX25L_RDID_CMND_OPCD,
+     MV_MX25L_RDSR_CMND_OPCD,
+     MV_MX25L_WRSR_CMND_OPCD,
+     MV_MX25L_READ_CMND_OPCD,
+     MV_MX25L_FAST_RD_CMND_OPCD,
+     MV_MX25L_PP_CMND_OPCD,
+     MV_MX25L_SE_CMND_OPCD,
+     MV_MX25L_BE_CMND_OPCD,
+     MV_MX25L_RES_CMND_OPCD,
+     MV_MX25L_DP_CMND_OPCD,
+     MV_MX25L_EN4B_CMND_OPCD,
+     MV_MX25L12805E_SECTOR_SIZE,
+     MV_MX25L12805E_SECTOR_NUMBER,
+     MV_MXIC_PAGE_SIZE,
+     "MXIC MX25L12805E",
+     MV_MXIC_MANF_ID,
+     MV_MX25L12805E_DEVICE_ID,
+     MV_MX25L12805E_MAX_SPI_FREQ,
+     MV_MX25L12805E_MAX_FAST_SPI_FREQ,
+     MV_MX25L12805E_FAST_READ_DUMMY_BYTES
+    },
     /* Macronix MXIC MX25L25635E SPI flash, 32MB, 512 sectors of 64K each */
     {
      MV_MX25L_WREN_CMND_OPCD,
@@ -330,6 +355,56 @@ static MV_SFLASH_DEVICE_PARAMS sflash[] = {
      MV_S25FL128_MAX_SPI_FREQ,
      MV_M25P128_MAX_FAST_SPI_FREQ,
      MV_M25P128_FAST_READ_DUMMY_BYTES
+    },
+   /* WINBOND M25Q128 SPI flash, 16MB, 256 sectors of 64K each */
+    {
+     MV_W25Q_WREN_CMND_OPCD,
+     MV_W25Q_WRDI_CMND_OPCD,
+     MV_W25Q_RDID_CMND_OPCD,
+     MV_W25Q_RDSR_CMND_OPCD,
+     MV_W25Q_WRSR_CMND_OPCD,
+     MV_W25Q_READ_CMND_OPCD,
+     MV_W25Q_FAST_RD_CMND_OPCD,
+     MV_W25Q_PP_CMND_OPCD,
+     MV_W25Q_SE_CMND_OPCD,
+     MV_W25Q_BE_CMND_OPCD,
+     MV_W25Q_RES_CMND_OPCD,
+     MV_SFLASH_NO_SPECIFIC_OPCD,    /* power save not supported */
+	 MV_SFLASH_NO_SPECIFIC_OPCD,
+     MV_W25Q128_SECTOR_SIZE,
+     MV_W25Q128_SECTOR_NUMBER,
+     MV_W25Q_PAGE_SIZE,
+     "WINBOND W25Q128",
+     MV_WINBOND_MANF_ID,
+     MV_W25Q128_DEVICE_ID,
+     MV_W25Q128_MAX_SPI_FREQ,
+     MV_W25Q128_MAX_FAST_SPI_FREQ,
+     MV_W25Q128_FAST_READ_DUMMY_BYTES
+    },
+    /* WINBOND M25Q256 SPI flash, 16MB, 512 sectors of 64K each */
+     {
+      MV_W25Q_WREN_CMND_OPCD,
+      MV_W25Q_WRDI_CMND_OPCD,
+      MV_W25Q_RDID_CMND_OPCD,
+      MV_W25Q_RDSR_CMND_OPCD,
+      MV_W25Q_WRSR_CMND_OPCD,
+      MV_W25Q_READ_4B_CMND_OPCD,
+      MV_W25Q_FAST_RD_4B_CMND_OPCD,
+      MV_W25Q_PP_CMND_OPCD,
+      MV_W25Q_SE_CMND_OPCD,
+      MV_W25Q_BE_CMND_OPCD,
+      MV_W25Q_RES_CMND_OPCD,
+      MV_SFLASH_NO_SPECIFIC_OPCD,    /* power save not supported */
+      MV_W25Q_EN4B_CMND_OPCD,
+      MV_W25Q256_SECTOR_SIZE,
+      MV_W25Q256_SECTOR_NUMBER,
+      MV_W25Q_PAGE_SIZE,
+      "WINBOND W25Q256",
+      MV_WINBOND_MANF_ID,
+      MV_W25Q256_DEVICE_ID,
+      MV_W25Q256_MAX_SPI_FREQ,
+      MV_W25Q256_MAX_FAST_SPI_FREQ,
+      MV_W25Q256_FAST_READ_DUMMY_BYTES
     }
 };
 
@@ -638,7 +713,7 @@ MV_STATUS mvSFlashInit(MV_SFLASH_INFO *pFlinfo)
 	mvOsPrintf("%s ERROR: Failed to get the SFlash ID!\n", __func__);
 	return ret;
     }
-
+printk("MTL SPI device manf = 0x%X, dev = 0x%X\n", manf, dev);
     /* loop over the whole table and look for the appropriate SFLASH */
     for (indx = 0; indx < MV_ARRAY_SIZE(sflash); indx++) {
 	if ((manf == sflash[indx].manufacturerId) && (dev == sflash[indx].deviceId)) {
@@ -662,20 +737,24 @@ MV_STATUS mvSFlashInit(MV_SFLASH_INFO *pFlinfo)
     /* Enable 4B address mode in case needed and supported */
     flSize = (pFlinfo->sectorSize  * pFlinfo->sectorNumber);
     if (flSize > _16M) {
-	cmndLength = 5;
-    	if (sflash[pFlinfo->index].opcdEn4B != MV_SFLASH_NO_SPECIFIC_OPCD) {
-		mvOsPrintf("%s: Enabling 4-Byte address mode\n", __func__);
+    	cmndLength = 5;
+    	if (sflash[pFlinfo->index].opcdEn4B != MV_SFLASH_NO_SPECIFIC_OPCD)
+    	{
+			mvOsPrintf("%s: Enabling 4-Byte address mode\n", __func__);
 
-	 	cmd = sflash[pFlinfo->index].opcdEn4B;
+			cmd = sflash[pFlinfo->index].opcdEn4B;
 
-		/*  mvSpiWriteThenWrite(MV_SFLASH_RES_CMND_LENGTH) */
-		ret = mvSysSflashCommandSet(NULL, &cmd, 1, SYS_SFLASH_TRANS_ATOMIC);
-		
-		if (ret != MV_OK)
-			return ret;
-	}
-    } else
-	cmndLength = 4;
+			/*  mvSpiWriteThenWrite(MV_SFLASH_RES_CMND_LENGTH) */
+			ret = mvSysSflashCommandSet(NULL, &cmd, 1, SYS_SFLASH_TRANS_ATOMIC);
+
+			if (ret != MV_OK)
+				return ret;
+    	}
+    }
+    else
+    {
+    	cmndLength = 4;
+    }
 
     /* Set the SPI frequency to the MAX allowed for the device for best performance */
     /*  mvSpiBaudRateSet(sflash[pFlinfo->index].spiMaxFreq) */
@@ -1297,7 +1376,52 @@ MV_STATUS mvSFlashWpRegionSet(MV_SFLASH_INFO *pFlinfo, MV_SFLASH_WP_REGION wpReg
 	    DB(mvOsPrintf("%s WARNING: Invaild parameter WP region!\n", __func__);)
 	    return MV_BAD_PARAM;
 	}
-    } else {
+    }else if (pFlinfo->manufacturerId == MV_WINBOND_MANF_ID) {
+	/* check if the manufacturer is SPANSION then the WP is 4bits */
+	switch (wpRegion) {
+	case MV_WP_NONE:
+	    wpMask = MV_W25Q_STATUS_BP_NONE;
+	    break;
+
+	case MV_WP_UPR_1OF128:
+	    DB(mvOsPrintf("%s WARNING: Invaild option for this flash chip!\n", __func__);)
+	    return MV_NOT_SUPPORTED;
+
+	case MV_WP_UPR_1OF64:
+	    wpMask = MV_W25Q_STATUS_BP_1_OF_64;
+	    break;
+
+	case MV_WP_UPR_1OF32:
+	    wpMask = MV_W25Q_STATUS_BP_1_OF_32;
+	    break;
+
+	case MV_WP_UPR_1OF16:
+	    wpMask = MV_W25Q_STATUS_BP_1_OF_16;
+	    break;
+
+	case MV_WP_UPR_1OF8:
+	    wpMask = MV_W25Q_STATUS_BP_1_OF_8;
+	    break;
+
+	case MV_WP_UPR_1OF4:
+	    wpMask = MV_W25Q_STATUS_BP_1_OF_4;
+	    break;
+
+	case MV_WP_UPR_1OF2:
+	    wpMask = MV_W25Q_STATUS_BP_1_OF_2;
+	    break;
+
+	case MV_WP_ALL:
+	    wpMask = MV_W25Q_STATUS_BP_ALL;
+	    break;
+
+
+	default:
+	    DB(mvOsPrintf("%s WARNING: Invaild parameter WP region!\n", __func__);)
+	    return MV_BAD_PARAM;
+	}
+    }
+	else {
 	DB(mvOsPrintf("%s WARNING: Invaild parameter Manufacturer ID!\n", __func__);)
 	return MV_BAD_PARAM;
     }
@@ -1467,7 +1591,48 @@ MV_STATUS mvSFlashWpRegionGet(MV_SFLASH_INFO *pFlinfo, MV_SFLASH_WP_REGION *pWpR
 	    DB(mvOsPrintf("%s WARNING: Unidentified WP region in h/w!\n", __func__);)
 	    return MV_BAD_VALUE;
 	}
-    } else {
+    } 
+	else if (pFlinfo->manufacturerId == MV_WINBOND_MANF_ID) {
+		/* Check if the chip is an SPANSION flash; then WP supports only 3 bits */
+	switch ((reg & MV_W25Q_STATUS_REG_WP_MASK)) {
+	case MV_W25Q_STATUS_BP_NONE:
+	    *pWpRegion = MV_WP_NONE;
+	    break;
+
+	case MV_W25Q_STATUS_BP_1_OF_64:
+	    *pWpRegion = MV_WP_UPR_1OF64;
+	    break;
+
+	case MV_W25Q_STATUS_BP_1_OF_32:
+	    *pWpRegion = MV_WP_UPR_1OF32;
+	    break;
+
+	case MV_W25Q_STATUS_BP_1_OF_16:
+	    *pWpRegion = MV_WP_UPR_1OF16;
+	    break;
+
+	case MV_W25Q_STATUS_BP_1_OF_8:
+	    *pWpRegion = MV_WP_UPR_1OF8;
+	    break;
+
+	case MV_W25Q_STATUS_BP_1_OF_4:
+	    *pWpRegion = MV_WP_UPR_1OF4;
+	    break;
+
+	case MV_W25Q_STATUS_BP_1_OF_2:
+	    *pWpRegion = MV_WP_UPR_1OF2;
+	    break;
+
+	case MV_W25Q_STATUS_BP_ALL:
+	    *pWpRegion = MV_WP_ALL;
+	    break;
+
+	default:
+	    DB(mvOsPrintf("%s WARNING: Unidentified WP region in h/w!\n", __func__);)
+	    return MV_BAD_VALUE;
+	}
+    }
+	else {
 	DB(mvOsPrintf("%s WARNING: Invaild parameter Manufacturer ID!\n", __func__);)
 	return MV_BAD_PARAM;
     }

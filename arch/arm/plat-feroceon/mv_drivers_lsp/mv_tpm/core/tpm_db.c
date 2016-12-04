@@ -478,6 +478,23 @@ int32_t tpm_db_mac_func_set(void)
 		gmac1 = TPM_GMAC_FUNC_NONE;
 		break;
 
+	case TPM_PON_WAN_G0_SINGLE_PORT_SGMII:
+		pon = TPM_GMAC_FUNC_WAN;
+		gmac0 = TPM_GMAC_FUNC_LAN;
+		gmac1 = TPM_GMAC_FUNC_NONE;
+		break;
+
+	case TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT:
+	  gmac0 = TPM_GMAC_FUNC_LAN;
+	  if (TPM_ENUM_GMAC_1 == tpm_db.init_misc.active_wan) {
+	    pon = TPM_GMAC_FUNC_NONE;
+	    gmac1 = TPM_GMAC_FUNC_WAN;
+	  }else{
+	    gmac1 = TPM_GMAC_FUNC_NONE;
+	    pon = TPM_GMAC_FUNC_WAN;
+	  }
+    break;
+
 	case TPM_G0_WAN_G1_INT_SWITCH:
 		pon = TPM_GMAC_FUNC_NONE;
 		gmac0 = TPM_GMAC_FUNC_WAN;
@@ -599,6 +616,7 @@ int32_t tpm_db_eth_max_uni_port_set(void)
 {
 	switch (tpm_db.eth_cmplx_profile) {
 	case TPM_PON_WAN_G0_SINGLE_PORT:
+	case TPM_PON_WAN_G0_SINGLE_PORT_SGMII:
 	case TPM_PON_WAN_G1_SINGLE_PORT:
 	case TPM_PON_WAN_G0_G1_LPBK:
 		tpm_db.max_uni_port_nr = TPM_SRC_PORT_UNI_0;
@@ -607,6 +625,7 @@ int32_t tpm_db_eth_max_uni_port_set(void)
 	case TPM_PON_G0_WAN_G1_SINGLE_PORT:
 	case TPM_PON_G1_WAN_G0_SINGLE_PORT:
 	case TPM_PON_WAN_G0_G1_DUAL_LAN:
+	case TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT:
 		tpm_db.max_uni_port_nr = TPM_SRC_PORT_UNI_1;
        	break;
 

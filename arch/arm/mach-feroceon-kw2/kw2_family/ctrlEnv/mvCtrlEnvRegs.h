@@ -518,6 +518,26 @@ typedef enum _mvTargetId {
 #define THERMAL_TEMPERATURE_OFFSET 10
 #define THERMAL_TEMPERATURE_MASK (0x1FF << THERMAL_TEMPERATURE_OFFSET)
 
+// LP SERDES PHY AND NETWORKING REGISTERS
+#define ETHERNET_COMPLEX_CTRL_REG_0()		(0x18810)
+#define SOFTWARE_RESET_CTRL_REG()			(0x18220)
+#define GE_MAC_CTRL_REG(port)				(0x72C00 + (port * 0x4000))
+#define ETH_UNIT_CTRL_REG(port)				(0x720B0 + (port * 0x4000))
+#define PORT_MAC_CTRL_REG2(port)			(0x72C08 + (port * 0x4000))
+#define PORT_AUTO_NEG_CTRL_REG(port)		(0x72C0C + (port * 0x4000))
+#define SYNC_PATTERN_REG()					(0x72E90)
+#define SERDES_CONFIG_REG(port)				(0x724A0 + (port * 0x4000))
+#define SERDES_STATUS_REG(port)				(0x724A4 + (port * 0x4000))
+#define ONEMS_CLK_DIVIDER_CTRL_REG(port)	(0x724F4 + (port * 0x4000))
+#define POWER_PLL_CTRL_REG()				(0x72E04)
+#define KVCO_CALIBRATION_CTRL_REG()			(0x72E08)
+#define IMPEDANCE_CALIBRATION_CTRL_REG()	(0x72E0C)
+#define GENERATION_1_SETTING_0_REG()		(0x72E34)
+#define GENERATION_1_SETTING_1_REG()		(0x72E38)
+#define DIGITAL_LOOPBACK_ENABLE_REG()		(0x72E8C)
+#define PHY_ISOLATION_MODE_CTRL_REG()		(0x72E98)
+
+
 #endif /* MV_ASMLANGUAGE */
 
 #ifdef __cplusplus

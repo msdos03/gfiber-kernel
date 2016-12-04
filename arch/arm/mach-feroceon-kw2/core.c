@@ -533,7 +533,7 @@ static void __init mv_init(void)
 #ifndef CONFIG_MV_DRAM_DEFAULT_ACCESS_CFG
         /* Support DRAM access configuration for Avanta-MC only */
         if (gBoardId == DB_88F6601_BP_ID || gBoardId == RD_88F6601_MC_ID ||
-	    gBoardId == RD_88F6601_MC2L_ID) {
+	    gBoardId == RD_88F6601_MC2L_ID || gBoardId == RD_88F6601_SFP_ID) {
                 printk("DRAM access: ");
 #ifdef CONFIG_MV_DRAM_XBAR_ACCESS_CFG
                 printk("XBAR\n");

@@ -189,6 +189,10 @@ extern "C" {
 #define     MV_MX25L6405_MAX_SPI_FREQ           20000000    /* 20MHz */
 #define     MV_MX25L6405_MAX_FAST_SPI_FREQ      50000000    /* 50MHz */
 #define     MV_MX25L6405_FAST_READ_DUMMY_BYTES   1
+#define     MV_MX25L12805E_DEVICE_ID             0x2018
+#define     MV_MX25L12805E_MAX_SPI_FREQ          20000000    /* 20MHz */
+#define     MV_MX25L12805E_MAX_FAST_SPI_FREQ     50000000    /* 50MHz */
+#define     MV_MX25L12805E_FAST_READ_DUMMY_BYTES 1
 #define     MV_MX25L25635E_DEVICE_ID             0x2019
 #define     MV_MX25L25635E_MAX_SPI_FREQ          20000000    /* 20MHz */
 #define     MV_MX25L25635E_MAX_FAST_SPI_FREQ     50000000    /* 50MHz */
@@ -199,10 +203,12 @@ extern "C" {
 #define     MV_MX25L1605_SECTOR_SIZE            0x10000 /* 64K */
 #define     MV_MX25L3205_SECTOR_SIZE            0x10000 /* 64K */
 #define     MV_MX25L6405_SECTOR_SIZE            0x10000 /* 64K */
+#define     MV_MX25L12805E_SECTOR_SIZE          0x10000 /* 64K */
 #define     MV_MX25L25635E_SECTOR_SIZE          0x10000 /* 64K */
 #define     MV_MX25L1605_SECTOR_NUMBER          32
 #define     MV_MX25L3205_SECTOR_NUMBER          64
 #define     MV_MX25L6405_SECTOR_NUMBER          128
+#define     MV_MX25L12805E_SECTOR_NUMBER        256
 #define     MV_MX25L25635E_SECTOR_NUMBER        512
 
 #define		MV_MXIC_PAGE_SIZE			        0x100   /* 256 byte */
@@ -273,6 +279,76 @@ extern "C" {
 #define     	MV_S25FL_STATUS_BP_1_OF_4           	(0x06 << MV_SFLASH_STATUS_REG_WP_OFFSET)
 #define     	MV_S25FL_STATUS_BP_1_OF_2           	(0x07 << MV_SFLASH_STATUS_REG_WP_OFFSET)
 #define     	MV_S25FL_STATUS_BP_ALL              	(0x0F << MV_SFLASH_STATUS_REG_WP_OFFSET)
+
+
+
+/************************************/
+/* WINBOND W25Qxxx Device Specific  */
+/************************************/
+
+/* Manufacturer IDs and Device IDs for SFLASHs supported by the driver */
+#define		MV_WINBOND_MANF_ID					0xEF
+#define     MV_W25Q128_DEVICE_ID                0x4018
+#define     MV_W25Q128_MAX_SPI_FREQ             20000000    /* 20MHz */
+#define     MV_W25Q128_MAX_FAST_SPI_FREQ        50000000    /* 50MHz */
+#define     MV_W25Q128_FAST_READ_DUMMY_BYTES    1
+
+#define     MV_W25Q256_DEVICE_ID                0x4019
+#define     MV_W25Q256_MAX_SPI_FREQ             20000000    /* 20MHz */
+#define     MV_W25Q256_MAX_FAST_SPI_FREQ        50000000    /* 50MHz */
+#define     MV_W25Q256_FAST_READ_DUMMY_BYTES    1
+
+/* Sector Sizes and population per device model*/
+#define     MV_W25Q128_SECTOR_SIZE              0x10000 /* 64K */
+#define     MV_W25Q128_SECTOR_NUMBER            256
+#define	    MV_W25Q_PAGE_SIZE					0x100   /* 256 byte */
+
+#define     MV_W25Q256_SECTOR_SIZE              0x10000 /* 64K */
+#define     MV_W25Q256_SECTOR_NUMBER            512		/* In the datasheet named block instead of sector */
+#define		MV_W25Q_FAST_RD_4B_CMND_OPCD		0x0C	/* Fast Read */
+#define		MV_W25Q_READ_4B_CMND_OPCD		    0x03	/* Sequential Read */
+#define	    MV_W25Q_PAGE_SIZE					0x100   /* 256 byte */
+
+#define     MV_W25Q256_SECTOR_SIZE              0x10000 /* 64K */
+#define     MV_W25Q256_SECTOR_NUMBER            512		/* In the datasheet named block instead of sector */
+#define		MV_W25Q_FAST_RD_4B_CMND_OPCD		0x0C	/* Fast Read */
+#define		MV_W25Q_READ_4B_CMND_OPCD		    0x03	/* Sequential Read */
+#define		MV_W25Q_WREN_CMND_OPCD			    0x06	/* Write Enable */
+#define		MV_W25Q_WRDI_CMND_OPCD			    0x04	/* Write Disable */
+#define		MV_W25Q_RDID_CMND_OPCD			    0x9F	/* Read ID */
+#define		MV_W25Q_RDSR_CMND_OPCD			    0x05	/* Read Status Register */
+#define		MV_W25Q_WRSR_CMND_OPCD			    0x01	/* Write Status Register */
+#define		MV_W25Q_READ_CMND_OPCD			    0x03	/* Sequential Read */
+#define		MV_W25Q_FAST_RD_CMND_OPCD		    0x0B	/* Fast Read */
+#define		MV_W25Q_PP_CMND_OPCD			    0x02	/* Page Program */
+#define		MV_W25Q_SE_CMND_OPCD			    0xD8	/* Sector Erase */
+#define		MV_W25Q_BE_CMND_OPCD			    0xC7	/* Bulk Erase */
+#define		MV_W25Q_RES_CMND_OPCD			    0xAB	/* Read Electronic Signature */
+#define		MV_W25Q_EN4B_CMND_OPCD			    0xB7	/* Enable 4-byte mode */
+
+/* Status Register Write Protect Bit Masks - 3bits */
+#define		MV_W25Q_STATUS_REG_WP_MASK	        (0x07 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q_STATUS_BP_NONE              (0x00 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q_STATUS_BP_1_OF_64           (0x01 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q_STATUS_BP_1_OF_32           (0x02 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q_STATUS_BP_1_OF_16           (0x03 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q_STATUS_BP_1_OF_8            (0x04 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q_STATUS_BP_1_OF_4            (0x05 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q_STATUS_BP_1_OF_2            (0x06 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q_STATUS_BP_ALL               (0x07 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+
+/* Status Register Write Protect Bit Masks - 4bits */
+#define		MV_W25Q256_STATUS_REG_WP_MASK	        (0x0F << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q256_STATUS_BP_NONE              (0x00 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q256_STATUS_BP_1_OF_128          (0x03 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q256_STATUS_BP_1_OF_64           (0x04 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q256_STATUS_BP_1_OF_32           (0x05 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q256_STATUS_BP_1_OF_16           (0x06 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q256_STATUS_BP_1_OF_8            (0x07 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q256_STATUS_BP_1_OF_4            (0x08 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q256_STATUS_BP_1_OF_2            (0x09 << MV_SFLASH_STATUS_REG_WP_OFFSET)
+#define     MV_W25Q256_STATUS_BP_ALL               (0x0C << MV_SFLASH_STATUS_REG_WP_OFFSET)
+
 
 #ifdef __cplusplus
 }

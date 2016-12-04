@@ -113,7 +113,7 @@ static MV_U32 mvCpuClockEntryGet(MV_VOID)
 	/* Search for a matching entry */
 	i = 0;
 	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
-	    boardId == DB_88F6601_BP_ID ||
+	    boardId == DB_88F6601_BP_ID || boardId == RD_88F6601_SFP_ID ||
 	    gfiber_is_any_jack()) {
 		while (cpuDdrTbl6601[i].satrValue != -1) {
 			if (cpuDdrTbl6601[i].satrValue == clockSatr) {
@@ -165,6 +165,7 @@ MV_U32 mvCpuPclkGet(MV_VOID)
 		if (boardId == RD_88F6601_MC_ID ||
 		    boardId == RD_88F6601_MC2L_ID ||
 		    boardId == DB_88F6601_BP_ID ||
+		    boardId == RD_88F6601_SFP_ID ||
 		    gfiber_is_any_jack())
 			return cpuDdrTbl6601[idx].cpuClk;
 		else
@@ -201,6 +202,7 @@ MV_U32 mvCpuL2ClkGet(MV_VOID)
 		if (boardId == RD_88F6601_MC_ID ||
 		    boardId == RD_88F6601_MC2L_ID ||
 		    boardId == RD_88F6601_MC_ID ||
+		    boardId == RD_88F6601_SFP_ID ||
 		    gfiber_is_any_jack())
 			return cpuDdrTbl6601[idx].l2Clk;
 		else
@@ -229,6 +231,7 @@ MV_BOOL mvCpuL2Exists(MV_VOID)
 
 	if (id == RD_88F6510_SFU_ID || id == DB_88F6601_BP_ID ||
 	    id == RD_88F6601_MC_ID || id == RD_88F6601_MC2L_ID ||
+	    id == RD_88F6601_SFP_ID ||
 	    gfiber_is_any_jack())
 		return MV_FALSE;
 
@@ -363,24 +366,24 @@ MV_U32 mvCpuIfPrintSystemConfig(MV_8 *buffer, MV_U32 index)
 	MV_8 Cpu_Stream_str[MV_PROC_STR_SIZE];
 
 	if (mvCtrlModelGet() != MV_6601_DEV_ID) {
-		mvCpuIfGetL2Mode(L2_En_str);
-		mvCpuIfGetL2EccMode(L2_ECC_str);
-		mvCpuIfGetL2PrefetchMode(L2_Prefetch_str);
+	mvCpuIfGetL2Mode(L2_En_str);
+	mvCpuIfGetL2EccMode(L2_ECC_str);
+	mvCpuIfGetL2PrefetchMode(L2_Prefetch_str);
 	}
 	mvCpuIfGetWriteAllocMode(Write_Alloc_str);
 	mvCpuIfGetCpuStreamMode(Cpu_Stream_str);
 	mvCpuIfPrintCpuRegs();
 
 	if (mvCtrlModelGet() != MV_6601_DEV_ID) {
-		count += mvOsSPrintf(buffer + count + index, "%s\n", L2_En_str);
-		count += mvOsSPrintf(buffer + count + index, "%s\n", L2_ECC_str);
-		count += mvOsSPrintf(buffer + count + index, "%s\n", L2_Prefetch_str);
+	count += mvOsSPrintf(buffer + count + index, "%s\n", L2_En_str);
+	count += mvOsSPrintf(buffer + count + index, "%s\n", L2_ECC_str);
+	count += mvOsSPrintf(buffer + count + index, "%s\n", L2_Prefetch_str);
 	}
 	count += mvOsSPrintf(buffer + count + index, "%s\n", Write_Alloc_str);
 	count += mvOsSPrintf(buffer + count + index, "%s\n", Cpu_Stream_str);
 	count += mvOsSPrintf(buffer + count + index, "CPU Config Reg = 0x%08x\n", MV_REG_READ(CPU_CONFIG_REG));
 	if (mvCtrlModelGet() != MV_6601_DEV_ID)
-		count += mvOsSPrintf(buffer + count + index, "L2 Config Reg = 0x%08x\n", MV_REG_READ(CPU_L2_CONFIG_REG));
+	count += mvOsSPrintf(buffer + count + index, "L2 Config Reg = 0x%08x\n", MV_REG_READ(CPU_L2_CONFIG_REG));
 
 	return count;
 }

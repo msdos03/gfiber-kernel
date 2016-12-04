@@ -167,21 +167,37 @@ tpm_error_code_t tpm_phy_access_check(tpm_src_port_type_t src_port,
     }
 
     /* Check gmac port connection info */
-    for (i = 0; i < TPM_MAX_NUM_GMACS; i++) {
-        if (TPM_DB_OK != tpm_db_gmac_conn_conf_get(i, &gmac_conn_info)) {
+    for (i = 0; i < TPM_MAX_NUM_GMACS; i++)
+    {
+        if (TPM_DB_OK != tpm_db_gmac_conn_conf_get(i, &gmac_conn_info))
+        {
             printk(KERN_ERR "ERROR: (%s:%d) Gmac port(%d) connection info get failed\n", __FUNCTION__, __LINE__, i);
             return ERR_PHY_SRC_PORT_CONN_INVALID;
         }
-        if (TPM_TRUE == gmac_conn_info.valid && src_port == gmac_conn_info.port_src) {
-            /* PHY access directly */
-            *phy_access_way = PHY_SMI_MASTER_CPU;
-            /*get PHY addr on GMAC*/
-            *phy_direct_addr = mvBoardPhyAddrGet(i);
+        if (TPM_TRUE == gmac_conn_info.valid && src_port == gmac_conn_info.port_src)
+        {
+        	if(gmac_conn_info.conn == TPM_GMAC_CON_SGMII)
+        	{
+				/* No PHY available */
+				*phy_access_way = PHY_SGMII;
 
-            if (trace_sw_dbg_flag)
-                printk(KERN_INFO "Port%d PHY access directly, phyaddr %d\n", src_port, *phy_direct_addr);
+				if (trace_sw_dbg_flag)
+					printk(KERN_INFO "Port%d SGMII connection, no PHY\n", src_port, *phy_direct_addr);
 
-            return TPM_RC_OK;
+				return TPM_RC_OK;
+        	}
+        	else // We keep the original code for the rest of cases
+        	{
+				/* PHY access directly */
+				*phy_access_way = PHY_SMI_MASTER_CPU;
+				/*get PHY addr on GMAC*/
+				*phy_direct_addr = mvBoardPhyAddrGet(i);
+
+				if (trace_sw_dbg_flag)
+					printk(KERN_INFO "Port%d PHY access directly, phyaddr %d\n", src_port, *phy_direct_addr);
+
+				return TPM_RC_OK;
+        	}
         }
     }
 
@@ -334,7 +350,9 @@ static tpm_error_code_t tpm_sw_set_gmac_speed_duplex_fc(uint32_t owner_id,
                 return retVal;
             }
         }
-    } else {
+    }
+    else if (PHY_SGMII != phy_access_way)
+    {
         printk(KERN_ERR "PHY not connected to GMAC\n");
         retVal = ERR_GENERAL;
         return retVal;
@@ -5077,6 +5095,10 @@ tpm_error_code_t tpm_phy_set_port_autoneg_mode
                "Port%d PHY access way check failed\n", src_port);
         return retVal;
     }
+    // Possible connection ways:
+    //  -RGMII phy accessed directly
+    //  -RGMII phy accessed through a switch
+    //  -SGMII - No autoneg available
     /* PHY accessed directly, call lsp API */
     if (PHY_SMI_MASTER_CPU == phy_access_way) {
         if (mvEthPhyAutoNegoSet(phy_direct_addr, state)) {
@@ -5084,12 +5106,15 @@ tpm_error_code_t tpm_phy_set_port_autoneg_mode
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
         }
-        if (state && (retVal == TPM_RC_OK)) {
-            if (mvEthPhyAdvertiseSet(phy_direct_addr, lsp_mode)) {
-                printk(KERN_ERR
-                       "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
-                retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
-            }
+
+        if(retVal == TPM_RC_OK )
+        {
+        	// Enable always advertisement
+			if (mvEthPhyAdvertiseSet(phy_direct_addr, lsp_mode)) {
+				printk(KERN_ERR
+					   "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
+				retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
+			}
         }
         /* Update GMAC speed, duplex and flow control */
         retVal = tpm_sw_set_gmac_speed_duplex_fc(owner_id, src_port, (state ? true : false));
@@ -5097,7 +5122,9 @@ tpm_error_code_t tpm_phy_set_port_autoneg_mode
             printk(KERN_ERR "Failed to update GMAC config with port%d\n", src_port);
             return retVal;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -5119,6 +5146,9 @@ tpm_error_code_t tpm_phy_set_port_autoneg_mode
             }
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
+
     if (trace_sw_dbg_flag)
     {
         printk(KERN_INFO
@@ -5262,7 +5292,7 @@ tpm_error_code_t tpm_phy_get_port_autoneg_mode
         } else {
             mode = TPM_SPEED_AUTO_DUPLEX_AUTO;
         }
-    } else {
+    } else if (PHY_SMI_MASTER_SWT == phy_access_way){
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -5278,6 +5308,8 @@ tpm_error_code_t tpm_phy_get_port_autoneg_mode
                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if(GT_TRUE == state)
         *autoneg_state = true;
@@ -5346,13 +5378,17 @@ tpm_error_code_t tpm_phy_restart_port_autoneg
         return retVal;
     }
     /* PHY accessed directly, call lsp API */
-    if (PHY_SMI_MASTER_CPU == phy_access_way) {
-        if (mvEthPhyRestartAN(phy_direct_addr, 0)) {
+    if (PHY_SMI_MASTER_CPU == phy_access_way)
+    {
+        if (mvEthPhyRestartAN(phy_direct_addr, 0))
+        {
             printk(KERN_ERR
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -5368,6 +5404,8 @@ tpm_error_code_t tpm_phy_restart_port_autoneg
                     "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if (trace_sw_dbg_flag)
     {
@@ -5434,13 +5472,16 @@ tpm_error_code_t tpm_phy_set_port_admin_state
         return retVal;
     }
     /* PHY accessed directly, call lsp API */
-    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+    if (PHY_SMI_MASTER_CPU == phy_access_way)
+    {
         if (mvEthPhySetAdminState(phy_direct_addr, (int)state)) {
             printk(KERN_ERR
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -5462,6 +5503,8 @@ tpm_error_code_t tpm_phy_set_port_admin_state
             }
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if (trace_sw_dbg_flag)
     {
@@ -5521,13 +5564,16 @@ tpm_error_code_t tpm_phy_get_port_admin_state
         return retVal;
     }
     /* PHY accessed directly, call lsp API */
-    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+    if (PHY_SMI_MASTER_CPU == phy_access_way)
+    {
         if (mvEthPhyGetAdminState(phy_direct_addr, (int *)&state)) {
             printk(KERN_ERR
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -5543,6 +5589,8 @@ tpm_error_code_t tpm_phy_get_port_admin_state
                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if(state == GT_TRUE)
         *phy_port_state = true;
@@ -5607,9 +5655,12 @@ tpm_error_code_t tpm_phy_get_port_link_status
         return retVal;
     }
     /* PHY accessed directly, call lsp API */
-    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+    if (PHY_SMI_MASTER_CPU == phy_access_way)
+    {
         state = (GT_BOOL)mvEthPhyCheckLink(phy_direct_addr);
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -5625,6 +5676,8 @@ tpm_error_code_t tpm_phy_get_port_link_status
                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if(state == GT_TRUE)
         *port_link_status = true;
@@ -5693,7 +5746,8 @@ tpm_error_code_t tpm_phy_get_port_duplex_status
         return retVal;
     }
     /* PHY accessed directly, call lsp API */
-    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+    if (PHY_SMI_MASTER_CPU == phy_access_way)
+    {
         if (mvEthPhyDuplexOperGet(phy_direct_addr, (int *)&status_valid, (int *)&state)) {
             printk(KERN_ERR
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
@@ -5705,7 +5759,9 @@ tpm_error_code_t tpm_phy_get_port_duplex_status
                    "ERROR: (%s:%d) PHY duplex status is not valid on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_STATUS_UNKNOWN;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -5721,6 +5777,8 @@ tpm_error_code_t tpm_phy_get_port_duplex_status
                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if(state == GT_TRUE)
         *port_duplex_status = true;
@@ -5789,7 +5847,8 @@ tpm_error_code_t tpm_phy_get_port_speed_mode
         return retVal;
     }
     /* PHY accessed directly, call lsp API */
-    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+    if (PHY_SMI_MASTER_CPU == phy_access_way)
+    {
         if (mvEthPhySpeedOperGet(phy_direct_addr, (uint32_t *)&tmpSpeed)) {
             printk(KERN_ERR
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
@@ -5801,7 +5860,9 @@ tpm_error_code_t tpm_phy_get_port_speed_mode
                    "ERROR: (%s:%d) PHY speed status is not valid on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_STATUS_UNKNOWN;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -5817,6 +5878,8 @@ tpm_error_code_t tpm_phy_get_port_speed_mode
                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     *speed = (uint32_t)tmpSpeed;
 
@@ -5888,7 +5951,8 @@ tpm_error_code_t tpm_phy_set_port_flow_control_support
         return retVal;
     }
     /* PHY accessed directly, call lsp API */
-    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+    if (PHY_SMI_MASTER_CPU == phy_access_way)
+    {
         if (tpm_db_switch_init_get(&switch_init) != TPM_DB_OK) {
             printk(KERN_ERR "ERROR: (%s:%d) tpm_db_switch_init_get Failed\n", __FUNCTION__, __LINE__);
             retVal = ERR_GENERAL;
@@ -5951,7 +6015,9 @@ tpm_error_code_t tpm_phy_set_port_flow_control_support
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -5973,6 +6039,8 @@ tpm_error_code_t tpm_phy_set_port_flow_control_support
             }
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if (trace_sw_dbg_flag)
     {
@@ -6030,13 +6098,16 @@ tpm_error_code_t tpm_phy_get_port_flow_control_support
         return retVal;
     }
     /* PHY accessed directly, call lsp API */
-    if (PHY_SMI_MASTER_CPU == phy_access_way) {
+    if (PHY_SMI_MASTER_CPU == phy_access_way)
+    {
         if (mvEthPhyPauseAdminGet(phy_direct_addr, (uint32_t *)&pause_state)) {
             printk(KERN_ERR
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -6052,6 +6123,8 @@ tpm_error_code_t tpm_phy_get_port_flow_control_support
                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if(pause_state == GT_PHY_NO_PAUSE)
         *state = false;
@@ -6149,27 +6222,30 @@ tpm_error_code_t tpm_phy_get_port_flow_control_state
                    "Port%d PHY access way check failed\n", src_port);
             return retVal;
         }
-        for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
-            if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
-                break;
-        }
-        if (gmac_port == TPM_MAX_NUM_GMACS) {
-            printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
-            retVal = ERR_GENERAL;
-            return retVal;
-        }
+        if(PHY_SMI_MASTER_CPU == phy_access_way)
+        {
+			for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
+				if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
+					break;
+			}
+			if (gmac_port == TPM_MAX_NUM_GMACS) {
+				printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
+				retVal = ERR_GENERAL;
+				return retVal;
+			}
 
-        /* Get GMAC Flow Control state */
-        if (mvNetaFlowCtrlGet((int)gmac_port, &fc_mode) != MV_OK) {
-            printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
-            retVal = ERR_GENERAL;
-            return retVal;
-        }
+			/* Get GMAC Flow Control state */
+			if (mvNetaFlowCtrlGet((int)gmac_port, &fc_mode) != MV_OK) {
+				printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
+				retVal = ERR_GENERAL;
+				return retVal;
+			}
 
-        if (fc_mode == MV_ETH_FC_DISABLE)
-            *state = false;
-        else
-            *state = true;
+			if (fc_mode == MV_ETH_FC_DISABLE)
+				*state = false;
+			else
+				*state = true;
+        }
     }
 
     if (trace_sw_dbg_flag)
@@ -6318,7 +6394,9 @@ tpm_error_code_t tpm_phy_set_port_loopback
                    "==ENTER==%s: mode[%d] invalid\n\r", __FUNCTION__,mode);
             retVal = ERR_GENERAL;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -6373,6 +6451,8 @@ tpm_error_code_t tpm_phy_set_port_loopback
                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if (trace_sw_dbg_flag)
     {
@@ -6449,7 +6529,9 @@ tpm_error_code_t tpm_phy_get_port_loopback
                    "==ENTER==%s: mode[%d] invalid\n\r", __FUNCTION__,mode);
             retVal = ERR_GENERAL;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -6475,6 +6557,8 @@ tpm_error_code_t tpm_phy_get_port_loopback
                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if(state == GT_TRUE)
     {
@@ -6568,7 +6652,9 @@ tpm_error_code_t tpm_phy_set_port_duplex_mode
                 return retVal;
             }
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -6584,6 +6670,8 @@ tpm_error_code_t tpm_phy_set_port_duplex_mode
                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if (trace_sw_dbg_flag)
     {
@@ -6651,7 +6739,9 @@ tpm_error_code_t tpm_phy_get_port_duplex_mode
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -6673,6 +6763,8 @@ tpm_error_code_t tpm_phy_get_port_duplex_mode
                     "==EXIT== %s:enable[%d]\n\r",__FUNCTION__,  *enable);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if(state == GT_TRUE)
     {
@@ -6750,7 +6842,9 @@ tpm_error_code_t tpm_phy_set_port_speed
                 return retVal;
             }
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -6766,6 +6860,8 @@ tpm_error_code_t tpm_phy_set_port_speed
                    "%s:%d: function failed\r\n", __FUNCTION__,__LINE__);
         }
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if (trace_sw_dbg_flag)
     {
@@ -6835,7 +6931,9 @@ tpm_error_code_t tpm_phy_get_port_speed
                    "ERROR: (%s:%d) PHY LSP API call failed on port(%d)\n", __FUNCTION__, __LINE__, src_port);
             retVal = ERR_PHY_SRC_PORT_CONN_INVALID;
         }
-    } else {
+    }
+    else if (PHY_SMI_MASTER_SWT == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)
@@ -6853,6 +6951,8 @@ tpm_error_code_t tpm_phy_get_port_speed
 
         *speed = (tpm_phy_speed_t)lSpeed;
     }
+    else if (PHY_SGMII == phy_access_way)
+    {  /* nothing to do*/ }
 
     if (trace_sw_dbg_flag)
     {
@@ -7563,20 +7663,26 @@ tpm_error_code_t tpm_sw_pm_1_read
         tpm_swport_pm_1->alignmentErrorCounter           = 0;
         tpm_swport_pm_1->internalMacReceiveErrorCounter  = statsCounterSet.InMACRcvErr;
     } else {
-        /* check PHY access way */
         retVal = tpm_phy_access_check(src_port, &phy_access_way, &phy_direct_addr);
         if (retVal != TPM_RC_OK) {
             printk(KERN_ERR
                    "Port%d PHY access way check failed\n", src_port);
             return retVal;
         }
-        for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
-            if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
-                break;
+        if (PHY_SMI_MASTER_CPU == phy_access_way)/* check PHY access way */
+        {
+			for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
+				if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
+					break;
+			}
+			if (gmac_port == TPM_MAX_NUM_GMACS) {
+				printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
+				return ERR_GENERAL;
+			}
         }
-        if (gmac_port == TPM_MAX_NUM_GMACS) {
-            printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
-            return ERR_GENERAL;
+        else if (PHY_SGMII == phy_access_way)
+        {
+        	gmac_port = 0;
         }
 
         /* Read counter from GMAC */
@@ -7586,7 +7692,7 @@ tpm_error_code_t tpm_sw_pm_1_read
             return ERR_GENERAL;
         }
 
-	g_mc_tpm_swport_pm_1.fcsErrors                       += tpm_swport_pm_1->fcsErrors;
+        g_mc_tpm_swport_pm_1.fcsErrors                       += tpm_swport_pm_1->fcsErrors;
         g_mc_tpm_swport_pm_1.excessiveCollisionCounter       += tpm_swport_pm_1->excessiveCollisionCounter;
         g_mc_tpm_swport_pm_1.lateCollisionCounter            += tpm_swport_pm_1->lateCollisionCounter;
         g_mc_tpm_swport_pm_1.frameTooLongs                   += tpm_swport_pm_1->frameTooLongs;
@@ -7760,13 +7866,20 @@ tpm_error_code_t tpm_sw_pm_3_read
                    "Port%d PHY access way check failed\n", src_port);
             return retVal;
         }
-        for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
-            if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
-                break;
+        if (PHY_SMI_MASTER_CPU == phy_access_way)/* check PHY access way */
+        {
+			for (gmac_port = TPM_ENUM_GMAC_0; gmac_port < TPM_MAX_NUM_GMACS; gmac_port++) {
+				if (phy_direct_addr == mvBoardPhyAddrGet(gmac_port))
+					break;
+			}
+			if (gmac_port == TPM_MAX_NUM_GMACS) {
+				printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
+				return ERR_GENERAL;
+			}
         }
-        if (gmac_port == TPM_MAX_NUM_GMACS) {
-            printk(KERN_ERR "ERROR: (%s:%d) Can not find gmac port\n", __FUNCTION__, __LINE__);
-            return ERR_GENERAL;
+        else if (PHY_SGMII == phy_access_way)
+        {
+        	gmac_port = 0;
         }
 
         /* Read counter from GMAC */
@@ -8123,7 +8236,9 @@ tpm_error_code_t tpm_phy_set_port_speed_duplex_mode
                 return retVal;
             }
         }
-    } else {
+    }
+    else if (PHY_SGMII == phy_access_way)
+    {
         /* PHY accessed through switch, as original do */
         lPort = tpm_db_eth_port_switch_port_get(src_port);
         if (lPort == TPM_DB_ERR_PORT_NUM)

@@ -127,21 +127,74 @@ static tpm_tx_mod_hal_map_t tpm_tx_mod_hal_attrs[TPM_MAX_NUM_TX_PORTS] = {
 	(((TPM_ENUM_PMAC == gmac) && (TPM_NONE != tpm_init.pon_type)) ||	\
 	 ((1 == tpm_init.gmac_port_conf[gmac].valid) && (TPM_GMAC_CON_DISC != tpm_init.gmac_port_conf[gmac].conn)))
 
-uint32_t opt_tbl[] = { 	ESC_OPT_RGMIIA_MAC0, ESC_OPT_RGMIIA_MAC1, ESC_OPT_RGMIIA_SW_P5, ESC_OPT_RGMIIA_SW_P6,
-			 	ESC_OPT_RGMIIB_MAC0, ESC_OPT_MAC0_2_SW_P4, ESC_OPT_MAC1_2_SW_P5, ESC_OPT_GEPHY_MAC1,
-			    	ESC_OPT_GEPHY_SW_P0, ESC_OPT_GEPHY_SW_P5, ESC_OPT_FE3PHY, ESC_OPT_SGMII_2_SW_P1, ESC_OPT_SGMII,
-				ESC_OPT_QSGMII,	ESC_OPT_SATA, ESC_OPT_SGMII_2_5 };
-char *opt_str_tlb[] = { "RGMIIA_MAC0", "RGMIIA_MAC1", "RGMIIA_SW_P5", "RGMIIA_SW_P6",
-		 	"RGMIIB_MAC0", "MAC0_2_SW_P4", "MAC1_2_SW_P5", "GEPHY_MAC1",
-		    	"GEPHY_SW_P0", "GEPHY_SW_P5", "FE3PHY", "PCS", "SGMII", "QSGMII", "SATA" , "SGMII_2_5"};
-char *prof_str_tlb[] = { "", "PON_WAN_DUAL_MAC_INT_SWITCH", 	"PON_WAN_G0_INT_SWITCH",
-			"PON_WAN_G1_LAN_G0_INT_SWITCH", 	"G0_WAN_G1_INT_SWITCH",
-		 	"G1_WAN_G0_INT_SWITCH", 		"PON_G1_WAN_G0_INT_SWITCH",
-			"PON_G0_WAN_G1_INT_SWITCH",		"PON_WAN_DUAL_MAC_EXT_SWITCH",
-		    	"PON_WAN_G1_MNG_EXT_SWITCH",		"PON_WAN_G0_SINGLE_PORT",
-			"PON_WAN_G1_SINGLE_PORT",		"PON_G1_WAN_G0_SINGLE_PORT",
-			"PON_G0_WAN_G1_SINGLE_PORT",		"PON_WAN_G0_G1_LPBK",
-			"TPM_PON_WAN_G0_G1_DUAL_LAN"};
+uint32_t opt_tbl[] = {
+    ESC_OPT_RGMIIA_MAC0,
+    ESC_OPT_RGMIIA_MAC1,
+    ESC_OPT_RGMIIA_SW_P5,
+    ESC_OPT_RGMIIA_SW_P6,
+    ESC_OPT_RGMIIB_MAC0,
+    ESC_OPT_MAC0_2_SW_P4,
+    ESC_OPT_MAC1_2_SW_P5,
+    ESC_OPT_GEPHY_MAC1,
+    ESC_OPT_GEPHY_SW_P0,
+    ESC_OPT_GEPHY_SW_P5,
+    ESC_OPT_FE3PHY,
+    ESC_OPT_SGMII_2_SW_P1,
+    ESC_OPT_SGMII,
+    ESC_OPT_QSGMII,
+    ESC_OPT_SATA,
+    ESC_OPT_SGMII_2_5,
+    ESC_OPT_GEPHY_MAC0,
+    ESC_OPT_LP_SERDES_FE_GE_PHY,
+    ESC_OPT_AUTO,
+    ESC_OPT_ILLEGAL,
+    ESC_OPT_ALL
+};
+
+char *opt_str_tlb[] = {
+    "RGMIIA_MAC0",
+    "RGMIIA_MAC1",
+    "RGMIIA_SW_P5",
+    "RGMIIA_SW_P6",
+    "RGMIIB_MAC0",
+    "MAC0_2_SW_P4",
+    "MAC1_2_SW_P5",
+    "GEPHY_MAC1",
+    "GEPHY_SW_P0",
+    "GEPHY_SW_P5",
+    "FE3PHY",
+    "PCS",
+    "SGMII",
+    "QSGMII",
+    "SATA" ,
+    "SGMII_2_5",
+    "GEPHY_MAC0",
+    "LP_SERDES_FE_GE_PHY",
+    "AUTO",
+    "ILLEGAL",
+    "ALL"
+};
+
+char *prof_str_tlb[] = {
+    "",                                     // 0
+    "PON_WAN_DUAL_MAC_INT_SWITCH",          // 1
+    "PON_WAN_G0_INT_SWITCH",                // 2
+    "PON_WAN_G1_LAN_G0_INT_SWITCH",         // 3
+    "G0_WAN_G1_INT_SWITCH",                 // 4
+    "G1_WAN_G0_INT_SWITCH",                 // 5
+    "PON_G1_WAN_G0_INT_SWITCH",             // 6
+    "PON_G0_WAN_G1_INT_SWITCH",             // 7
+    "PON_WAN_DUAL_MAC_EXT_SWITCH",          // 8
+    "PON_WAN_G1_MNG_EXT_SWITCH",            // 9
+    "PON_WAN_G0_SINGLE_PORT",               // 10
+    "PON_WAN_G1_SINGLE_PORT",               // 11
+    "PON_G1_WAN_G0_SINGLE_PORT",            // 12
+    "PON_G0_WAN_G1_SINGLE_PORT",            // 13
+    "PON_WAN_G0_G1_LPBK",                   // 14
+    "TPM_PON_WAN_G0_G1_DUAL_LAN",           // 15
+    "TPM_PON_WAN_G0_SINGLE_PORT_SGMII",     // 16
+    "TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT",  // 17
+};
 
 static tpm_pnc_range_lookup_map_t pnc_range_lookup_tbl[TPM_MAX_NUM_RANGES] = {
 /*  Range_num             lu_id  last_range  valid */
@@ -568,11 +621,13 @@ void tpm_init_switch_init_get(void)
 {
 	if (tpm_init.switch_init == MV_TPM_UN_INITIALIZED_INIT_PARAM) {
 		if (   tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_SINGLE_PORT
+			|| tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_SINGLE_PORT_SGMII
 		    || tpm_init.eth_cmplx_profile == TPM_PON_WAN_G1_SINGLE_PORT
 		    || tpm_init.eth_cmplx_profile == TPM_PON_G1_WAN_G0_SINGLE_PORT
 		    || tpm_init.eth_cmplx_profile == TPM_PON_G0_WAN_G1_SINGLE_PORT
 		    || tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_LPBK
-		    || tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_DUAL_LAN)
+		    || tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_DUAL_LAN
+		    || tpm_init.eth_cmplx_profile == TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT )
 			tpm_init.switch_init = 0;
 		else
 			tpm_init.switch_init = 1;
@@ -599,8 +654,8 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 	char buff[1024];
 	uint32_t profile[7]= {0};
 
-	off += sprintf(buff+off, "\nSelected Eth Complex Profile: %s", prof_str_tlb[tpm_init.eth_cmplx_profile]);
-	off += sprintf(buff+off, "\nHW enabled options:\n\t");
+	off += sprintf(buff+off, "\nSelected Eth Complex Profile: %s %d", prof_str_tlb[tpm_init.eth_cmplx_profile], tpm_init.eth_cmplx_profile);
+	off += sprintf(buff+off, "\nHW enabled options: 0x%x\n\t", hwEthCmplx);
 	for (i = 0;  i<sizeof(opt_tbl)/sizeof(uint32_t); i++) {
 		if (opt_tbl[i] & hwEthCmplx)
 			off += sprintf(buff+off, "%s ", opt_str_tlb[i]);
@@ -669,6 +724,15 @@ void tpm_init_eth_cmplx_setup_error_print(uint32_t hwEthCmplx, bool sysfs_call)
 
 	case TPM_PON_WAN_G0_SINGLE_PORT:
 		profile[0] = ESC_OPT_RGMIIB_MAC0;
+		break;
+
+	case TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT:
+	  profile[0] = ESC_OPT_RGMIIB_MAC0;
+	  profile[1] = ESC_OPT_SGMII | ESC_OPT_SGMII_2_5;
+	  break;
+
+	case TPM_PON_WAN_G0_SINGLE_PORT_SGMII:
+		profile[0] = ESC_OPT_SGMII;
 		break;
 
 	case TPM_PON_WAN_G1_SINGLE_PORT:
@@ -1247,6 +1311,66 @@ static uint32_t tpm_init_eth_cmplx_update_conf(void)
 			tpm_init.eth_port_conf[i].valid = TPM_FALSE;
 		break;
 
+	case TPM_PON_WAN_G0_SINGLE_PORT_SGMII:
+		if (1 == tpm_init.virt_uni_info.enabled)
+			goto virt_uni_err;
+
+		if (!VALID_ONLY((ESC_OPT_SGMII), hwEthCmplx))
+			goto setup_err;
+
+		tpm_init.gmac_port_conf[0].valid = TPM_TRUE;
+		tpm_init.gmac_port_conf[0].port_src = TPM_SRC_PORT_UNI_0;
+		tpm_init.gmac_port_conf[0].conn = TPM_GMAC_CON_SGMII;
+
+		tpm_init.gmac_port_conf[1].valid = TPM_FALSE;
+		tpm_init.gmac_port_conf[1].conn = TPM_GMAC_CON_DISC;
+
+		tpm_init.gmac_port_conf[2].valid = TPM_TRUE;
+		tpm_init.gmac_port_conf[2].port_src = TPM_SRC_PORT_WAN;
+
+		tpm_init.eth_port_conf[0].valid = TPM_TRUE;
+		tpm_init.eth_port_conf[0].port_src = TPM_SRC_PORT_UNI_0;
+		tpm_init.eth_port_conf[0].chip_connect = TPM_CONN_DISC;
+		tpm_init.eth_port_conf[0].int_connect = TPM_INTCON_GMAC0;
+
+		for (i=1 ; i < TPM_MAX_NUM_ETH_PORTS; i++)
+			tpm_init.eth_port_conf[i].valid = TPM_FALSE;
+		break;
+
+  case TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT:
+    if (1 == tpm_init.virt_uni_info.enabled)
+      goto virt_uni_err;
+
+    if (!VALID_ONLY((ESC_OPT_GEPHY_MAC0 | ESC_OPT_SGMII_2_5), hwEthCmplx) &&
+        !VALID_ONLY((ESC_OPT_GEPHY_MAC0 | ESC_OPT_SGMII    ), hwEthCmplx)
+        )
+      goto setup_err;
+
+    tpm_init.gmac_port_conf[0].valid = TPM_TRUE;
+    tpm_init.gmac_port_conf[0].port_src = TPM_SRC_PORT_UNI_0;
+    tpm_init.gmac_port_conf[0].conn = TPM_GMAC_CON_RGMII2;
+
+    tpm_init.gmac_port_conf[1].valid = TPM_TRUE;
+    tpm_init.gmac_port_conf[1].conn = TPM_SRC_PORT_WAN;
+    tpm_init.gmac_port_conf[1].conn = TPM_GMAC_CON_SGMII;
+
+    tpm_init.gmac_port_conf[2].valid = TPM_TRUE;
+    tpm_init.gmac_port_conf[2].port_src = TPM_SRC_PORT_WAN;
+
+    tpm_init.eth_port_conf[0].valid = TPM_TRUE;
+    tpm_init.eth_port_conf[0].port_src = TPM_SRC_PORT_UNI_0;
+    tpm_init.eth_port_conf[0].chip_connect = TPM_CONN_RGMII2;
+    tpm_init.eth_port_conf[0].int_connect = TPM_INTCON_GMAC0;
+
+    tpm_init.eth_port_conf[1].valid = TPM_TRUE;
+    tpm_init.eth_port_conf[1].port_src = TPM_SRC_PORT_WAN;
+    tpm_init.eth_port_conf[1].chip_connect = TPM_CONN_DISC;
+    tpm_init.eth_port_conf[1].int_connect = TPM_INTCON_GMAC1;
+
+    for (i=2 ; i < TPM_MAX_NUM_ETH_PORTS; i++)
+      tpm_init.eth_port_conf[i].valid = TPM_FALSE;
+    break;
+
 	case TPM_PON_WAN_G1_SINGLE_PORT:
 		if (1 == tpm_init.virt_uni_info.enabled)
 			goto virt_uni_err;
@@ -1739,14 +1863,14 @@ int32_t tpm_init_info_validate(void)
 	}
 
 	/********************** GMAC_0 connectivity validation *************************************/
-	if ((tpm_init.gmac_port_conf[0].conn < TPM_GMAC_CON_DISC) || (tpm_init.gmac_port_conf[0].conn > TPM_GMAC_CON_GE_PHY)) {
+	if ((tpm_init.gmac_port_conf[0].conn < TPM_GMAC_CON_DISC) || (tpm_init.gmac_port_conf[0].conn > TPM_GMAC_CON_SGMII)) {
 		TPM_OS_FATAL(TPM_INIT_MOD,
 			     "\n GMAC_0 connectivity: wrong init value(%d) => legal values <0-7> \n",
 			     tpm_init.gmac_port_conf[0].conn);
 		return (TPM_FAIL);
 	}
 	/********************** GMAC_1 connectivity validation *************************************/
-	if ((tpm_init.gmac_port_conf[1].conn < TPM_GMAC_CON_DISC) || (tpm_init.gmac_port_conf[1].conn > TPM_GMAC_CON_GE_PHY)) {
+	if ((tpm_init.gmac_port_conf[1].conn < TPM_GMAC_CON_DISC) || (tpm_init.gmac_port_conf[1].conn > TPM_GMAC_CON_SGMII)) {
 		TPM_OS_FATAL(TPM_INIT_MOD,
 			     "\n GMAC_1 connectivity: wrong init value(%d) => legal values <0-7> \n",
 			     tpm_init.gmac_port_conf[1].conn);
@@ -2221,11 +2345,13 @@ int32_t tpm_init_info_validate(void)
 			return (TPM_FAIL);
 		}
 	} else if ((tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_SINGLE_PORT ||
+			tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_SINGLE_PORT_SGMII ||
 		    tpm_init.eth_cmplx_profile == TPM_PON_WAN_G1_SINGLE_PORT ||
 		    tpm_init.eth_cmplx_profile == TPM_PON_G1_WAN_G0_SINGLE_PORT ||
 		    tpm_init.eth_cmplx_profile == TPM_PON_G0_WAN_G1_SINGLE_PORT ||
 		    tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_LPBK ||
-		    tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_DUAL_LAN)
+		    tpm_init.eth_cmplx_profile == TPM_PON_WAN_G0_G1_DUAL_LAN ||
+		    tpm_init.eth_cmplx_profile == TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT)
 		 && tpm_init.switch_init == 1) {
 			TPM_OS_FATAL(TPM_INIT_MOD,
 					"\n Switch can not be Init at this profile: [%d]! \n", tpm_init.eth_cmplx_profile);
@@ -2573,13 +2699,13 @@ int32_t tpm_init_port_vector_tbl(void)
 
 	/* virt uni not enabled */
 	if (virt_uni_info.enabled == 0) {
-		/* Convert UNI_Vector to Amber Vector, applies to uni_0..7, uni_vector from 0x00 to 0xFF */
-		for (i = 0; i < TPM_TX_MAX_MH_REGS; i++) {
-			amber_port_vector = tpm_init_uni_amber_vec_map(i + 1);
-			tpm_db_port_vector_tbl_info_set(i, i + 1, amber_port_vector, 0);
-		}
-		return TPM_DB_OK;
-       }
+	  /* Convert UNI_Vector to Amber Vector, applies to uni_0..7, uni_vector from 0x00 to 0xFF */
+	  for (i = 0; i < TPM_TX_MAX_MH_REGS; i++) {
+	    amber_port_vector = tpm_init_uni_amber_vec_map(i + 1);
+	    tpm_db_port_vector_tbl_info_set(i, i + 1, amber_port_vector, 0);
+	  }
+	  return TPM_DB_OK;
+	}
 
 	/* virt uni enabled */
 
@@ -3161,11 +3287,13 @@ int32_t tpm_init_switch(void)
 	case TPM_PON_WAN_DUAL_MAC_EXT_SWITCH:
 	case TPM_PON_WAN_G1_MNG_EXT_SWITCH:
 	case TPM_PON_WAN_G0_SINGLE_PORT:
+	case TPM_PON_WAN_G0_SINGLE_PORT_SGMII:
 	case TPM_PON_WAN_G1_SINGLE_PORT:
 	case TPM_PON_G1_WAN_G0_SINGLE_PORT:
 	case TPM_PON_G0_WAN_G1_SINGLE_PORT:
 	case TPM_PON_WAN_G0_G1_LPBK:
 	case TPM_PON_WAN_G0_G1_DUAL_LAN:
+	case TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT:
 		return (TPM_OK);
        default:
        	break;
@@ -3828,6 +3956,8 @@ int32_t tpm_init_ethertype_dsa_tag(void)
 int32_t tpm_init_gmac_loopback(tpm_gmacs_enum_t port, uint8_t enable)
 {
 	uint32_t regVal;
+
+	printk("GMAC port(%d) is invalid\n", port);
 
 	if (port > TPM_MAX_GMAC) {
 		TPM_OS_ERROR(TPM_INIT_MOD, "GMAC port(%d) is invalid\n", port);

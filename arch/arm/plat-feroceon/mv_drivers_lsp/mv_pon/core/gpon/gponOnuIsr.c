@@ -302,8 +302,7 @@ void onuGponIsrRoutine(MV_U32 event, MV_U32 status)
     {
         state = ponXvrFunc(interruptStatus, ONU_GPON_XVR_SIGNAL_DETECT_STATUS_MASK);
 
-	  if (state == MV_TRUE)
-	  {
+	  if (state == MV_TRUE) {
 		onuGponPonMngIntrAlarmHandler(ONU_PON_MNGR_LOS_ALARM, MV_FALSE);
 		/* Set signal detect to ON */
 		onuGponDbOnuSignalDetectSet(1);
@@ -315,7 +314,6 @@ void onuGponIsrRoutine(MV_U32 event, MV_U32 status)
 #ifndef PON_FPGA
 		onuGponIsrXvrReset();
 		onuGponIsrXvrResetStateSet(MV_TRUE);
-		//onuGponPonMngIntrMessageHandler();
 #endif /* PON_FPGA */
 	  }
 	  else if (state == MV_FALSE)
@@ -342,6 +340,22 @@ void onuGponIsrRoutine(MV_U32 event, MV_U32 status)
     if (interruptEvent & ONU_GPON_LOF_ALARM_MASK)
     {
       state = (interruptStatus & ONU_GPON_LOF_ALARM_MASK) ? MV_TRUE : MV_FALSE;
+	  if ((ONU_GPON_XVR_SD_LOW_ACTIVE == onuGponDbXvrSdPolarityGet()) &&
+	  (state != MV_TRUE)) {
+            onuGponPonMngIntrAlarmHandler(ONU_PON_MNGR_LOS_ALARM, MV_FALSE);
+            /* Set signal detect to ON */
+            onuGponDbOnuSignalDetectSet(1);
+
+#ifdef MV_GPON_DEBUG_PRINT
+            mvPonPrint(PON_PRINT_DEBUG, PON_ISR_MODULE,
+                        "DEBUG: (%s:%d) Set signal detect to ON = 1 \n", __FILE_DESC__, __LINE__);
+#endif /* MV_GPON_DEBUG_PRINT */
+#ifndef PON_FPGA
+            onuGponIsrXvrReset();
+            onuGponIsrXvrResetStateSet(MV_TRUE);
+            //onuGponPonMngIntrMessageHandler();
+#endif /* PON_FPGA */
+      }
       onuGponPonMngIntrAlarmHandler(ONU_PON_MNGR_LOF_ALARM, state);
 
       onuGponSyncLog(ONU_GPON_LOG_INTERRUPT_LOF, state, 0, 0);

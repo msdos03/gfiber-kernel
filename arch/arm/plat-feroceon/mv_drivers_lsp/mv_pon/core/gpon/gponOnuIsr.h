@@ -150,6 +150,12 @@ typedef enum
   ONU_GPON_ISR_TYPE_MAX
 }E_OnuGponIsrTypes;
 
+typedef enum
+{
+  ONU_GPON_XVR_SD_HIGH_ACTIVE = 0,
+  ONU_GPON_XVR_SD_LOW_ACTIVE
+}E_OnuGponXvrSdPolarity;
+
 /* Typedefs
 ------------------------------------------------------------------------------*/
 typedef struct

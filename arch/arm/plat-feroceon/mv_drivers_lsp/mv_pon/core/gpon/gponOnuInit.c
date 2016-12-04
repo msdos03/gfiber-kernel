@@ -1258,6 +1258,7 @@ MV_STATUS onuGponStart(S_GponIoctlInfo *onuInit)
   }
 
     ponXvrFunc = funcGponXvrSDStatus(onuInit->ponXvrPolarity);
+    onuGponDbXvrSdPolaritySet(onuInit->ponXvrPolarity);
 
     onuP2PDbXvrBurstEnablePolaritySet(onuInit->p2pXvrBurstEnPolarity);
 

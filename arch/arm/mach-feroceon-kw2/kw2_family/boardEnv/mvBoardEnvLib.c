@@ -160,7 +160,7 @@ MV_VOID mvBoardEnvInit(MV_VOID)
 	MV_REG_WRITE(GPP_DATA_OUT_REG(0), BOARD_INFO(boardId)->gppOutValLow);
 	MV_REG_WRITE(GPP_DATA_OUT_REG(1), BOARD_INFO(boardId)->gppOutValMid);
 	if (boardId != DB_88F6601_BP_ID && boardId != RD_88F6601_MC_ID &&
-	   boardId != RD_88F6601_MC2L_ID &&
+	   boardId != RD_88F6601_MC2L_ID && boardId != RD_88F6601_SFP_ID &&
 	   !gfiber_is_any_jack())
 		MV_REG_WRITE(GPP_DATA_OUT_REG(2), BOARD_INFO(boardId)->gppOutValHigh);
 
@@ -168,7 +168,7 @@ MV_VOID mvBoardEnvInit(MV_VOID)
 	mvGppPolaritySet(0, 0xFFFFFFFF, BOARD_INFO(boardId)->gppPolarityValLow);
 	mvGppPolaritySet(1, 0xFFFFFFFF, BOARD_INFO(boardId)->gppPolarityValMid);
 	if (boardId != DB_88F6601_BP_ID && boardId != RD_88F6601_MC_ID &&
-	   boardId != RD_88F6601_MC2L_ID &&
+	   boardId != RD_88F6601_MC2L_ID && boardId != RD_88F6601_SFP_ID &&
 	   !gfiber_is_any_jack())
 		mvGppPolaritySet(2, 0xFFFFFFFF, BOARD_INFO(boardId)->gppPolarityValHigh);
 
@@ -176,7 +176,7 @@ MV_VOID mvBoardEnvInit(MV_VOID)
 	mvGppTypeSet(0, 0xFFFFFFFF, BOARD_INFO(boardId)->gppOutEnValLow);
 	mvGppTypeSet(1, 0xFFFFFFFF, BOARD_INFO(boardId)->gppOutEnValMid);
 	if (boardId != DB_88F6601_BP_ID && boardId != RD_88F6601_MC_ID &&
-	    boardId != RD_88F6601_MC2L_ID &&
+	    boardId != RD_88F6601_MC2L_ID && boardId != RD_88F6601_SFP_ID &&
 	    !gfiber_is_any_jack())
 		mvGppTypeSet(2, 0xFFFFFFFF, BOARD_INFO(boardId)->gppOutEnValHigh);
 }
@@ -355,6 +355,14 @@ MV_BOOL mvBoardIsPortInSgmii(MV_U32 ethPortNum)
 			return MV_TRUE;
 		return MV_FALSE;
 	}
+	else if (boardId == RD_88F6601_SFP_ID)
+	{
+		if (ethPortNum == 0)
+			return MV_TRUE;
+		else
+			return MV_FALSE;
+	}
+
 	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
 	    gfiber_is_any_jack())
 		return MV_FALSE;
@@ -655,7 +663,7 @@ MV_32 mvBoardSwitchNumPortsGet(MV_VOID)
 		return MV_ERROR;
 	}
 	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
-	    boardId == DB_88F6601_BP_ID ||
+	    boardId == DB_88F6601_BP_ID || boardId == RD_88F6601_SFP_ID ||
 	    gfiber_is_any_jack())
 		return 0;
 
@@ -672,7 +680,7 @@ MV_32 mvBoardSwitchNumPortsGet(MV_VOID)
 			numPorts += 1;
 		if (ethCompOpt & (ESC_OPT_RGMIIA_SW_P5 | ESC_OPT_RGMIIA_SW_P6))
 			numPorts += 1;
-		if (ethCompOpt & ESC_OPT_SGMII_2_SW_P1)
+		if (ethCompOpt & ESC_OPT_SGMII)
 			numPorts += 1;
 	}
 
@@ -854,8 +862,9 @@ MV_STATUS mvBoardSwitchInfoUpdate(MV_VOID)
 			i = 3;
 		}
 		else if (ethCompOpt & ESC_OPT_SGMII_2_SW_P1) {
-			BOARD_INFO(boardId)->pSwitchInfo[swIdx].switchPort[0] = 1;
-			i = 1;
+			BOARD_INFO(boardId)->pSwitchInfo[swIdx].switchPort[0] = -1;
+			BOARD_INFO(boardId)->pSwitchInfo[swIdx].switchPort[1] = 0;
+			i = 2;
 		}
 
 		if (ethCompOpt & ESC_OPT_GEPHY_SW_P0)
@@ -1255,7 +1264,7 @@ MV_U32 mvBoardTclkGet(MV_VOID)
 
 	tmpTClkRate = MV_REG_READ(MPP_SAMPLE_AT_RESET(0));
 	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
-	    boardId == DB_88F6601_BP_ID ||
+	    boardId == DB_88F6601_BP_ID || boardId == RD_88F6601_SFP_ID ||
 	    gfiber_is_any_jack()) {
 		tmpTClkRate &= MSAR_TCLCK_6601_MASK;
 		if (tmpTClkRate)
@@ -1312,7 +1321,7 @@ MV_U32 mvBoardSysClkGet(MV_VOID)
 	clockSatr = MSAR_CPU_DDR_L2_CLCK_EXTRACT(sar0);
 	i = 0;
 	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
-	    boardId == DB_88F6601_BP_ID ||
+	    boardId == DB_88F6601_BP_ID || boardId == RD_88F6601_SFP_ID ||
 	    gfiber_is_any_jack()) {
 		while (cpuDdrTbl6601[i].satrValue != -1) {
 			if (cpuDdrTbl6601[i].satrValue == clockSatr) {
@@ -1722,7 +1731,7 @@ MV_VOID mvBoardEthComplexConfigSet(MV_U32 ethConfig)
 	BOARD_INFO(boardId)->pBoardMppTypeValue->ethSataComplexOpt = ethConfig;
 
 	if (boardId != DB_88F6601_BP_ID && boardId != RD_88F6601_MC_ID &&
-	    boardId != RD_88F6601_MC2L_ID &&
+	    boardId != RD_88F6601_MC2L_ID && boardId != RD_88F6601_SFP_ID &&
 	    !gfiber_is_any_jack()) {
 		/* KW2 only */
 		/* Update link speed for MAC0 / 1 */
@@ -2275,7 +2284,7 @@ MV_VOID mvBoardMppModuleTypePrint(MV_VOID)
 		if (mvBoardSmiScanModeGet(0) == 1)
 			mvOsOutput("       Switch in Single-Chip Address Mode.\n");
 	}
-
+                                 
 	/* 3xFE PHY */
 	if (ethConfig & ESC_OPT_FE3PHY)
 		mvOsOutput("       3xFE PHY Module.\n");
@@ -2355,7 +2364,7 @@ MV_BOOL mvBoardIsGbEPortConnected(MV_U32 ethPortNum)
 		return MV_FALSE;
 	}
 	if (boardId == RD_88F6601_MC_ID || boardId == RD_88F6601_MC2L_ID ||
-	    gfiber_is_any_jack()) {
+	    boardId == RD_88F6601_SFP_ID || gfiber_is_any_jack()) {
 		if (ethPortNum == 0)
 			return MV_TRUE;
 		return MV_FALSE;
@@ -2758,6 +2767,8 @@ MV_U32 mvBoardIdGet(MV_VOID)
 		tmpBoardId = RD_88F6601_MC_ID;
 #elif defined(RD_88F6601MC2L)
 		tmpBoardId = RD_88F6601_MC2L_ID;
+#elif defined(RD_88F6601SFP)
+		tmpBoardId = RD_88F6601_SFP_ID;
 
 #elif defined(DB_CUSTOMER)
 		tmpBoardId = DB_CUSTOMER_ID;
@@ -3181,7 +3192,7 @@ MV_STATUS mvBoardEthSataModulesScan(MV_U32 *modules, MV_ETH_COMPLEX_IF_SOURCES *
 		if (0 == MV_BOARD_6601_CFG_FXS(boardCfg))
 			*modules |= MV_BOARD_MODULE_TDM_1_ID;
 
-		/* Configure XCVR mux */
+		/*   Configure XCVR mux */
 		twsiSlave.slaveAddr.address = MV_BOARD_XCVR_MUX_ADDR;
 		twsiSlave.slaveAddr.type = MV_BOARD_XCVR_MUX_ADDR_TYPE;
 		twsiSlave.validOffset = MV_TRUE;

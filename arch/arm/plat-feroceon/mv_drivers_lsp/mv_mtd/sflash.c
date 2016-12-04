@@ -185,6 +185,7 @@ static struct mtd_info *sflash_probe(struct map_info *map)
 	DB(printk("\n           Device ID       : 0x%04x", sflash->deviceId));
 	DB(printk("\n           Sector Size     : 0x%x", sflash->sectorSize));
 	DB(printk("\n           Sector Number   : %d", sflash->sectorNumber));
+	DB(printk("\n           Name   : %s", mtd->name));
 	
 	printk("SPI Serial flash detected @ 0x%08x, %dKB (%dsec x %dKB)\n",
 	         sflash->baseAddr, ((sflash->sectorNumber * sflash->sectorSize)/1024), 

@@ -115,9 +115,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define GFLT200_ID			DB_CUSTOMER_ID
 #define GFLT110_ID			(BOARD_ID_BASE+0x8)
 #define RD_88F6601_MC2L_ID		(BOARD_ID_BASE+0x9)
-#define GFLT300_ID			(BOARD_ID_BASE+0xA)
-#define GFLT400_ID			(BOARD_ID_BASE+0xB)
-#define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 5)
+#define RD_88F6601_SFP_ID		(BOARD_ID_BASE+0xA)
+#define GFLT300_ID			(BOARD_ID_BASE+0xB)
+#define GFLT400_ID			(BOARD_ID_BASE+0xC)
+#define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 6)
 // These are Marvells defines, we should switch to match these in
 // uboot to make future merges easier.
 //#define DB_CUSTOMER_ID			(BOARD_ID_BASE+0x8)
@@ -441,6 +442,7 @@ MPP#	NAME			IN/OUT
 #define RD_88F6601_MPP24_31		0x00200650
 #define RD_88F6601_MPP32_37		0x00000000
 
+
 /* GPPs
  1 SPI0_MOSI (out)
  2 SPI0_SCK (out)
@@ -733,5 +735,45 @@ MPP#	NAME			IN/OUT
 
 #define RD_88F6601MC2L_GPP_POL_LOW		(BIT15)
 #define RD_88F6601MC2L_GPP_POL_MID		0x0
+
+/***************************************************************************
+** RD-88F6601-SFP
+****************************************************************************/
+
+#define RD_88F6601SFP_MPP0_7		0x22222220
+#define RD_88F6601SFP_MPP8_15		0x00000002
+#define RD_88F6601SFP_MPP16_23		0x00000000
+#define RD_88F6601SFP_MPP24_31		0x04000000
+#define RD_88F6601SFP_MPP32_37		0x00050000
+
+
+/* GPPs
+ 1 SPI0_MOSI (out)
+ 2 SPI0_SCK (out)
+ 3 SPI0_CSn[0] (out)
+ 4 SPI0_MISO (in)
+ 5 I2C0_SDA (inout)
+ 6 I2C0_SCK (inout)
+ 7 UA0_TXD (out)
+ 8 UA0_RXD (in)
+20 LED_PON
+21 PON_BEN (out)
+24 XVR_Tx_IND
+25 LED_G
+26 LED_Y
+28 NF&SPI_WP
+29 XVR_SD (in)
+33 TX_Fault/TX_indication
+37 TX_PD
+*/
+
+#define RD_88F6601SFP_GPP_OUT_ENA_LOW	~(0x0)
+#define RD_88F6601SFP_GPP_OUT_ENA_MID	~(BIT5)
+
+#define RD_88F6601SFP_GPP_OUT_VAL_LOW	0x0
+#define RD_88F6601SFP_GPP_OUT_VAL_MID	0x0
+
+#define RD_88F6601SFP_GPP_POL_LOW		0x0
+#define RD_88F6601SFP_GPP_POL_MID		0x0
 
 #endif /* __INCmvBoardEnvSpech */

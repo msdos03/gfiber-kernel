@@ -125,6 +125,8 @@ MV_ENUM_ENTRY_T g_enum_map_profile_id[] =
     { TPM_PON_G0_WAN_G1_SINGLE_PORT,    "TPM_PON_G0_WAN_G1_SINGLE_PORTg"},
     { TPM_PON_WAN_G0_G1_LPBK,           "TPM_PON_WAN_G0_G1_LPBK"},
     { TPM_PON_WAN_G0_G1_DUAL_LAN,       "TPM_PON_WAN_G0_G1_DUAL_LAN"},     
+    { TPM_PON_WAN_G0_SINGLE_PORT_SGMII, "TPM_PON_WAN_G0_SINGLE_PORT_SGMII"},
+    { TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT, "TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT"},
 };
 
 static MV_ENUM_ARRAY_T g_enum_array_profile_id =
@@ -218,9 +220,9 @@ MV_STATUS cph_app_set_complex_profile (tpm_eth_complex_profile_t profile_id, MV_
     MV_STATUS rc = MV_OK;
 
     /* Check the range of profile_id */
-    if (profile_id > TPM_PON_WAN_G0_G1_DUAL_LAN)
+    if (profile_id >= TPM_COMPLEX_PROFILE_LAST)
     {
-        MV_CPH_PRINT(CPH_ERR_LEVEL, "profile_id[%d] is out of range[1~%d] \n", profile_id, TPM_PON_WAN_G0_G1_DUAL_LAN);
+        MV_CPH_PRINT(CPH_ERR_LEVEL, "profile_id[%d] is out of range[1~%d] \n", profile_id, TPM_COMPLEX_PROFILE_LAST-1);
         return MV_OUT_OF_RANGE;
     }
 
@@ -776,6 +778,7 @@ MV_STATUS cph_app_parse_ge_port_type (
             break;
         case TPM_PON_WAN_G0_INT_SWITCH:
         case TPM_PON_WAN_G0_SINGLE_PORT:            
+        case TPM_PON_WAN_G0_SINGLE_PORT_SGMII:
         case TPM_PON_WAN_G0_G1_LPBK:            
             port_type[MV_APP_GMAC_PORT_0].port_type   = MV_APP_PORT_LAN;
             port_type[MV_APP_GMAC_PORT_0].port_state  = MV_GE_PORT_ACTIVE;
@@ -798,7 +801,8 @@ MV_STATUS cph_app_parse_ge_port_type (
             port_type[MV_APP_PON_MAC_PORT].port_state = MV_GE_PORT_INVALID;
             break;
         case TPM_PON_G1_WAN_G0_INT_SWITCH:
-        case TPM_PON_G1_WAN_G0_SINGLE_PORT:            
+        case TPM_PON_G1_WAN_G0_SINGLE_PORT:
+        case TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT:
             port_type[MV_APP_GMAC_PORT_0].port_type   = MV_APP_PORT_LAN;
             port_type[MV_APP_GMAC_PORT_0].port_state  = MV_GE_PORT_ACTIVE;
             port_type[MV_APP_GMAC_PORT_1].port_type   = MV_APP_PORT_WAN;
@@ -1275,6 +1279,8 @@ INT32 cph_app_rx_bc(INT32 port, struct net_device *dev, struct eth_pbuf *pkt, st
     BOOL                  state     = FALSE;
     struct sk_buff       *skb_old   = NULL;
     struct sk_buff       *skb_new   = NULL;
+    tpm_eth_complex_profile_t  profile_id  = 0;
+    MV_APP_GMAC_PORT_E         active_port = 0;
     MV_STATUS             rc        = MV_OK;
     
     /* Check whether need to handle broadcast packet */
@@ -1316,6 +1322,16 @@ INT32 cph_app_rx_bc(INT32 port, struct net_device *dev, struct eth_pbuf *pkt, st
                 skb_new = skb_old;
                 goto out;
             }
+            /* If WAN interface is GMAC1, remove MH in upstream  */
+            cph_db_get_param(CPH_DB_PARAM_PROFILE_ID, &profile_id);
+            cph_db_get_param(CPH_DB_PARAM_ACTIVE_PORT, &active_port);
+            if ((profile_id == TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT) && (active_port == MV_APP_GMAC_PORT_1))
+            {
+              skb_old->data += MV_ETH_MH_SIZE;
+              skb_old->tail -= MV_ETH_MH_SIZE;
+              skb_old->len  -= MV_ETH_MH_SIZE;
+          }
+
             mv_net_devs[peer_port]->netdev_ops->ndo_start_xmit(skb_old, mv_net_devs[peer_port]);      
         }
     }

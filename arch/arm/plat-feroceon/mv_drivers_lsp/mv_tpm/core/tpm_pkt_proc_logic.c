@@ -899,7 +899,7 @@ int32_t tpm_proc_check_valid_target(tpm_dir_t dir,
 				if (((gmac_bm & TPM_BM_GMAC_0) && (tx_owner != TPM_Q_OWNER_GMAC0)) ||
 				    ((gmac_bm & TPM_BM_GMAC_1) && (tx_owner != TPM_Q_OWNER_GMAC1)) ||
 				    ((gmac_bm & TPM_BM_PMAC) && (tx_owner != TPM_Q_OWNER_PMAC))) {
-					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Target Queue Owner Invalid, gmac_bm: [%d], tx_owner: [%d]\n",
+					TPM_OS_ERROR(TPM_TPM_LOG_MOD, "Target Queue Owner Invalid, gmac_bm: [0x%x], tx_owner: [%d]\n",
 									gmac_bm, tx_owner);
 					return(ERR_FRWD_INVALID);
 				}
@@ -7094,7 +7094,7 @@ tpm_error_code_t tpm_proc_check_dst_uni_port(tpm_trg_port_type_t dest_port_bm)
 
 		/* if port is valid */
 		if(!tpm_db_eth_port_valid(src_port)) {
-			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "dest_port(0x%x) is not valid\n", dst_port);
+			TPM_OS_ERROR(TPM_TPM_LOG_MOD, "dest_port(0x%x) - src_port(%d) is not valid\n", dst_port, src_port);
 			return ERR_MC_DST_PORT_INVALID;
 		}
 	}

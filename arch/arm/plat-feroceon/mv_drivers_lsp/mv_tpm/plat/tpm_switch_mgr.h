@@ -116,6 +116,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef enum {
         PHY_SMI_MASTER_CPU,/*Phy directly accessed through LSP function*/
         PHY_SMI_MASTER_SWT,/*Phy accessed through switch*/
+        PHY_SGMII,/*No Phy, direct SGMII connection*/
 } tpm_phy_ctrl_t;
 
 /*******************************************************************************

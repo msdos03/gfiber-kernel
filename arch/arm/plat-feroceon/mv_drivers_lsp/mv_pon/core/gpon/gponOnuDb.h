@@ -134,6 +134,7 @@ typedef struct
   MV_U32      onuGponOmccPortOverrideEn;
   MV_BOOL     onuGponDyingGaspEn;
   MV_BOOL     onuGponBwMapDumpEn;
+  MV_U32      onuGponXvrSdPolarity;
 
   ALARMNOTIFYFUNC   alarmCallback;
   STATUSNOTIFYFUNC  statusCallback;
@@ -268,6 +269,8 @@ MV_STATUS onuGponDbOnuSignalDetectSet(MV_U32 state);
 MV_U32    onuGponDbOnuSignalDetectGet(void);
 MV_STATUS onuGponDbOnuDsSyncOnSet(MV_U32 state);
 MV_U32    onuGponDbOnuDsSyncOnGet(void);
+MV_STATUS onuGponDbXvrSdPolaritySet(MV_U32 polarity);
+MV_U32    onuGponDbXvrSdPolarityGet(void);
 MV_STATUS onuGponDbOnuIdOverrideSet(MV_BOOL enable);
 MV_BOOL   onuGponDbOnuIdOverrideGet(void);
 MV_STATUS onuGponDbOnuIdOverrideValueSet(MV_U32 onuId);

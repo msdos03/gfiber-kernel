@@ -1097,6 +1097,125 @@ MV_BOARD_INFO rd88f6601MC2LInfo = {
 };
 
 /***************************************************************************
+** RD-88F6601SFP Avanta
+****************************************************************************/
+/* NAND not supported  */
+
+MV_BOARD_TWSI_INFO rd88f6601SFPInfoBoardTwsiDev[] = {
+	/* {{MV_BOARD_DEV_CLASS devClass, MV_U8 twsiDevAddr, MV_U8 twsiDevAddrType}} */
+};
+
+MV_BOARD_MAC_INFO rd88f6601SFPInfoBoardMacInfo[] = {
+	/* {{MV_BOARD_MAC_SPEED boardMacSpeed, MV_U8 boardEthSmiAddr}} */
+	{BOARD_MAC_SPEED_AUTO, 0x0},
+	{BOARD_MAC_SPEED_AUTO, 0x1},
+	{N_A,N_A}
+};
+
+MV_BOARD_MPP_TYPE_INFO rd88f6601SFPInfoBoardMppTypeInfo[] = {
+	{
+		.boardMppTdm = MV_BOARD_AUTO,
+		.ethSataComplexOpt = ESC_OPT_SGMII,
+		.ethPortsMode = 0x0,
+	}
+};
+
+MV_BOARD_GPP_INFO rd88f6601SFPInfoBoardGppInfo[] = {
+	/* {{MV_BOARD_GPP_CLASS devClass, MV_U8 gppPinNum}} */
+//	{BOARD_GPP_PON_XVR_TX, 17},
+	{BOARD_GPP_PON_XVR_TX, 30},
+	{BOARD_GPP_PON_XVR_TX_POWER, 37}, /* should be MPP 9 at FIT design, but now MPP9 is for UART */
+	{BOARD_GPP_PON_XVR_TX_IND, 24},
+};
+
+MV_DEV_CS_INFO rd88f6601SFPInfoBoardDeCsInfo[] = {
+	/*{deviceCS, params, devType, devWidth} */
+#ifdef MV_SPI
+	{SPI_CS0, N_A, BOARD_DEV_SPI_FLASH, 8},		/* SPI DEV */
+#endif
+#if !defined(MV_SPI)
+	{N_A, N_A, N_A, N_A}			/* No device */
+#endif
+};
+
+MV_BOARD_MPP_INFO rd88f6601SFPInfoBoardMppConfigValue[] = {
+	{{
+	  RD_88F6601SFP_MPP0_7,
+	  RD_88F6601SFP_MPP8_15,
+	  RD_88F6601SFP_MPP16_23,
+	  RD_88F6601SFP_MPP24_31,
+	  RD_88F6601SFP_MPP32_37
+	  }
+	 }
+};
+
+MV_BOARD_INFO rd88f6601SFPInfo = {
+	.boardName = "RD-88F6601-BP-FIT-GPON_SFP",
+	.numBoardMppTypeValue = MV_ARRAY_SIZE(rd88f6601SFPInfoBoardMppTypeInfo),
+	.pBoardMppTypeValue = rd88f6601SFPInfoBoardMppTypeInfo,
+	.numBoardMppConfigValue = MV_ARRAY_SIZE(rd88f6601SFPInfoBoardMppConfigValue),
+	.pBoardMppConfigValue = rd88f6601SFPInfoBoardMppConfigValue,
+	.intsGppMaskLow = 0,
+	.intsGppMaskMid = 0,
+	.intsGppMaskHigh = 0,
+	.numBoardDeviceIf = MV_ARRAY_SIZE(rd88f6601SFPInfoBoardDeCsInfo),
+	.pDevCsInfo = rd88f6601SFPInfoBoardDeCsInfo,
+	.numBoardTwsiDev = MV_ARRAY_SIZE(rd88f6601SFPInfoBoardTwsiDev),
+	.pBoardTwsiDev = rd88f6601SFPInfoBoardTwsiDev,
+	.numBoardMacInfo = MV_ARRAY_SIZE(rd88f6601SFPInfoBoardMacInfo),
+	.pBoardMacInfo = rd88f6601SFPInfoBoardMacInfo,
+	.numBoardGppInfo = MV_ARRAY_SIZE(rd88f6601SFPInfoBoardGppInfo),
+	.pBoardGppInfo = rd88f6601SFPInfoBoardGppInfo,
+	.activeLedsNumber = 0,
+	.pLedGppPin = NULL,
+	.ledsPolarity = 0,
+
+	/* GPP values */
+	.gppOutEnValLow = RD_88F6601SFP_GPP_OUT_ENA_LOW,
+	.gppOutEnValMid = RD_88F6601SFP_GPP_OUT_ENA_MID,
+	.gppOutEnValHigh = 0, // Does not exist in 6601
+	.gppOutValLow = RD_88F6601SFP_GPP_OUT_VAL_LOW,
+	.gppOutValMid = RD_88F6601SFP_GPP_OUT_VAL_MID,
+	.gppOutValHigh = 0,
+	.gppPolarityValLow = RD_88F6601SFP_GPP_POL_LOW,
+	.gppPolarityValMid = RD_88F6601SFP_GPP_POL_MID,
+	.gppPolarityValHigh = 0,
+
+	/* External Switch Configuration */
+	.pSwitchInfo = NULL,
+	.switchInfoNum = 0,
+
+	/* PON configuration. */
+	.ponConfigValue = BOARD_GPON_CONFIG,
+
+	/* TDM configuration */
+	/* We hold a different configuration array for each possible slic that
+	 ** can be connected to board.
+	 ** When modules are scanned, then we select the index of the relevant
+	 ** slic's information array.
+	 ** For RD and Customers boards we only need to initialize a single
+	 ** entry of the arrays below, and set the boardTdmInfoIndex to 0.
+	 */
+	.numBoardTdmInfo = {0},
+	.pBoardTdmInt2CsInfo = {NULL},
+	.boardTdmInfoIndex = -1,
+
+	.pBoardSpecInit = NULL,
+
+	.deepIdlePwrUpDelay = 2400,	/* 12uS */
+
+	/* NAND init params */
+	.nandFlashParamsValid = MV_FALSE,
+	.nandFlashReadParams = 0,
+	.nandFlashWriteParams = 0,
+	.nandFlashControl = 0,
+	.pBoardTdmSpiInfo = NULL,
+
+	/* Enable modules auto-detection. */
+	.moduleAutoDetect = MV_FALSE
+};
+
+/***************************************************************************
 ** DB-88F6601-BP Avanta
 ****************************************************************************/
 /* NAND not supported  */
@@ -1877,6 +1996,7 @@ MV_BOARD_INFO *boardInfoTbl[] = {
 	&gflt200Info,
 	&gflt110Info,
 	&rd88f6601MC2LInfo,
+	&rd88f6601SFPInfo,
 	&gflt300Info,
 	&gflt400Info,
 };

@@ -768,11 +768,13 @@ typedef enum tpm_sw_sched_type {
 *	TPM_PHY_SPEED_10_MBPS   - 10Mbps
 *	TPM_PHY_SPEED_100_MBPS	- 100Mbps
 *	TPM_PHY_SPEED_1000_MBPS - 1000Mbps
+*	TPM_PHY_SPEED_1000_MBPS - 2500Mbps
 */
 typedef enum {
 	TPM_PHY_SPEED_10_MBPS,
 	TPM_PHY_SPEED_100_MBPS,
-	TPM_PHY_SPEED_1000_MBPS
+	TPM_PHY_SPEED_1000_MBPS,
+	TPM_PHY_SPEED_2500_MBPS,
 } tpm_phy_speed_t;
 
 /* switch mirror type */
@@ -1027,7 +1029,10 @@ typedef enum {
 	TPM_PON_G1_WAN_G0_SINGLE_PORT,
 	TPM_PON_G0_WAN_G1_SINGLE_PORT,
 	TPM_PON_WAN_G0_G1_LPBK,
-	TPM_PON_WAN_G0_G1_DUAL_LAN
+	TPM_PON_WAN_G0_G1_DUAL_LAN,
+	TPM_PON_WAN_G0_SINGLE_PORT_SGMII,
+  TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT,
+  TPM_COMPLEX_PROFILE_LAST,
 } tpm_eth_complex_profile_t;
 
 typedef enum {
@@ -1083,7 +1088,8 @@ typedef enum {
 	TPM_GMAC_CON_SWITCH_6,	/* Amber Switch Port #6 */
 	TPM_GMAC_CON_RGMII1,
 	TPM_GMAC_CON_RGMII2,
-	TPM_GMAC_CON_GE_PHY	/* Internal Gig PHY */
+	TPM_GMAC_CON_GE_PHY,	/* Internal Gig PHY */
+	TPM_GMAC_CON_SGMII,
 } tpm_init_gmac_conn_t;
 
 typedef enum {

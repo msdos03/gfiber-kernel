@@ -1553,13 +1553,16 @@ MV_STATUS mvEthernetComplexInit(void)
 	mvEthernetComplexPreInit(ethCompCfg);
 
 	if (mvCtrlModelGet() == MV_6601_DEV_ID) {
+	#if 1
+		printk("MTL: mvEthCompMac0ToSgmiiConfig bypassed, ethCompCfg=0x%x\n", ethCompCfg);
 		
+	#else
 		/*  MAC0 to GE PHY. */
 		mvEthCompMac0ToGePhyConfig(ethCompCfg, mvBoardPhyAddrGet(0));
 
 		/*  MAC0/1 to SGMII. */
 		mvEthCompMac0ToSgmiiConfig(ethCompCfg);
-
+	#endif
 	} else {
 
 		/*  First, initialize the switch. */

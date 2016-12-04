@@ -144,6 +144,7 @@ db_enum_string_t tpm_db_gmac_conn_str[] = {
 	BuildEnumString(TPM_GMAC_CON_RGMII1),
 	BuildEnumString(TPM_GMAC_CON_RGMII2),
 	BuildEnumString(TPM_GMAC_CON_GE_PHY),
+	BuildEnumString(TPM_GMAC_CON_SGMII),
 };
 
 db_enum_string_t tpm_db_gmac_func_str[] = {

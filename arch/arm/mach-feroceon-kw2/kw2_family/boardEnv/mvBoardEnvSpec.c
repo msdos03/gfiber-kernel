@@ -1865,7 +1865,7 @@ MV_BOARD_MAC_INFO gflt400InfoBoardMacInfo[] = {
 MV_BOARD_MPP_TYPE_INFO gflt400InfoBoardMppTypeInfo[] = {
 	{
 		.boardMppTdm = MV_BOARD_AUTO,
-		.ethSataComplexOpt = ESC_OPT_GEPHY_MAC0,
+		.ethSataComplexOpt = ESC_OPT_GEPHY_MAC0 | ESC_OPT_SGMII,
 		.ethPortsMode = 0x0
 	}
 };

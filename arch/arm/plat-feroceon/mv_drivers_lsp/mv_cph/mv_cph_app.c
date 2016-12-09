@@ -1322,6 +1322,10 @@ INT32 cph_app_rx_bc(INT32 port, struct net_device *dev, struct eth_pbuf *pkt, st
                 skb_new = skb_old;
                 goto out;
             }
+            // Remove CRC from original message. It is not needed when forwarding to WAN interface
+            skb_old->tail -= MV_ETH_CRC_SIZE;  // Remove CRC
+            skb_old->len  -= MV_ETH_CRC_SIZE;  // Remove CRC
+
             /* If WAN interface is GMAC1, remove MH in upstream  */
             cph_db_get_param(CPH_DB_PARAM_PROFILE_ID, &profile_id);
             cph_db_get_param(CPH_DB_PARAM_ACTIVE_PORT, &active_port);

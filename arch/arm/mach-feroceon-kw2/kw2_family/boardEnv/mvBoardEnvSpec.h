@@ -115,9 +115,15 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define GFLT200_ID			DB_CUSTOMER_ID
 #define GFLT110_ID			(BOARD_ID_BASE+0x8)
 #define RD_88F6601_MC2L_ID		(BOARD_ID_BASE+0x9)
-#define RD_88F6601_SFP_ID		(BOARD_ID_BASE+0xA)
-#define GFLT300_ID			(BOARD_ID_BASE+0xB)
-#define GFLT400_ID			(BOARD_ID_BASE+0xC)
+#define GFLT300_ID			(BOARD_ID_BASE+0xA)
+#define GFLT400_ID			(BOARD_ID_BASE+0xB)
+// When Marvell upgraded their SDK from RC32 -> thunderbolt_v1, they added a
+// new ID. We did not upgrade the uboot half of our SDK. This means the IDs are
+// out of sync. Since uboot doesn't have this ID at all, we manually move it
+// in the kernel half to the end of list so that it stays out of the way, and
+// every other boardID still lines up.
+#define RD_88F6601_SFP_ID		(BOARD_ID_BASE+0xC)
+
 #define MV_MAX_BOARD_ID			(DB_CUSTOMER_ID + 6)
 // These are Marvells defines, we should switch to match these in
 // uboot to make future merges easier.

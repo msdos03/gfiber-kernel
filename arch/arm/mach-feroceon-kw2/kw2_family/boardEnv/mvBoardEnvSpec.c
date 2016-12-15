@@ -1995,8 +1995,8 @@ MV_BOARD_INFO *boardInfoTbl[] = {
 	&rd88f6601Info,
 	&gflt200Info,
 	&gflt110Info,
-	&rd88f6601MC2LInfo,
-	&rd88f6601SFPInfo,
+	&rd88f6601MC2LInfo, /* disabled (NULL) in uboot */
 	&gflt300Info,
 	&gflt400Info,
+	&rd88f6601SFPInfo /* not present in uboot, moved to back of list */
 };

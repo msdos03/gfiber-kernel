@@ -157,7 +157,8 @@ static int __init parse_tag_mv_uboot(const struct tag *tag)
 
 	gBoardId =  (mvUbootVer & 0xff);
 #ifdef CONFIG_MACH_GFLT110
-	if ((gBoardId != GFLT110_ID) && (gBoardId != GFLT300_ID)) {
+	if ((gBoardId != GFLT110_ID) && (gBoardId != GFLT300_ID) &&
+	    (gBoardId != GFLT400_ID)) {
 		printk("Unknown boardId from uboot: %x: Defaulting to GFLT110.\n", gBoardId);
 		gBoardId = GFLT110_ID;
 	}

@@ -1288,6 +1288,9 @@ INT32 cph_app_rx_bc(INT32 port, struct net_device *dev, struct eth_pbuf *pkt, st
     if (state == FALSE)
         return 0;
 
+    cph_db_get_param(CPH_DB_PARAM_PROFILE_ID, &profile_id);
+    cph_db_get_param(CPH_DB_PARAM_ACTIVE_PORT, &active_port);
+
     /* Parse packets */
     skb_old = (struct sk_buff *)(pkt->osInfo);
     skb_new = (struct sk_buff *)(pkt->osInfo);
@@ -1298,8 +1301,8 @@ INT32 cph_app_rx_bc(INT32 port, struct net_device *dev, struct eth_pbuf *pkt, st
         return 0;
     }
 
-    /* U/S */
-    if(flow_rule.dir == CPH_DIR_US)
+    /* U/S or in bridged mode between GMAC1 and GMAC0 */
+    if((flow_rule.dir == CPH_DIR_US) || (profile_id == TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT))
     {  
         /* Forward packet to peer port */
         rc = cph_app_parse_peer_port(port, &peer_port);
@@ -1327,8 +1330,6 @@ INT32 cph_app_rx_bc(INT32 port, struct net_device *dev, struct eth_pbuf *pkt, st
             skb_old->len  -= MV_ETH_CRC_SIZE;  // Remove CRC
 
             /* If WAN interface is GMAC1, remove MH in upstream  */
-            cph_db_get_param(CPH_DB_PARAM_PROFILE_ID, &profile_id);
-            cph_db_get_param(CPH_DB_PARAM_ACTIVE_PORT, &active_port);
             if ((profile_id == TPM_PON_G1_SGMII_WAN_G0_SINGLE_PORT) && (active_port == MV_APP_GMAC_PORT_1))
             {
               skb_old->data += MV_ETH_MH_SIZE;

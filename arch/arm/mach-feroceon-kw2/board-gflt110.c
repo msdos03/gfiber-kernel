@@ -13,6 +13,7 @@
 
 #include "gflt.h"
 
+#define GHN_RESET_N_L		0
 #define GPIO_PON_PWR_EN		37
 
 struct gflt_led_data {
@@ -39,6 +40,10 @@ static struct board_gpio gflt300_board_gpios[] = {
 	},
 };
 static struct board_gpio gflt400_board_gpios[] = {
+	{
+		.gpio = GHN_RESET_N_L,
+		.label = "g.hn-reset",
+	},
 // GFLT400 doesn't use Pin 37 (NC)
 };
 

@@ -684,12 +684,12 @@ MPP#	NAME			IN/OUT
 #define GFLT400_MPP32_37	0x00000000
 
 /* Default all ones-inputs, invert for outputs */
-#define GFLT400_GPP_OUT_ENA_LOW	 (~(BIT9 | BIT10))
+#define GFLT400_GPP_OUT_ENA_LOW	 (~(BIT0 | BIT9 | BIT10))
 #define GFLT400_GPP_OUT_ENA_MID	 0x0
 
 /* BIT09 turns the LED blue.
  * BIT10 turns the LED red. */
-#define GFLT400_GPP_OUT_VAL_LOW	(BIT9)
+#define GFLT400_GPP_OUT_VAL_LOW	(BIT0 | BIT9)
 #define GFLT400_GPP_OUT_VAL_MID	(0)
 
 /* GFLT400 has the reset button signal inverted */
